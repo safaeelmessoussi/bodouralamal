@@ -24,10 +24,15 @@ interface Row {
   id: string;
   name: string;
   description: string | null;
+  min_age: number | null;
+  max_age: number | null;
   levels: {
     id: string;
     name: string;
     description: string | null;
+    min_age: number | null;
+    max_age: number | null;
+    journey_role: string;
     subjects: { id: string; name: string }[];
     surahs: { id: number; name: string }[];
   }[];
@@ -111,9 +116,11 @@ describe("GET /programs — public access", () => {
     });
 
     const rows = mine((await call("/programs")).body);
-    expect(Object.keys(rows[0]!).sort()).toEqual(["description", "id", "levels", "name"].sort());
+    // R180 §4/§6 — the Level's age range and journey role travel; the
+    // Category's range is derived from its Levels.
+    expect(Object.keys(rows[0]!).sort()).toEqual(["description", "id", "levels", "max_age", "min_age", "name"].sort());
     expect(Object.keys(rows[0]!.levels[0]!).sort()).toEqual(
-      ["description", "id", "name", "subjects", "surahs"].sort(),
+      ["description", "id", "journey_role", "max_age", "min_age", "name", "subjects", "surahs"].sort(),
     );
     for (const leaked of [
       "enrollment_count",
@@ -168,6 +175,27 @@ describe("GET /programs — public access", () => {
       `${TAG} أول`,
       `${TAG} ثانٍ`,
       `${TAG} بلا ترتيب`,
+    ]);
+  });
+
+  it("R180 §4 — a Category's range is its first Level's start and its last Level's end; no last end means open-ended", async () => {
+    const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
+    await prisma.level.create({
+      data: { name: `${TAG} أول`, categoryId: category.id, displayOrder: 1, minAge: 6, maxAge: 8 },
+    });
+    await prisma.level.create({
+      data: { name: `${TAG} ثانٍ`, categoryId: category.id, displayOrder: 2, minAge: 9, maxAge: 12, journeyRole: "preparatory" },
+    });
+    await prisma.level.create({
+      data: { name: `${TAG} ثالث`, categoryId: category.id, displayOrder: 3, minAge: 13 },
+    });
+    const row = mine((await call("/programs")).body)[0]!;
+    expect(row.min_age).toBe(6);
+    expect(row.max_age).toBeNull();
+    expect(row.levels.map((l) => [l.min_age, l.max_age, l.journey_role])).toEqual([
+      [6, 8, "step"],
+      [9, 12, "preparatory"],
+      [13, null, "step"],
     ]);
   });
 

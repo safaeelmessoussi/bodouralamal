@@ -10,6 +10,7 @@ import {
   type Category,
   type CreateLevelInput,
   type GenderRestriction,
+  type JourneyRole,
   type Level,
 } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
@@ -24,7 +25,9 @@ import {
   type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { SelectField, TextArea, TextField } from '../../components/ui/field.js';
+import { NumberField, SelectField, TextArea, TextField } from '../../components/ui/field.js';
+import { ageRangeLabel } from '../../lib/category-audience.js';
+import { ageRangeError } from './taxonomy.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
@@ -120,6 +123,13 @@ export function LevelsPage(): ReactNode {
       header: t('admin.levels.colGender'),
       // Announced as a word, never as a colour or an icon alone (§14.4).
       cell: (r) => t(`admin.levels.gender.${r.gender_restriction}`),
+    },
+    {
+      // R180 §4 — the Level's own range; the Category's on «الفئات» is derived from these.
+      key: 'age_range',
+      header: t('admin.levels.colAge'),
+      secondary: true,
+      cell: (r) => ageRangeLabel(r) ?? <span className="muted">{t('common.notSet')}</span>,
     },
     /* **«الترتيب» is gone** (R76.8). It answered *why is this Level listed
        here*, and the answer is now the sequence itself — visible without a
@@ -235,6 +245,10 @@ export function LevelsPage(): ReactNode {
              */
             description: input.description ?? null,
             gender_restriction: input.gender_restriction,
+            // R180 §4/§6 — the two ends and the role, every save.
+            min_age: input.min_age ?? null,
+            max_age: input.max_age ?? null,
+            ...(input.journey_role !== undefined ? { journey_role: input.journey_role } : {}),
           },
           accessToken,
         );
@@ -412,6 +426,10 @@ function LevelFormDialog({
     description: level?.description ?? '',
     categoryId: level?.category_id ?? categories[0]?.id ?? '',
     gender: (level?.gender_restriction ?? 'any') as GenderRestriction,
+    // R180 §4/§6 — the Level's own age range («» is not stated) and journey role.
+    minAge: level?.min_age == null ? '' : String(level.min_age),
+    maxAge: level?.max_age == null ? '' : String(level.max_age),
+    journeyRole: (level?.journey_role ?? 'step') as JourneyRole,
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
@@ -420,6 +438,7 @@ function LevelFormDialog({
   const errors = {
     name: form.name.trim() === '' ? t('common.required') : null,
     category: !level && form.categoryId === '' ? t('common.required') : null,
+    age: ageRangeError(form.minAge, form.maxAge),
   };
   const valid = Object.values(errors).every((e) => e === null);
 
@@ -432,6 +451,10 @@ function LevelFormDialog({
       description: form.description.trim() || null,
       category_id: form.categoryId,
       gender_restriction: form.gender,
+      // An empty age is «not stated» (`null`), never zero.
+      min_age: form.minAge.trim() === '' ? null : Number(form.minAge),
+      max_age: form.maxAge.trim() === '' ? null : Number(form.maxAge),
+      journey_role: form.journeyRole,
     });
   }
 
@@ -479,6 +502,40 @@ function LevelFormDialog({
           onChange={(v) => setForm((f) => ({ ...f, gender: v as GenderRestriction }))}
           options={GENDER_OPTIONS.map((g) => ({ value: g, label: t(`admin.levels.gender.${g}`) }))}
           hint={t('admin.levels.genderHint')}
+        />
+
+        {/* R180 §4 — the age range is the LEVEL's; the Category's is derived
+            from its first and last Level, so it is asked nowhere else. */}
+        <NumberField
+          label={t('admin.taxonomy.minAgeLabel')}
+          value={form.minAge}
+          onChange={(v) => setForm((f) => ({ ...f, minAge: v }))}
+          min={0}
+          max={120}
+          step={1}
+          hint={t('admin.taxonomy.ageHint')}
+        />
+        <NumberField
+          label={t('admin.taxonomy.maxAgeLabel')}
+          value={form.maxAge}
+          onChange={(v) => setForm((f) => ({ ...f, maxAge: v }))}
+          min={0}
+          max={120}
+          step={1}
+          error={touched ? errors.age : null}
+        />
+
+        {/* R180 §6 — what the Level is on the journey, as data (§4.4b), never
+            read off its name. */}
+        <SelectField
+          label={t('admin.levels.journeyRoleLabel')}
+          value={form.journeyRole}
+          onChange={(v) => setForm((f) => ({ ...f, journeyRole: v as JourneyRole }))}
+          options={(['step', 'preparatory'] as const).map((role) => ({
+            value: role,
+            label: t(`admin.levels.journeyRole.${role}`),
+          }))}
+          hint={t('admin.levels.journeyRoleHint')}
         />
 
         {/* **No branch (Revision 66).** It was here because creating a Level

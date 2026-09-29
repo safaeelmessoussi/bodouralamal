@@ -1,4 +1,5 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { derivedCategoryAgeRange } from '../policies/age-range.js';
 import { baseHijri, sortMonthStarts, type MonthStart } from '../lib/hijri.js';
 
 /**
@@ -45,6 +46,7 @@ export interface CalendarBootstrap {
     name: string;
     displayOrder: number | null;
     holdsOwnLogin: boolean | null;
+    /** R180 §4 — derived from the Category's Levels; informational. */
     minAge: number | null;
     maxAge: number | null;
   }[];
@@ -144,7 +146,20 @@ export async function calendarBootstrap(
     }),
     prisma.category.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true, displayOrder: true, holdsOwnLogin: true, minAge: true, maxAge: true },
+      select: {
+        id: true,
+        name: true,
+        displayOrder: true,
+        holdsOwnLogin: true,
+        // R180 §4 — the range is derived from EVERY live Level of the
+        // Category (not the `levels` list below, which a `category_id`
+        // filter may narrow), in the Category's own order.
+        levels: {
+          where: { deletedAt: null },
+          select: { minAge: true, maxAge: true },
+          orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+        },
+      },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
     }),
     prisma.level.findMany({
@@ -219,7 +234,10 @@ export async function calendarBootstrap(
   return {
     hijri: { days, months: [...monthSeen.values()] },
     gregorianMonths: [...gregorianSeen.values()],
-    categories,
+    categories: categories.map(({ levels: own, ...category }) => ({
+      ...category,
+      ...derivedCategoryAgeRange(own),
+    })),
     levels,
     branches,
     subjects,

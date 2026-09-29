@@ -1,20 +1,26 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { fetchPrograms, type PublicProgramCategory } from '../adapters/programs.js';
 import { t } from '../i18n/index.js';
-import { Badge } from './ui/badge.js';
+import { buildJourney } from './programs/journey-model.js';
+import { ProgramsJourney } from './programs/programs-journey.js';
+import { ProgramsTextView } from './programs/programs-text-view.js';
+import { Button } from './ui/button.js';
 import { Container } from './ui/container.js';
 
 /**
- * «برامجنا التعليمية» — the §5.1 programme overview (Revision 144,
- * Owner-reported 2026-09-14).
+ * «برامجنا التعليمية» — the §5.1 programme overview (Revision 144), redesigned
+ * as a JOURNEY by SRS Revision 180: the Levels climb from the youngest
+ * Category's first step to the summit, shoe prints walk from each to the
+ * next, a graduation ends every Category, and «عرض جميع البرامج» opens the
+ * same catalogue as text to scan.
  *
  * Placed before `BranchesSection` on the landing page. Entirely data-driven
  * from `GET /programs` (TD-3.16): every Category the admin taxonomy screens
- * hold, each Category's Levels, and each Level's مواد المستوى/مقرر الحفظ —
- * so a Level added or a Subject assigned in the back office appears here
- * with no frontend change, the same property `BranchesSection` already has
- * for branches.
+ * hold, each Category's Levels with their ages and journey role, and each
+ * Level's مواد المستوى/مقرر الحفظ — so a Level added, re-aged or reordered in
+ * the back office appears here with no frontend change, the same property
+ * `BranchesSection` already has for branches.
  *
  * §14.4 requires every surface to declare which state it is in. Unlike
  * `PartnersSection` (where an empty list is the association's ordinary,
@@ -30,6 +36,10 @@ type State =
 
 export function ProgramsSection(): ReactNode {
   const [state, setState] = useState<State>({ kind: 'loading' });
+  const [textView, setTextView] = useState<{ open: boolean; levelId: string | null }>({
+    open: false,
+    levelId: null,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +56,10 @@ export function ProgramsSection(): ReactNode {
     };
   }, []);
 
+  const categories = state.kind === 'ready' ? state.categories : [];
+  const journey = useMemo(() => buildJourney(categories), [categories]);
+  const openText = (levelId: string | null): void => setTextView({ open: true, levelId });
+
   return (
     <section id="programs" className="section" aria-labelledby="programs-title">
       <Container>
@@ -54,73 +68,38 @@ export function ProgramsSection(): ReactNode {
             {t('programs.title')}
           </h2>
           <p className="lede">{t('programs.lede')}</p>
+          {/* §10 — the practical way to everything, before any scrolling. */}
+          {state.kind === 'ready' && state.categories.length > 0 ? (
+            <div className="programs__actions">
+              <Button variant="primary" icon="book" onClick={() => openText(null)}>
+                {t('programs.textView.open')}
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <div aria-live="polite" aria-busy={state.kind === 'loading'}>
           {state.kind === 'loading' ? <ProgramSkeletons /> : null}
           {state.kind === 'error' ? <p className="muted">{t('programs.error')}</p> : null}
-          {state.kind === 'ready' && state.categories.length === 0 ? (
+          {state.kind === 'ready' && journey.categories.length === 0 ? (
             <p className="muted">{t('programs.empty')}</p>
           ) : null}
-          {state.kind === 'ready' && state.categories.length > 0 ? (
-            <div className="grid grid--3">
-              {state.categories.map((category) => (
-                <CategoryCard key={category.id} category={category} />
-              ))}
-            </div>
+          {state.kind === 'ready' && journey.categories.length > 0 ? (
+            <ProgramsJourney journey={journey} onDetails={openText} />
           ) : null}
         </div>
+
+        {state.kind === 'ready' ? (
+          <ProgramsTextView
+            open={textView.open}
+            onClose={() => setTextView({ open: false, levelId: null })}
+            journey={journey}
+            categories={state.categories}
+            focusLevelId={textView.levelId}
+          />
+        ) : null}
       </Container>
     </section>
-  );
-}
-
-function CategoryCard({ category }: { category: PublicProgramCategory }): ReactNode {
-  return (
-    <article className="card programs__card">
-      {/* R170 — the Category is the card's HEADING BAND: name, then what it is
-          in the association's words, then how many Levels it holds. */}
-      <header className="programs__head">
-        <h3>{category.name}</h3>
-        {category.description ? <p className="programs__description">{category.description}</p> : null}
-        <span className="programs__count">
-          {t('programs.levelCount').replace('{n}', String(category.levels.length))}
-        </span>
-      </header>
-      {category.levels.length === 0 ? (
-        <p className="muted">{t('programs.noLevels')}</p>
-      ) : (
-        <ul className="programs__levels">
-          {category.levels.map((level, index) => (
-            <li key={level.id} className="programs__level">
-              <p className="programs__levelName">
-                {/* The position in the Category's own order (`/programs` lists
-                    Levels by `display_order`), as a small numeral. */}
-                <span className="programs__levelIndex" aria-hidden="true">
-                  {index + 1}
-                </span>
-                {level.name}
-              </p>
-              {level.description ? <p className="muted">{level.description}</p> : null}
-              {level.subjects.length > 0 ? (
-                <p className="programs__row">
-                  <span className="programs__rowLabel">{t('programs.subjectsLabel')}</span>
-                  {level.subjects.map((subject) => (
-                    <Badge key={subject.id}>{subject.name}</Badge>
-                  ))}
-                </p>
-              ) : null}
-              {level.surahs.length > 0 ? (
-                <p className="programs__row programs__row--text">
-                  <span className="programs__rowLabel">{t('programs.surahsLabel')}</span>
-                  {level.surahs.map((s) => s.name).join('، ')}
-                </p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-    </article>
   );
 }
 

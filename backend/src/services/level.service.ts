@@ -1,4 +1,5 @@
 import type { Level, Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { assertAgeRange } from '../policies/age-range.js';
 import { AppError } from '../lib/errors.js';
 import { applyOrder } from '../lib/reorder.js';
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
@@ -48,6 +49,10 @@ export interface CreateLevelInput {
   categoryId: string;
   genderRestriction: 'any' | 'girls_only' | 'boys_only';
   displayOrder?: number | null;
+  /** R180 §4/§6 — the age range (informational) and the journey role. */
+  minAge?: number | null;
+  maxAge?: number | null;
+  journeyRole?: 'step' | 'preparatory';
   /**
    * ~~**Required (Revision 43.1).** Where المجموعة 1 sits.~~ **Removed by
    * Revision 66.** A Level belongs to a Category and to no Branch, and it no
@@ -91,6 +96,10 @@ export interface LevelSummary {
   categoryName: string;
   genderRestriction: string;
   displayOrder: number | null;
+  /** R180 §4/§6 — the Level's own age range and its role on the journey. */
+  minAge: number | null;
+  maxAge: number | null;
+  journeyRole: 'step' | 'preparatory';
   groupCount: number;
   subjectCount: number;
   /**
@@ -229,6 +238,10 @@ export async function listLevels(
       categoryId: true,
       genderRestriction: true,
       displayOrder: true,
+      // R180 §4/§6
+      minAge: true,
+      maxAge: true,
+      journeyRole: true,
       version: true,
       category: { select: { name: true } },
       subjects: { where: { deletedAt: null, subject: { deletedAt: null } }, select: { subjectId: true } },
@@ -261,6 +274,9 @@ export async function listLevels(
     categoryName: row.category.name,
     genderRestriction: row.genderRestriction,
     displayOrder: row.displayOrder,
+    minAge: row.minAge,
+    maxAge: row.maxAge,
+    journeyRole: row.journeyRole,
     groupCount: row._count.administrativeGroups,
     subjectCount: row._count.subjects,
     subjectIds: row.subjects.map((link) => link.subjectId),
@@ -314,9 +330,23 @@ export async function updateLevel(
     description?: string | null;
     genderRestriction?: 'any' | 'girls_only' | 'boys_only';
     displayOrder?: number | null;
+    minAge?: number | null;
+    maxAge?: number | null;
+    journeyRole?: 'step' | 'preparatory';
   },
 ): Promise<Level> {
   assertCanManageReferenceData(actor);
+  // R180 §4 — an edit may send one end only: checked against the stored other.
+  if (data.minAge !== undefined || data.maxAge !== undefined) {
+    const stored = await prisma.level.findFirst({
+      where: { id, deletedAt: null },
+      select: { minAge: true, maxAge: true },
+    });
+    assertAgeRange(
+      data.minAge !== undefined ? data.minAge : (stored?.minAge ?? null),
+      data.maxAge !== undefined ? data.maxAge : (stored?.maxAge ?? null),
+    );
+  }
 
   return updateWithVersion<Level>({
     delegate: prisma.level,
@@ -505,6 +535,7 @@ export async function createLevel(
   input: CreateLevelInput,
 ): Promise<CreatedLevel> {
   assertCanManageReferenceData(actor);
+  assertAgeRange(input.minAge ?? null, input.maxAge ?? null);
 
   return prisma.$transaction(async (tx) => {
     const category = await tx.category.findFirst({
@@ -520,6 +551,10 @@ export async function createLevel(
         categoryId: input.categoryId,
         genderRestriction: input.genderRestriction,
         displayOrder: input.displayOrder ?? null,
+        // R180 §4/§6
+        minAge: input.minAge ?? null,
+        maxAge: input.maxAge ?? null,
+        journeyRole: input.journeyRole ?? 'step',
         createdById: actor.userId,
       },
     });

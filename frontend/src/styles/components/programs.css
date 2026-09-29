@@ -1,32 +1,418 @@
 /* Part of the design system — see `src/styles.css` for the layering. */
 
-/* ── Programme overview (§5.1, Revision 144) ─────────────────────────────── */
+/* ── «برامجنا التعليمية» as a journey (§5.1, SRS Revision 180) ───────────────
+   One road that CLIMBS, right to left (the page reads right to left), inside
+   a panel that scrolls sideways. Every stop stands `--journey-rise` higher
+   than the one before (`--step` is set per cell by the component), so the
+   ascent is real on every width and the page itself stays short. The section
+   head carries «عرض جميع البرامج», the text view of the same data (§10). */
 
-.programs__levels {
-  display: flex;
-  flex-direction: column;
+.journey {
+  display: grid;
   gap: var(--space-4);
+}
+.programs__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-block-start: var(--space-3);
+}
+
+/* The way to any Category without walking the ones before (§11). */
+.journey__nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.journey__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.programs__level {
-  padding-block-start: 0.75rem;
-  border-block-start: 1px solid var(--color-border);
-}
-.programs__level:first-child {
-  padding-block-start: 0;
-  border-block-start: none;
-}
-.programs__levelName {
+.journey__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-block-size: var(--tap-min);
+  padding: 0.25rem var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-primary-strong);
+  font: inherit;
   font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
+.journey__chip:hover {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-emphasis);
+}
+.journey__chip:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.journey__chipAge {
+  font-weight: 400;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+.journey__arrows {
+  display: flex;
+  gap: var(--space-2);
+}
+/* The chevron points down; a quarter turn each way says «back along the road»
+   (to the right, where it began) and «forward» (to the left). */
+.journey__arrow {
+  min-inline-size: var(--tap-min);
+  padding-inline: var(--space-2);
+}
+.journey__arrow--back svg {
+  transform: rotate(-90deg);
+}
+.journey__arrow--forward svg {
+  transform: rotate(90deg);
+}
+
+/* ── The panel and the road ──────────────────────────────────────────────── */
+.journey__panel {
+  --journey-card-w: 15.5rem;
+  --journey-walk-w: 96px;
+  --journey-junction-w: 150px;
+  /* Room below the road for the ways in (§5, §6): they arrive from outside,
+     beneath the road, and the first Categories stand low. */
+  --journey-below: 7rem;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  /* Sky above, ground below: the road climbs from one into the other. */
+  background: linear-gradient(
+    180deg,
+    var(--color-surface-raised) 0%,
+    var(--color-primary-faint) 55%,
+    var(--color-primary-soft) 100%
+  );
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--space-6);
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+}
+.journey__panel:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+/* A far hillside, higher toward the summit (the left, where the road ends). */
+.journey__panel::before {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 62%;
+  background: var(--color-primary-soft);
+  opacity: 0.9;
+  clip-path: polygon(0 12%, 12% 22%, 24% 10%, 40% 30%, 55% 26%, 72% 48%, 86% 44%, 100% 60%, 100% 100%, 0 100%);
+  pointer-events: none;
+}
+.journey__road {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: max-content;
+  margin: 0;
+  padding: var(--space-4) var(--space-6) var(--journey-below, 7rem);
+  list-style: none;
+}
+.journey__cell {
+  flex: none;
+  padding-block-end: calc(var(--step, 0) * var(--journey-rise-px, 12px));
+  scroll-snap-align: start;
+}
+.journey__cell--stop {
+  width: var(--journey-card-w, 15.5rem);
+}
+.journey__cell--walk {
+  width: var(--journey-walk-w, 96px);
+}
+.journey__cell--junction {
+  position: relative;
+  width: var(--journey-junction-w, 150px);
+}
+.journey__cell--graduation,
+.journey__cell--summit {
+  width: 9rem;
+}
+
+/* ── Stops ───────────────────────────────────────────────────────────────── */
+.journey__card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
+  /* Its foot: the road passes under the card. */
+  border-block-end: 4px solid var(--color-primary);
+}
+.journey__cardKicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+.journey__cardOrdinal {
+  padding: 0.1rem var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-weight: 700;
+}
+.journey__cardOrdinal--prep {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+.journey__cardTitle {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-tight);
+  color: var(--color-primary-strong);
+}
+.journey__cardAge {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+.journey__cardText {
+  margin: 0;
+  color: var(--color-text-secondary);
+  text-wrap: pretty;
+}
+.journey__cardRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0;
+}
+.journey__cardRow--muted {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+.journey__more {
+  justify-self: start;
+  padding-inline: var(--space-2);
+  min-block-size: var(--tap-min);
+}
+
+/* ── Walks: the shoe prints between stops ────────────────────────────────── */
+.journey__walk {
+  display: block;
+}
+.journey__prints {
+  display: block;
+  color: var(--color-primary-strong);
+  fill: currentcolor;
+  opacity: 0.85;
+}
+.journey__prints--entry,
+.journey__prints--prep {
+  color: var(--color-accent);
+}
+/* §9 — revealed print by print as a walk comes into view. Only once the
+   component has said it will animate (`journey--animate`): without JavaScript
+   or under reduced motion every print simply stands there. */
+.journey--animate .journey__print {
+  opacity: 0;
+}
+.journey--animate .is-walked .journey__print {
+  animation: journey-print-in 320ms ease-out both;
+  animation-delay: calc(var(--i, 0) * 130ms);
+}
+/* Opacity only: a CSS `transform` here would replace the print's own SVG
+   transform (its place and its direction of travel). */
+@keyframes journey-print-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .journey--animate .journey__print {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+/* ── Junctions: where a Category begins ──────────────────────────────────── */
+.journey__junction {
+  display: grid;
+  gap: var(--space-2);
+}
+.journey__sign {
+  display: grid;
+  gap: 0.15rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-strong);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-sm);
+}
+.journey__signCategory {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+.journey__signOrdinal {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.6rem;
+  block-size: 1.6rem;
+  border-radius: var(--radius-full);
+  background: var(--color-on-primary);
+  color: var(--color-primary-strong);
+  font-size: var(--font-size-xs);
+}
+.journey__signAge {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  opacity: 0.9;
+}
+.journey__signText {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  opacity: 0.85;
+}
+.journey__start {
+  justify-self: start;
+  margin: 0;
+  padding: 0.15rem var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-on-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+/* The ways in that come from OUTSIDE the road (§5 direct entry, §6 the
+   preparatory programme) hang below the road line — the cell's own foot —
+   and the road climbs past them. */
+.journey__entry,
+.journey__prep {
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% - var(--step, 0) * var(--journey-rise-px, 12px));
+  width: var(--journey-junction-w, 150px);
+}
+/* The words, then the prints toward the first step (which stands to the left). */
+.journey__entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: var(--space-1);
+}
+.journey__entryText {
+  margin: 0;
+  padding-block-start: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-accent);
+  font-weight: 600;
+  text-wrap: balance;
+}
+.journey__entryAge {
+  display: block;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+/* A preparatory programme stands beside the direct entry, one column over. */
+.journey__prep {
+  inset-inline-end: calc(var(--journey-junction-w, 150px) + var(--space-3));
+  width: var(--journey-card-w, 15.5rem);
+}
+.journey__card--prep {
+  border-block-end-color: var(--color-accent);
+}
+
+/* ── Milestones: the graduation hut, and the summit ──────────────────────── */
+.journey__milestone {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  text-align: center;
+}
+.journey__hut,
+.journey__peak {
+  display: block;
+}
+.journey__hutRoof {
+  fill: var(--color-accent);
+}
+.journey__hutWall {
+  fill: var(--color-surface-raised);
+  stroke: var(--color-primary-strong);
+  stroke-width: 2;
+}
+.journey__hutDoor {
+  fill: var(--color-primary-strong);
+}
+.journey__cap {
+  fill: var(--color-primary-strong);
+}
+.journey__capBrim {
+  fill: none;
+  stroke: var(--color-primary-strong);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.journey__peakRock {
+  fill: var(--color-primary);
+}
+.journey__peakSnow {
+  fill: var(--color-surface-raised);
+}
+.journey__flag {
+  fill: var(--color-accent);
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+.journey__milestoneTitle {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-weight: 700;
+  color: var(--color-primary-strong);
+}
+.journey__milestoneText {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  text-wrap: balance;
+}
+.journey__milestone--summit .journey__milestoneTitle {
+  color: var(--color-accent);
+}
+
+/* ── The text view (§10): the same data, to scan ─────────────────────────── */
 .programs__row {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.4rem;
-  margin-block-start: 0.3rem;
+  margin: 0;
 }
 /* The surahs row is a sentence, not a run of pills — a Level's حفظ curriculum
    can carry far more entries than its Subjects, and a badge each would read
@@ -38,59 +424,97 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }
-
-/* ── R170 — the Category as a heading band, the Levels as numbered rows ──── */
-
-.programs__card {
-  padding: 0;
-  overflow: hidden;
-  gap: 0;
+.programs-text {
+  display: grid;
+  gap: var(--space-6);
 }
-.programs__head {
+.programs-text__category {
+  display: grid;
+  gap: var(--space-3);
+  scroll-margin-block-start: var(--space-4);
+}
+.programs-text__head {
   display: grid;
   gap: var(--space-1);
-  padding: var(--space-5) var(--space-5) var(--space-4);
-  background: linear-gradient(180deg, var(--color-primary-soft), var(--color-surface-raised));
-  border-block-end: 1px solid var(--color-border-subtle);
+  padding-block-end: var(--space-2);
+  border-block-end: 2px solid var(--color-primary-soft);
 }
-.programs__head h3 {
+.programs-text__head h3 {
   margin: 0;
   color: var(--color-primary-strong);
 }
-.programs__description {
+.programs-text__age {
   margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
+  font-weight: 600;
+  color: var(--color-accent);
 }
-.programs__count {
-  margin-block-start: var(--space-1);
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  color: var(--color-primary);
-}
-.programs__card > .programs__levels,
-.programs__card > .muted {
-  padding: var(--space-4) var(--space-5) var(--space-5);
+.programs-text__levels {
+  display: grid;
+  gap: var(--space-3);
   margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.programs__levelName {
+.programs-text__level {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-inline-start: 4px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  scroll-margin-block-start: var(--space-4);
+}
+.programs-text__level--prep {
+  border-inline-start-color: var(--color-accent);
+}
+.programs-text__level--focus {
+  box-shadow: var(--shadow-focus);
+}
+.programs-text__levelName {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: baseline;
   gap: var(--space-2);
   margin: 0;
-}
-.programs__levelIndex {
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  inline-size: 1.75rem;
-  block-size: 1.75rem;
-  border-radius: var(--radius-full);
-  background: var(--color-primary-soft);
-  border: 0;
-  color: var(--color-primary);
-  font-size: var(--font-size-xs);
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
+}
+.programs-text__milestone {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* ── Narrow screens (§11) ────────────────────────────────────────────────── */
+@media (max-width: 44rem) {
+  .journey__panel {
+    --journey-card-w: 13rem;
+    --journey-walk-w: 72px;
+    --journey-junction-w: 128px;
+    --journey-below: 7rem;
+  }
+  .journey__road {
+    padding-inline: var(--space-4);
+  }
+  /* A phone's card says the essentials — the Subjects and the Surahs are one
+     line each; the text view has the lists. */
+  .journey__cardRow--wide {
+    display: none;
+  }
+  .journey__cardText {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    overflow: hidden;
+  }
+  .journey__prep {
+    width: var(--journey-card-w, 15.5rem);
+  }
+}
+@media (min-width: 44.01rem) {
+  .journey__cardSummary {
+    display: none;
+  }
 }

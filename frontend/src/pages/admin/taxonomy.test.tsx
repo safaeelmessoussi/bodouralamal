@@ -43,6 +43,9 @@ const LEVEL: Level = {
   category_name: CATEGORY.name,
   gender_restriction: 'girls_only',
   display_order: 1,
+  min_age: 6,
+  max_age: 8,
+  journey_role: 'step',
   group_count: 1,
   subject_count: 2,
       subject_ids: [],
@@ -55,8 +58,8 @@ describe('the adapter types match the wire contract', () => {
     expect(Object.keys(CATEGORY).sort()).toEqual([
       'description',
       'display_order',
-      // R170 §6 — who holds the login (`null`: not stated), and the
-      // informational age range.
+      // R170 §6 — who holds the login (`null`: not stated); R180 §4 — the age
+      // range, DERIVED from the Category's first and last Level.
       'holds_own_login',
       'id',
       'level_count',
@@ -90,6 +93,10 @@ describe('the adapter types match the wire contract', () => {
       'gender_restriction',
       'group_count',
       'id',
+      // R180 §4/§6 — the Level's own age range and its role on the journey.
+      'journey_role',
+      'max_age',
+      'min_age',
       'name',
       'subject_count',
       // 2026-09-23 — the Level's own Subjects, so «مواد المستوى» reads the
@@ -166,11 +173,12 @@ describe('the registry and the router agree', () => {
 });
 
 /**
- * R170 §6 — the Category's age range is whole years between 0 and 120 and never
- * inverted; an empty box is «not stated». The server and the database hold the
- * same rule — this is what says it beside the field.
+ * R170 §6 / R180 §4 — the LEVEL's age range is whole years between 0 and 120
+ * and never inverted; an empty box is «not stated». The server and the
+ * database hold the same rule — this is what says it beside the field, on
+ * «المستويات» now.
  */
-describe('ageRangeError (R170 §6)', () => {
+describe('ageRangeError (R170 §6, on the Level since R180 §4)', () => {
   it('accepts an empty pair, one end, and an ordered pair', () => {
     for (const [min, max] of [['', ''], ['6', ''], ['', '12'], ['6', '12'], ['18', '18'], ['0', '5']]) {
       expect(ageRangeError(min!, max!)).toBeNull();

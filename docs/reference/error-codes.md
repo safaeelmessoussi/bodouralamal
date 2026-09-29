@@ -89,5 +89,6 @@ Canonical catalogue; every service uses exactly these identifiers; extensible on
 | `SURAH_NOT_IN_SYLLABUS` | Class, occurrence, exam or content writes (R165 §2; a Surah is optional everywhere since R179 §2 — `SURAHS_REQUIRED` retired) | `details.surah_ids` outside every addressed Level's «مقرر الحفظ» |
 | `SURAHS_NOT_APPLICABLE` | Same | Surah named for a non-Surah Subject; remove it (never stored as an extra) |
 | `TRACKER_REQUIRES_SURAHS` | Editing a Subject | The memorisation Subject always works by Surah; un-mark tracker first |
+| `AGE_RANGE_INVERTED` | Level create/update (R170 §6, on the Level since R180 §4) | «السن من» exceeds «السن إلى»; one end sent alone is checked against the stored other |
 
 **Related:** [API](../architecture/api.md#the-error-envelope), [API endpoints](api-endpoints.md), [Resilience](../operations/resilience.md)

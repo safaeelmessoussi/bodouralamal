@@ -34,7 +34,8 @@ export interface Category {
    * restricts nothing.** The server enforces it; forms only stop offering.
    */
   holds_own_login: boolean | null;
-  /** R170 §6 — informational, whole years; gates nothing. */
+  /** R180 §4 — DERIVED from the Category's first and last Level (stated on
+   *  «المستويات»); informational, whole years; gates nothing. */
   min_age: number | null;
   max_age: number | null;
   display_order: number | null;
@@ -63,8 +64,6 @@ export interface TaxonomyInput {
   description?: string | null;
   /** R170 §6 — Categories only; omit to leave unchanged. */
   holds_own_login?: boolean | null;
-  min_age?: number | null;
-  max_age?: number | null;
   display_order?: number | null;
   /** R73 — Subjects only; omit to leave unchanged. See `SubjectRef`'s own note. */
   tracks_quran_progress?: boolean;
@@ -187,6 +186,12 @@ export interface Level {
   /** §4.4b / Revision 27 — who the Level admits, as data rather than as a name. */
   gender_restriction: GenderRestriction;
   display_order: number | null;
+  /** R180 §4 — the Level's age range, informational; `null` is «not stated». */
+  min_age: number | null;
+  max_age: number | null;
+  /** R180 §6 — `step` (the next rung) or `preparatory` (a programme that leads
+   *  into the Category's first step, not required of those who enter there). */
+  journey_role: JourneyRole;
   group_count: number;
   subject_count: number;
   /** The Subjects the Level teaches on its own — one read for «مواد المستوى». */
@@ -208,12 +213,18 @@ export interface Level {
  * where المجموعة 1 goes. A Level is Category-scoped and branch-independent —
  * it may hold groups at several branches later.
  */
+export type JourneyRole = 'step' | 'preparatory';
+
 export interface CreateLevelInput {
   name: string;
   description?: string | null;
   category_id: string;
   gender_restriction: GenderRestriction;
   display_order?: number | null;
+  /** R180 §4/§6 — omit to leave unchanged; `null` clears an end of the range. */
+  min_age?: number | null;
+  max_age?: number | null;
+  journey_role?: JourneyRole;
 }
 
 /** `category_id` is absent deliberately: a Level does not move between
@@ -224,6 +235,9 @@ export interface UpdateLevelInput {
   description?: string | null;
   gender_restriction?: GenderRestriction;
   display_order?: number | null;
+  min_age?: number | null;
+  max_age?: number | null;
+  journey_role?: JourneyRole;
 }
 
 export async function listLevels(

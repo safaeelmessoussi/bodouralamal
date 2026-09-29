@@ -122,6 +122,10 @@ The §14.3 registry (`StudentSelector`, `GroupSelector`/`LevelSelector`/`BranchS
 - `withCategoryNames` joins a Category name onto Levels carrying `category_id` so `levelLabel` renders `{Category} — {Level}`.
 - `.button` / `.button.primary` in `status-pages.css` (a second button system, ten call sites) was deleted for `ButtonLink`.
 
+## The landing page's programmes (R180)
+
+`components/programs-section.tsx` reads `GET /programs` once and hands the categories to `components/programs/journey-model.ts` (`buildJourney`: journey order — derived start age when every Category states one, else the Super Admin's order; steps numbered per Category; `preparatory` Levels apart; `directEntry` on every Category after the first). Two views of that one model: `programs-journey.tsx` (a sideways-scrolling panel; each cell carries `--step` and stands `--step × rise` higher, the rise scaling with the catalogue's length; `shoe-prints.tsx` stamps a shoe-sole symbol along each walk; an `IntersectionObserver` on the panel adds `is-walked`, the stylesheet reveals prints print by print only under `journey--animate`, which the component sets only when the browser allows motion — `scripts/ci/check-journey-css.sh` holds that) and `programs-text-view.tsx` («عرض جميع البرامج», a wide `Dialog`, focusable at one Level). Nothing in the catalogue is named in code; `programs.css` carries every rule under semantic tokens.
+
 ## The calendar page
 
 Atomic components: title, navigation, filter toolbar, three filter selects, grid, day cell, event chip, day dialog, details dialog.

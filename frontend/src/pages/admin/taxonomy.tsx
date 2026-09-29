@@ -26,7 +26,7 @@ import {
   type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { CheckboxField, NumberField, TextArea, TextField } from '../../components/ui/field.js';
+import { CheckboxField, TextArea, TextField } from '../../components/ui/field.js';
 import { ageRangeLabel } from '../../lib/category-audience.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
@@ -145,7 +145,8 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
         },
       },
       {
-        // R170 §6 — informational; shown so the office and the forms say the same.
+        // R170 §6 — informational; shown so the office and the forms say the
+        // same. R180 §4 — DERIVED from the Category's first and last Level.
         key: 'age_range',
         header: 'admin.taxonomy.colAge',
         cell: (r) => ageRangeLabel(r as Category) ?? <span className="muted">{t('common.notSet')}</span>,
@@ -516,8 +517,6 @@ function TaxonomyFormDialog({
     tracks_quran_progress?: boolean;
     requires_surahs?: boolean;
     holds_own_login?: boolean | null;
-    min_age?: number | null;
-    max_age?: number | null;
   } | null;
   withDescription?: boolean;
   withQuranFlag?: boolean;
@@ -535,28 +534,23 @@ function TaxonomyFormDialog({
     // unticked is «يسجّلها وليّ الأمر». A row nobody has answered («غير محدَّد»)
     // opens unticked and is answered by the first save.
     holdsOwnLogin: initial?.holds_own_login === true,
-    minAge: initial?.min_age == null ? '' : String(initial.min_age),
-    maxAge: initial?.max_age == null ? '' : String(initial.max_age),
   };
   const [name, setName] = useState(pristine.name);
   const [holdsOwnLogin, setHoldsOwnLogin] = useState(pristine.holdsOwnLogin);
-  const [minAge, setMinAge] = useState(pristine.minAge);
-  const [maxAge, setMaxAge] = useState(pristine.maxAge);
   const [description, setDescription] = useState(pristine.description);
   const [tracksQuranProgress, setTracksQuranProgress] = useState(pristine.tracksQuranProgress);
   const [requiresSurahs, setRequiresSurahs] = useState(pristine.requiresSurahs);
   const [touched, setTouched] = useState(false);
   const error = name.trim() === '' ? t('common.required') : null;
-  const ageError = withAudience ? ageRangeError(minAge, maxAge) : null;
   // Only user-modified data is dirty; a validation error is not a change.
   const dirty = isDirty(
-    { name, description, tracksQuranProgress, requiresSurahs, holdsOwnLogin, minAge, maxAge },
+    { name, description, tracksQuranProgress, requiresSurahs, holdsOwnLogin },
     pristine,
   );
 
   function submit(): void {
     setTouched(true);
-    if (error || ageError) return;
+    if (error) return;
     /* **`display_order` is not sent** (R76.8). The form no longer offers it, so
        sending anything would be inventing a value: an edit would overwrite a
        position the administrator set by dragging, and a create would claim a
@@ -577,15 +571,9 @@ function TaxonomyFormDialog({
       // CHECK), so the pair is sent consistent rather than left for the server
       // to refuse: ticking the first ticks the second.
       ...(withQuranFlag ? { requires_surahs: requiresSurahs || tracksQuranProgress } : {}),
-      // R170 §6 — sent only by the form that offers them. An empty age is
-      // «not stated» (`null`), never zero.
-      ...(withAudience
-        ? {
-            holds_own_login: holdsOwnLogin,
-            min_age: minAge.trim() === '' ? null : Number(minAge),
-            max_age: maxAge.trim() === '' ? null : Number(maxAge),
-          }
-        : {}),
+      // R170 §6 — sent only by the form that offers it. R180 §4 — the age
+      // range is no longer asked here: it is the Levels', on «المستويات».
+      ...(withAudience ? { holds_own_login: holdsOwnLogin } : {}),
     });
   }
 
@@ -623,28 +611,8 @@ function TaxonomyFormDialog({
           hint={t('admin.taxonomy.holdsOwnLoginHint')}
         />
       ) : null}
-      {withAudience ? (
-        <NumberField
-          label={t('admin.taxonomy.minAgeLabel')}
-          value={minAge}
-          onChange={setMinAge}
-          min={0}
-          max={120}
-          step={1}
-          hint={t('admin.taxonomy.ageHint')}
-        />
-      ) : null}
-      {withAudience ? (
-        <NumberField
-          label={t('admin.taxonomy.maxAgeLabel')}
-          value={maxAge}
-          onChange={setMaxAge}
-          min={0}
-          max={120}
-          step={1}
-          error={touched ? ageError : null}
-        />
-      ) : null}
+      {/* R180 §4 — no age inputs here: a Category's range is derived from its
+          first and last Level, stated on «المستويات». */}
       {withQuranFlag ? (
         <CheckboxField
           label={t('admin.taxonomy.tracksQuranLabel')}

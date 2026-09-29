@@ -18,10 +18,17 @@ export function list(prisma: PrismaClient) {
         id: category.id,
         name: category.name,
         description: category.description,
+        // R180 §4 — derived from the first and last Level; `null` = no bound.
+        min_age: category.minAge,
+        max_age: category.maxAge,
         levels: category.levels.map((level) => ({
           id: level.id,
           name: level.name,
           description: level.description,
+          min_age: level.minAge,
+          max_age: level.maxAge,
+          // R180 §6 — what the Level is on the journey.
+          journey_role: level.journeyRole,
           subjects: level.subjects.map((s) => ({ id: s.id, name: s.name })),
           surahs: level.surahs.map((s) => ({ id: s.id, name: s.name })),
         })),

@@ -1,5 +1,6 @@
 import type { Category, PrismaClient, Subject } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { derivedCategoryAgeRange } from '../policies/age-range.js';
 import { applyOrder } from '../lib/reorder.js';
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import * as scope from '../policies/branch-scope.js';
@@ -361,7 +362,8 @@ export interface CategoryRef {
   description: string | null;
   /** R170 §6 — who holds the login; `null` is «not stated» and restricts nothing. */
   holdsOwnLogin: boolean | null;
-  /** R170 §6 — informational; gates nothing. */
+  /** R180 §4 — DERIVED from the Category's first and last Level (`policies/
+   *  age-range.ts`); informational; gates nothing. Never stored here. */
   minAge: number | null;
   maxAge: number | null;
   displayOrder: number | null;
@@ -398,13 +400,17 @@ export async function listCategories(
       name: true,
       description: true,
       holdsOwnLogin: true,
-      minAge: true,
-      maxAge: true,
       displayOrder: true,
       version: true,
       _count: { select: { levels: { where: { deletedAt: null } } } },
       // R172 §1 — taught to every Level of the Category; one read for the page.
       subjects: { where: { deletedAt: null, subject: { deletedAt: null } }, select: { subjectId: true } },
+      // R180 §4 — the range is the Levels', in the Category's own order.
+      levels: {
+        where: { deletedAt: null },
+        select: { minAge: true, maxAge: true },
+        orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+      },
     },
   });
   return rows.map((row) => ({
@@ -412,8 +418,7 @@ export async function listCategories(
     name: row.name,
     description: row.description,
     holdsOwnLogin: row.holdsOwnLogin,
-    minAge: row.minAge,
-    maxAge: row.maxAge,
+    ...derivedCategoryAgeRange(row.levels),
     displayOrder: row.displayOrder,
     levelCount: row._count.levels,
     subjectIds: row.subjects.map((link) => link.subjectId),
@@ -428,7 +433,6 @@ export async function createCategory(
   data: CategoryWrite & { name: string },
 ): Promise<CategoryRef> {
   assertCanWrite(actor);
-  assertAgeRange(data.minAge ?? null, data.maxAge ?? null);
 
   return prisma.$transaction(async (tx) => {
     const category = await tx.category.create({
@@ -436,8 +440,6 @@ export async function createCategory(
         name: data.name,
         description: data.description ?? null,
         holdsOwnLogin: data.holdsOwnLogin ?? null,
-        minAge: data.minAge ?? null,
-        maxAge: data.maxAge ?? null,
         displayOrder: data.displayOrder ?? null,
         createdById: actor.userId,
       },
@@ -455,8 +457,9 @@ export async function createCategory(
       name: category.name,
       description: category.description,
       holdsOwnLogin: category.holdsOwnLogin,
-      minAge: category.minAge,
-      maxAge: category.maxAge,
+      // No Levels yet, so no range (R180 §4).
+      minAge: null,
+      maxAge: null,
       displayOrder: category.displayOrder,
       levelCount: 0,
       subjectIds: [],
@@ -470,20 +473,7 @@ export interface CategoryWrite {
   name?: string;
   description?: string | null;
   holdsOwnLogin?: boolean | null;
-  minAge?: number | null;
-  maxAge?: number | null;
   displayOrder?: number | null;
-}
-
-/**
- * The pair is checked HERE for a create; an edit may send one end only, so it
- * is checked there against the stored other end. The database holds the same
- * rule (`category_age_range_check`) — this is what turns it into a sentence.
- */
-function assertAgeRange(minAge: number | null, maxAge: number | null): void {
-  if (minAge !== null && maxAge !== null && minAge > maxAge) {
-    throw new AppError('VALIDATION_FAILED', 'min_age must not exceed max_age', { reason: 'AGE_RANGE_INVERTED' });
-  }
 }
 
 export async function updateCategory(
@@ -494,16 +484,6 @@ export async function updateCategory(
   data: CategoryWrite,
 ): Promise<CategoryRef> {
   assertCanWrite(actor);
-  if (data.minAge !== undefined || data.maxAge !== undefined) {
-    const stored = await prisma.category.findFirst({
-      where: { id, deletedAt: null },
-      select: { minAge: true, maxAge: true },
-    });
-    assertAgeRange(
-      data.minAge !== undefined ? data.minAge : (stored?.minAge ?? null),
-      data.maxAge !== undefined ? data.maxAge : (stored?.maxAge ?? null),
-    );
-  }
   const category = await updateWithVersion<Category>({
     delegate: prisma.category,
     id,
@@ -511,8 +491,12 @@ export async function updateCategory(
     requireNotDeleted: true,
     data: { ...data },
   });
-  const [levelCount, links] = await Promise.all([
-    prisma.level.count({ where: { categoryId: id, deletedAt: null } }),
+  const [levels, links] = await Promise.all([
+    prisma.level.findMany({
+      where: { categoryId: id, deletedAt: null },
+      select: { minAge: true, maxAge: true },
+      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+    }),
     prisma.categorySubject.findMany({
       where: { categoryId: id, deletedAt: null, subject: { deletedAt: null } },
       select: { subjectId: true },
@@ -524,10 +508,9 @@ export async function updateCategory(
     subjectIds: links.map((link) => link.subjectId),
     description: category.description,
     holdsOwnLogin: category.holdsOwnLogin,
-    minAge: category.minAge,
-    maxAge: category.maxAge,
+    ...derivedCategoryAgeRange(levels),
     displayOrder: category.displayOrder,
-    levelCount,
+    levelCount: levels.length,
     version: category.version,
   };
 }

@@ -175,53 +175,102 @@ describe("Categories (§5.6 الفئات والمواد)", () => {
     expect(row["holds_own_login"]).toBeNull();
   });
 
-  it("R170 §6 — records who holds the login and the age range, and clears them again", async () => {
+  it("R170 §6 — records who holds the login, and clears it again", async () => {
     const before = (
       (await call("GET", "/admin/categories", superAdmin)).body.data as unknown as Record<string, unknown>[]
     ).find((r) => r["id"] === categoryId)!;
     const saved = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, {
       version: before["version"],
       holds_own_login: false,
-      min_age: 6,
-      max_age: 12,
     });
     expect(saved.status).toBe(200);
-    expect(saved.body.data).toMatchObject({ holds_own_login: false, min_age: 6, max_age: 12 });
-
-    // One end only is checked against the STORED other end.
-    const inverted = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, {
+    expect(saved.body.data).toMatchObject({ holds_own_login: false });
+    const bad = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, {
       version: (saved.body.data as unknown as Record<string, unknown>)["version"],
-      min_age: 13,
+      holds_own_login: "yes",
     });
-    expect(inverted.status).toBe(400);
-    expect(inverted.body.error?.details).toMatchObject({ reason: "AGE_RANGE_INVERTED" });
-
-    // Not a number of years: refused at the boundary.
-    for (const bad of [{ min_age: -1 }, { max_age: 121 }, { min_age: 6.5 }, { holds_own_login: "yes" }]) {
-      const res = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, {
-        version: (saved.body.data as unknown as Record<string, unknown>)["version"],
-        ...bad,
-      });
-      expect(res.status).toBe(400);
-    }
+    expect(bad.status).toBe(400);
 
     // `null` is an answer too: «not stated», which restricts nothing.
     const cleared = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, {
       version: (saved.body.data as unknown as Record<string, unknown>)["version"],
       holds_own_login: null,
-      min_age: null,
-      max_age: null,
     });
     expect(cleared.status).toBe(200);
-    expect(cleared.body.data).toMatchObject({ holds_own_login: null, min_age: null, max_age: null });
+    expect(cleared.body.data).toMatchObject({ holds_own_login: null });
   });
 
-  it("R170 §6 — the public bootstrap carries the marker and the range, so the forms can offer the right Categories", async () => {
-    const res = await call("GET", "/calendar/bootstrap?from=2026-09-01&to=2026-09-30");
-    expect(res.status).toBe(200);
-    const categories = (res.body.data as unknown as { categories: Record<string, unknown>[] }).categories;
-    const row = categories.find((c) => c["id"] === categoryId)!;
+  /**
+   * **R180 §4 — the age range lives on the LEVEL; a Category's is DERIVED:**
+   * the first Level's start, the last Level's end, in the Category's own
+   * order; a last Level with no end leaves the Category open-ended.
+   */
+  it("R180 §4 — a Level states its ages; the Category's range is its first and last Level's, never stored", async () => {
+    const made: string[] = [];
+    try {
+    const first = await call("POST", "/admin/levels", superAdmin, {
+      name: `${TAG} أعمار 1`,
+      category_id: categoryId,
+      min_age: 6,
+      max_age: 8,
+      display_order: 1,
+    });
+    expect(first.status).toBe(201);
+    made.push(String((first.body.data as unknown as Record<string, unknown>)["id"]));
+    expect(first.body.data).toMatchObject({ min_age: 6, max_age: 8, journey_role: "step" });
+    const last = await call("POST", "/admin/levels", superAdmin, {
+      name: `${TAG} أعمار 2`,
+      category_id: categoryId,
+      min_age: 9,
+      display_order: 2,
+    });
+    expect(last.status).toBe(201);
+    made.push(String((last.body.data as unknown as Record<string, unknown>)["id"]));
+
+    const category = (
+      (await call("GET", "/admin/categories", superAdmin)).body.data as unknown as Record<string, unknown>[]
+    ).find((r) => r["id"] === categoryId)!;
+    // Start 6 (first Level), no end (the last Level states none): open-ended.
+    expect(category["min_age"]).toBe(6);
+    expect(category["max_age"]).toBeNull();
+
+    // The same answer on the public bootstrap the registration forms read.
+    const bootstrap = await call("GET", "/calendar/bootstrap?from=2026-09-01&to=2026-09-30");
+    const row = (bootstrap.body.data as unknown as { categories: Record<string, unknown>[] }).categories.find(
+      (c) => c["id"] === categoryId,
+    )!;
     expect(Object.keys(row).sort()).toEqual(["display_order", "holds_own_login", "id", "max_age", "min_age", "name"]);
+    expect(row).toMatchObject({ min_age: 6, max_age: null });
+
+    // The Category takes no range of its own any more: the keys are dropped, not stored.
+    const version = category["version"];
+    const ignored = await call("PATCH", `/admin/categories/${categoryId}`, superAdmin, { version, min_age: 40 });
+    expect(ignored.status).toBe(200);
+    expect((ignored.body.data as unknown as Record<string, unknown>)["min_age"]).toBe(6);
+
+    // One end only is checked against the STORED other end; whole years 0–120.
+    const lastId = String((last.body.data as unknown as Record<string, unknown>)["id"]);
+    const lastVersion = (last.body.data as unknown as Record<string, unknown>)["version"];
+    const inverted = await call("PATCH", `/admin/levels/${lastId}`, superAdmin, { version: lastVersion, max_age: 5 });
+    expect(inverted.status).toBe(400);
+    expect(inverted.body.error?.details).toMatchObject({ reason: "AGE_RANGE_INVERTED" });
+    for (const bad of [{ min_age: -1 }, { max_age: 121 }, { min_age: 6.5 }, { journey_role: "gate" }]) {
+      const res = await call("PATCH", `/admin/levels/${lastId}`, superAdmin, { version: lastVersion, ...bad });
+      expect(res.status).toBe(400);
+    }
+    // R180 §6 — the journey role is a column, set on «المستويات».
+    const marked = await call("PATCH", `/admin/levels/${lastId}`, superAdmin, {
+      version: lastVersion,
+      journey_role: "preparatory",
+      max_age: 12,
+    });
+    expect(marked.status).toBe(200);
+    expect(marked.body.data).toMatchObject({ journey_role: "preparatory", min_age: 9, max_age: 12 });
+    } finally {
+      // Whatever the assertions said, the Category must be empty for the
+      // deletion test that follows.
+      await prisma.level.deleteMany({ where: { id: { in: made } } });
+    }
   });
 
   it("refuses a stale version with 409 VERSION_CONFLICT rather than overwriting", async () => {

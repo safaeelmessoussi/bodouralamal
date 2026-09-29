@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint — current Revision 179 (2026-09-29); see the revision ledger below.
+**Status:** Final MVP Blueprint — current Revision 180 (2026-09-30); see the revision ledger below.
 **Revision date:** 2026-09-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** Safae El Messoussi
@@ -24,7 +24,7 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
-**Revision ledger (R1–R179):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 179** (2026-09-29).
+**Revision ledger (R1–R180):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 180** (2026-09-30).
 
 Where §4 (functional) and §12–§20 (rules/constraints) describe the same behavior, they must agree; if an implementer ever finds a conflict, **§12 Business Rules win**, and the conflict must be reported, not silently resolved.
 
@@ -631,7 +631,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 (The authoritative sitemap and navigation hierarchy is §14.1; this section describes each page's content and behavior. End-to-end journeys connecting these pages: §17.)
 
 ### 5.1 Public (unauthenticated)
-* **Landing Page (`/`)** — Association identity, mission, **branch list with contact details and a map link — served by the public `GET /branches` (TD-3.9, Revision 35) and never hardcoded, so a branch added in the back office appears here with no frontend change**, read-only public calendar, unrestricted public resources. Login/Register CTAs. (Language switcher ships with the FR/EN translations post-MVP, §10.1 — MVP is Arabic-only.)
+* **Landing Page (`/`)** — Association identity, mission, **«برامجنا التعليمية» as a journey (Revision 180)** — served by the public `GET /programs` (TD-3.16), never hardcoded: one road that climbs from the first Level of the youngest Category, step by step through each Category to its graduation and on to the next, to the summit; shoe prints walk from each Level to the next, revealed as the visitor scrolls (still under `prefers-reduced-motion`, and without JavaScript); every Category after the first may be entered directly at its FIRST Level (never a later one), drawn as prints arriving from outside the road; a `preparatory` Level (§7, a column) leads into its Category's first Level beside the road; and **«عرض جميع البرامج»** opens the same catalogue as text to scan, from the same read — **branch list with contact details and a map link — served by the public `GET /branches` (TD-3.9, Revision 35) and never hardcoded, so a branch added in the back office appears here with no frontend change**, read-only public calendar, unrestricted public resources. Login/Register CTAs. (Language switcher ships with the FR/EN translations post-MVP, §10.1 — MVP is Arabic-only.)
 * **Registration Page (`/register`)** — "Continue with Google" entry executing the OAuth-first sequence (§4.1b); adult self-registration form or unified Parent + Child form with read-only pre-populated Google email; **الاسم الشخصي and الاسم العائلي as separate required fields (Revision 40)**, with `name_arabic` composed server-side; **a required Branch selector (Revision 39)**, populated from the public `GET /branches` and never hardcoded, so a branch added in the back office becomes selectable here with no frontend change; generic consent checkbox and explicit Parental Media Consent checkbox for minors; submits into `Pending`. **The form offers no Level, Room or Group** — those are administrative decisions after approval (§4.1).
 * **Login Page (`/login`)** — Google OAuth button only. No password fields. Deactivated and Pending states per §4.1/§2.1.
 * **Content Access Changed Page (`/content-unavailable`)** — friendly error page for stale public links to now-private content (§3.1).
@@ -735,7 +735,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
   * Columns are added **nullable at the database level** so branches predating this revision need no invented address (the same treatment `User.sex` received in Revision 27); *required* is enforced at the write boundary by TD-9, which is where a real value can actually be demanded.
 * **Room** — rooms linked to specific branches, with an optional integer **`capacity`** (published on `RoomDto` and editable on the rooms dialog since Revision 169 §3). **`capacity` is INFORMATIONAL and is never enforced (Revision 43):** it is displayed to assist planning and no business logic refuses an assignment on it. Administrators remain responsible for assigning suitable rooms; the platform surfaces the number and does not pretend to know better than the person standing in the building.
 * **Category** — academic track with single Arabic `name` (collated) and optional `display_order`. **`self_attendance_allowed`** *(Revision 123)* — whether a beneficiary of this Category may record her own presence; `true` for المرأة, `false` for اليافعات and الطفل, and `false` by default so a Category created later is safe until somebody decides otherwise. It is a **column**, because §4.4b forbids reading a rule off a name.
-* **Level** — level sub-track with single Arabic `name` (collated), `gender_restriction`, optional `display_order` (scoped within its Category).
+* **Level** — level sub-track with single Arabic `name` (collated), `gender_restriction`, optional `display_order` (scoped within its Category); **`min_age`/`max_age`** *(Revision 180 §4; R170 §6's range moved here from the Category)* — informational whole years, 0–120, never inverted (`level_age_range_check`), gating nothing (R64.7); **`journey_role`** *(Revision 180 §6)* — `step` (the Category's next rung) or `preparatory` (a programme, such as a literacy programme, that leads into the Category's first step and is not required of a learner who enters there), a column and never a match on the name (§4.4b). **A Category's age range is derived, never stored** (Revision 180 §4): its start is its first Level's start, its end its LAST Level's end in the Category's own order — a last Level with no end leaves the Category open-ended («من 18 سنة»).
 * **Subject** — atomic curriculum subject with single Arabic `name` (collated), optional `display_order`, `tracks_quran_progress` (default false) and **`requires_surahs`** (default false; Revision 165 — the Subject works by Surah, so scheduling a class or an exam of it must name which; a column, never a match on the name; CHECK `NOT tracks_quran_progress OR requires_surahs`). The broad Quran domain القرآن الكريم is not a Subject; **حفظ القرآن is the only Subject that may carry the memorisation-authorization marker** (Revisions 107–108, §4.4b). The seed baseline does not constrain which additional Subjects a Super Admin may create.
 * **LevelSubject** — join: Subject↔Level, **many-to-many**; creation auto-generates draft grading components (BR-9), **except for حفظ القرآن and تفسير القرآن, which generate none** (§4.4b carve-out — their future per-Surah components come from `LevelSurah`).
 * **LevelSurah** — join: Surah↔Level; the حفظ القرآن memorisation syllabus and BR-11 completion set, also followed by تفسير القرآن as its per-Level Surah selection. Its future Adult-stage generation creates memorisation and Tafsir components without giving Tafsir memorisation authority (§4.6).
@@ -1411,9 +1411,12 @@ audiences has to get the difference right on every future change.
 **3.16 Public programme overview (Revision 144)**
 ```
 GET /programs   (public — anonymous) → the §5.1 landing-page programme section
-                  Returns ONLY, per Category: id, name, description, and
-                  levels[]; per Level: id, name, description, subjects[]
-                  and surahs[]; per Subject: id, name; per Surah: id,
+                  Returns ONLY, per Category: id, name, description,
+                  min_age, max_age (DERIVED from its first/last Level,
+                  Revision 180 §4) and levels[]; per Level: id, name,
+                  description, min_age, max_age, journey_role
+                  (step | preparatory, Revision 180 §6), subjects[] and
+                  surahs[]; per Subject: id, name; per Surah: id,
                   name (Arabic).
                   Never: enrolment_count, gender_restriction,
                   display_order, default_visibility, version, or any

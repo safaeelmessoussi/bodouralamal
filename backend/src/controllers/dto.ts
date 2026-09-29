@@ -1367,7 +1367,19 @@ export interface LevelCoreDto {
   /** §4.4b / Revision 27 — `any | girls_only | boys_only`. */
   gender_restriction: string;
   display_order: number | null;
+  /** R180 §4 — the Level's age range, informational; `null` is «not stated». */
+  min_age: number | null;
+  max_age: number | null;
+  /** R180 §6 — `step | preparatory`: what the Level is on the journey. */
+  journey_role: string;
   version: number;
+}
+
+/** The Level columns every Level DTO carries (R180 §4/§6). */
+export interface LevelJourneyColumns {
+  minAge: number | null;
+  maxAge: number | null;
+  journeyRole: string;
 }
 
 export function levelCoreDto(row: {
@@ -1378,7 +1390,7 @@ export function levelCoreDto(row: {
   genderRestriction: string;
   displayOrder: number | null;
   version: number;
-}): LevelCoreDto {
+} & LevelJourneyColumns): LevelCoreDto {
   return {
     id: row.id,
     name: row.name,
@@ -1386,6 +1398,9 @@ export function levelCoreDto(row: {
     category_id: row.categoryId,
     gender_restriction: row.genderRestriction,
     display_order: row.displayOrder,
+    min_age: row.minAge,
+    max_age: row.maxAge,
+    journey_role: row.journeyRole,
     version: row.version,
   };
 }
@@ -1430,7 +1445,7 @@ export function levelDto(row: {
   enrollmentCount: number;
   defaultVisibility: string;
   version: number;
-}): LevelDto {
+} & LevelJourneyColumns): LevelDto {
   return {
     id: row.id,
     name: row.name,
@@ -1439,6 +1454,9 @@ export function levelDto(row: {
     category_name: row.categoryName,
     gender_restriction: row.genderRestriction,
     display_order: row.displayOrder,
+    min_age: row.minAge,
+    max_age: row.maxAge,
+    journey_role: row.journeyRole,
     group_count: row.groupCount,
     subject_count: row.subjectCount,
     subject_ids: row.subjectIds,
@@ -1466,7 +1484,7 @@ export function createdLevelDto(level: {
   genderRestriction: string;
   displayOrder: number | null;
   version: number;
-}): CreatedLevelDto {
+} & LevelJourneyColumns): CreatedLevelDto {
   return {
     id: level.id,
     name: level.name,
@@ -1474,6 +1492,9 @@ export function createdLevelDto(level: {
     category_id: level.categoryId,
     gender_restriction: level.genderRestriction,
     display_order: level.displayOrder,
+    min_age: level.minAge,
+    max_age: level.maxAge,
+    journey_role: level.journeyRole,
     version: level.version,
   };
 }

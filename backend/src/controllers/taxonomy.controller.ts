@@ -81,8 +81,6 @@ export function createCategoryHandler(prisma: PrismaClient) {
       // description indistinguishable from not mentioning it.
       ...(body.description !== undefined ? { description: body.description } : {}),
       ...(body.holds_own_login !== undefined ? { holdsOwnLogin: body.holds_own_login } : {}),
-      ...(body.min_age !== undefined ? { minAge: body.min_age } : {}),
-      ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
     });
     res.status(201).json({ data: categoryDto(created) });
@@ -101,8 +99,6 @@ export function updateCategoryHandler(prisma: PrismaClient) {
         ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.holds_own_login !== undefined ? { holdsOwnLogin: body.holds_own_login } : {}),
-        ...(body.min_age !== undefined ? { minAge: body.min_age } : {}),
-        ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
         ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
       },
     );
@@ -211,6 +207,10 @@ export function createLevelHandler(prisma: PrismaClient) {
       categoryId: body.category_id,
       genderRestriction: body.gender_restriction,
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
+      // R180 §4/§6 — absent stays absent; `null` clears an end of the range.
+      ...(body.min_age !== undefined ? { minAge: body.min_age } : {}),
+      ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
+      ...(body.journey_role !== undefined ? { journeyRole: body.journey_role } : {}),
     });
     res.status(201).json({ data: createdLevelDto(created.level) });
   };
@@ -226,6 +226,9 @@ export function updateLevelHandler(prisma: PrismaClient) {
         ? { genderRestriction: body.gender_restriction }
         : {}),
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
+      ...(body.min_age !== undefined ? { minAge: body.min_age } : {}),
+      ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
+      ...(body.journey_role !== undefined ? { journeyRole: body.journey_role } : {}),
     });
     res.json({ data: levelCoreDto(updated) });
   };

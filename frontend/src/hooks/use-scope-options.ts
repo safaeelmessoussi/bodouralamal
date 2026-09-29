@@ -356,6 +356,10 @@ export function useScopeOptions({
         category_name: l.category_name,
         default_visibility: l.default_visibility,
         gender_restriction: 'any',
+        // R180 §4/§6 — not carried by `/me/scope-options`; a form reads none.
+        min_age: null,
+        max_age: null,
+        journey_role: 'step',
         display_order: null,
         group_count: 0,
         subject_count: l.subject_ids.length,

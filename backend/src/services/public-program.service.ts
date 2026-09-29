@@ -1,4 +1,5 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { derivedCategoryAgeRange } from '../policies/age-range.js';
 
 /**
  * The public programme overview — the homepage's "what does the institute
@@ -27,6 +28,12 @@ export interface PublicProgramLevel {
   id: string;
   name: string;
   description: string | null;
+  /** R180 §4 — the Level's age range, informational; `null` is «not stated». */
+  minAge: number | null;
+  maxAge: number | null;
+  /** R180 §6 — `step` (the next rung) or `preparatory` (leads into the
+   *  Category's first step; not required of those who enter there). */
+  journeyRole: 'step' | 'preparatory';
   subjects: PublicSubjectRef[];
   surahs: PublicSurahRef[];
 }
@@ -35,6 +42,10 @@ export interface PublicProgramCategory {
   id: string;
   name: string;
   description: string | null;
+  /** R180 §4 — DERIVED from the first and last Level (`policies/age-range.ts`);
+   *  a Category whose last Level states no end has none. */
+  minAge: number | null;
+  maxAge: number | null;
   levels: PublicProgramLevel[];
 }
 
@@ -51,12 +62,12 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
 
   const levels = await prisma.level.findMany({
     where: { deletedAt: null, categoryId: { in: categories.map((c) => c.id) } },
-    select: { id: true, name: true, description: true, categoryId: true },
+    select: { id: true, name: true, description: true, categoryId: true, minAge: true, maxAge: true, journeyRole: true },
     // Ordering is scoped within the parent Category (§2.2), same as the
     // admin taxonomy read.
     orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
   });
-  if (levels.length === 0) return categories.map((c) => ({ ...c, levels: [] }));
+  if (levels.length === 0) return categories.map((c) => ({ ...c, minAge: null, maxAge: null, levels: [] }));
   const levelIds = levels.map((l) => l.id);
 
   const [levelSubjects, categorySubjects, levelSurahs] = await Promise.all([
@@ -133,14 +144,22 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
       id: level.id,
       name: level.name,
       description: level.description,
+      minAge: level.minAge,
+      maxAge: level.maxAge,
+      journeyRole: level.journeyRole,
       subjects: subjectsByLevel.get(level.id) ?? [],
       surahs: surahsByLevel.get(level.id) ?? [],
     });
     levelsByCategory.set(level.categoryId, list);
   }
 
-  return categories.map((category) => ({
-    ...category,
-    levels: levelsByCategory.get(category.id) ?? [],
-  }));
+  return categories.map((category) => {
+    const own = levelsByCategory.get(category.id) ?? [];
+    return {
+      ...category,
+      // R180 §4 — the Category's range is its Levels', never a column of its own.
+      ...derivedCategoryAgeRange(own),
+      levels: own,
+    };
+  });
 }

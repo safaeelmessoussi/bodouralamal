@@ -15,15 +15,17 @@ import { displayOrder, entityDescription, entityName, uuid, version } from './co
  * R170 §6 — a whole number of years, or `null` for «not stated». Informational:
  * it is shown, and gates nothing. 0–120 is the database's own CHECK.
  */
-const categoryAge = z.number().int().min(0).max(120).nullable();
+// R180 §4 — whole years, 0–120; stated on a LEVEL. A Category's range is
+// derived from its Levels and is not accepted here (a key a Category write
+// once took; the schemas are not strict, so an old client's field is dropped
+// rather than refused — the server never stores it).
+const levelAge = z.number().int().min(0).max(120).nullable();
 
 export const createCategorySchema = z.object({
   name: entityName,
   description: entityDescription.optional(),
   // R170 §6 — `null` is «not stated», and restricts nothing.
   holds_own_login: z.boolean().nullable().optional(),
-  min_age: categoryAge.optional(),
-  max_age: categoryAge.optional(),
   display_order: displayOrder.optional(),
 });
 
@@ -32,8 +34,6 @@ export const updateCategorySchema = z.object({
   name: entityName.optional(),
   description: entityDescription.optional(),
   holds_own_login: z.boolean().nullable().optional(),
-  min_age: categoryAge.optional(),
-  max_age: categoryAge.optional(),
   display_order: displayOrder.optional(),
 });
 
@@ -68,6 +68,9 @@ export const updateSubjectSchema = z.object({
  */
 const genderRestriction = z.enum(['any', 'girls_only', 'boys_only']);
 
+/** R180 §6 — what the Level is on the journey (`Level.journey_role`). */
+const journeyRole = z.enum(['step', 'preparatory']);
+
 /**
  * `branch_id` is **required** and is not a column on `Level` (TD-4.6b,
  * Revision 43.1): it says where المجموعة 1 goes. A Level stays Category-scoped
@@ -87,6 +90,10 @@ export const createLevelSchema = z
     category_id: uuid,
     gender_restriction: genderRestriction.default('any'),
     display_order: displayOrder.optional(),
+    // R180 §4/§6 — the Level's age range and its role on the journey.
+    min_age: levelAge.optional(),
+    max_age: levelAge.optional(),
+    journey_role: journeyRole.optional(),
   })
   // **`.strict()`, and for the reason the update schema already is:** stripping
   // `branch_id` would let a client send one, receive `201`, and believe a group
@@ -112,5 +119,8 @@ export const updateLevelSchema = z
     description: entityDescription.optional(),
     gender_restriction: genderRestriction.optional(),
     display_order: displayOrder.optional(),
+    min_age: levelAge.optional(),
+    max_age: levelAge.optional(),
+    journey_role: journeyRole.optional(),
   })
   .strict();
