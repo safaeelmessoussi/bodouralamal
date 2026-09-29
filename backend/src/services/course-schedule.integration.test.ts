@@ -1106,6 +1106,33 @@ describe("R179 §11 — a class in the Trash books nothing", () => {
     expect(first.startTime).toBe("15:00");
   });
 
+  it("R179 §12 — a class that has ENDED clashes with nothing after its end: editing its room is not measured against later classes", async () => {
+    const teacher = await person("الأستاذة الدورة");
+    // A short course, Tuesdays in June only, in room B with its teacher.
+    const ended = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ roomId: roomB, effectiveUntil: day("2026-06-30"), staff: [{ userId: teacher, position: "teacher" }] }),
+      NOW,
+    );
+    // From July, another class takes the same room, the same hour, the same teacher.
+    await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ roomId: roomB, anchorDate: day("2026-07-07"), staff: [{ userId: teacher, position: "teacher" }] }),
+      NOW,
+    );
+    // Editing the ended course — even back to that very room — is not a clash.
+    await updateCourseSchedule(prisma, superAdmin(), ended.id, { roomId: roomA, version: 0 }, NOW);
+    await updateCourseSchedule(prisma, superAdmin(), ended.id, { roomId: roomB, version: 1 }, NOW);
+    expect((await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id: ended.id } })).roomId).toBe(roomB);
+    // Extending it INTO July is a real clash, and says so.
+    const err = await failure(() =>
+      updateCourseSchedule(prisma, superAdmin(), ended.id, { effectiveUntil: day("2026-07-31"), version: 2 }, NOW),
+    );
+    expect(err.code).toBe("SCHEDULE_CONFLICT");
+  });
+
   it("names the clash: the room, the other occurrence's title and its window (R179 §11)", async () => {
     await createCourseSchedule(prisma, superAdmin(), baseInput({ roomId: roomB }), NOW);
     const err = await failure(() =>

@@ -210,6 +210,19 @@ const CALENDAR_FILTER_FIELDS = [
 function startOfMonth(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }
+/**
+ * R179 §12 — a class whose last occurrence date is before today: its series
+ * end where it has one, its single date for a one-off; an open-ended series
+ * always has dates ahead. Read from the row, so no request is spent on it.
+ */
+export function classHasEnded(
+  item: { recurrence: string; startDate: string | null; repeatUntil: string | null },
+  todayIso: string,
+): boolean {
+  const last = item.repeatUntil ?? (item.recurrence === 'none' ? item.startDate : null);
+  return last !== null && last < todayIso;
+}
+
 function iso(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -2471,6 +2484,15 @@ export function SchedulingDialog({
         onRecurrence={setRecurrence}
         allowOnce={spec.allowsOnce}
       >
+        {/* R179 §12 (Owner, 2026-09-29) — what an edit REACHES, said before
+            she edits: the coming occurrences only; the past keeps what was
+            delivered (§4.4, R43.4). A class whose last date has passed is
+            told that the edit changes its card alone. */}
+        {type === 'class' && editing && item ? (
+          <Feedback>
+            {t(classHasEnded(item, iso(new Date())) ? 'scheduling.editReach.ended' : 'scheduling.editReach.future')}
+          </Feedback>
+        ) : null}
         {type === 'class' ? (
           <ClassSection
             scope={scope}

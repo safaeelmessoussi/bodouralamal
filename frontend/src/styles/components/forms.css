@@ -13,6 +13,10 @@
 
 .field {
   display: grid;
+  /* Same reason as `.form` below (R179 §13): the field's own implicit column
+     must not size to a nowrap summary's max-content either. `.field--choice`
+     is a flex row and unaffected. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
   min-width: 0;
 }
@@ -139,6 +143,14 @@
 
 .form {
   display: grid;
+  /* R179 §13 (Owner-reported, 2026-09-29) — ONE column that can never be
+     wider than its container. An implicit `auto` column sizes to the widest
+     child's max-content, and a multi-select whose summary names every Level
+     («الطفل — كتاكيت الأمل، اليافعات — نسيم الأمل، …», `white-space: nowrap`)
+     made «إضافة عنصر» 4 600 px wide, scrolling sideways inside the dialog.
+     `minmax(0, 1fr)` caps the track at the dialog and lets the summary's own
+     ellipsis do its work. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
 }
 /* Two fields side by side where they are genuinely a pair — phone and email,

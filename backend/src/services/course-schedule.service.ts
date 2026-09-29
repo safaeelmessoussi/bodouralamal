@@ -1493,6 +1493,15 @@ export async function updateCourseSchedule(
           : data.monthOfYear,
       anchorDate:
         data.anchorDate === undefined ? existing.anchorDate : data.anchorDate,
+      // **R179 §12 (Owner-reported, 2026-09-29) — the class's own END bounds
+      // the check.** Left out here, `findConflicts` expanded the pattern to the
+      // horizon: a course that ended in September was measured against every
+      // later Wednesday, and editing its room was refused for October's
+      // classes in the same room, with the same teacher — «booked», for a
+      // class that meets no more. The create, split, preview and restore paths
+      // already passed it; this one did not.
+      effectiveUntil:
+        data.effectiveUntil === undefined ? existing.effectiveUntil : data.effectiveUntil,
       // **The proposed staffing, not the stored one.** Checking the old names
       // would clear a reassignment that double-books the new مؤطِّرة, which is
       // the one conflict a staffing edit is most likely to introduce.

@@ -352,3 +352,24 @@ describe('R179 §3 — the frozen Subject is the row\'s, not the hook\'s', () =>
     expect(SCHEDULING_SOURCE).not.toContain("if (scope.value.subjectId === '') return t('scheduling.invalid.subject');\n      // R178 §6(a)");
   });
 });
+
+/**
+ * **R179 §12 (Owner, 2026-09-29) — the form says what an edit reaches.** A
+ * class whose last date has passed changes its card alone; any other edit
+ * reaches the coming occurrences only, never the past (§4.4, R43.4).
+ */
+describe('R179 §12 — what an edit reaches is said on the form', () => {
+  it('a series with an end before today, or a one-off before today, has ended; an open series never has', async () => {
+    const { classHasEnded } = await import('../../pages/admin/scheduling.js');
+    expect(classHasEnded({ recurrence: 'weekly', startDate: '2026-09-01', repeatUntil: '2026-09-25' }, '2026-09-29')).toBe(true);
+    expect(classHasEnded({ recurrence: 'weekly', startDate: '2026-09-01', repeatUntil: '2026-10-25' }, '2026-09-29')).toBe(false);
+    expect(classHasEnded({ recurrence: 'weekly', startDate: '2026-09-01', repeatUntil: null }, '2026-09-29')).toBe(false);
+    expect(classHasEnded({ recurrence: 'none', startDate: '2026-09-21', repeatUntil: null }, '2026-09-29')).toBe(true);
+    expect(classHasEnded({ recurrence: 'none', startDate: '2026-09-29', repeatUntil: null }, '2026-09-29')).toBe(false);
+  });
+
+  it('the notice is rendered on edit of a class, in one of its two forms', () => {
+    expect(SCHEDULING_SOURCE).toContain("{type === 'class' && editing && item ? (");
+    expect(SCHEDULING_SOURCE).toContain("classHasEnded(item, iso(new Date())) ? 'scheduling.editReach.ended' : 'scheduling.editReach.future'");
+  });
+});
