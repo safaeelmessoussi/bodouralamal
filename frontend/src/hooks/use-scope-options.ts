@@ -116,6 +116,9 @@ export interface ScopeOptions {
    * it narrows them itself, from this.
    */
   levelCategoryIds: Record<string, string>;
+  /** Level id → its bare name (R179 §5) — for a label that already says the
+   *  Category elsewhere, or none at all («1 — كتاكيت الأمل — مقر تاركة»). */
+  levelNames: Record<string, string>;
   /**
    * **SRS Revision 165 §2 — what a form needs to ask «أي سورة؟».** Which
    * Subjects work by Surah (a column the server sends — never a Subject's
@@ -642,6 +645,7 @@ export function useScopeOptions({
     levelTeachesNothing:
       wants('subjectId') && value.levelId !== '' && !loadingSubjects && subjects.length === 0,
     levelCategoryIds: Object.fromEntries(levels.map((l) => [l.id, l.category_id])),
+    levelNames: Object.fromEntries(levels.map((l) => [l.id, l.name])),
     /**
      * R172 §1 — the whole-Category choices a Level control may offer beside
      * its Levels (only Categories some Subject is taught WHOLE), and the

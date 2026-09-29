@@ -53,6 +53,7 @@ const EMPTY_SCOPE: ScopeOptions = {
   subjectsIndependentOfLevel: false,
   teacherHonorific: '',
   levelCategoryIds: {},
+  levelNames: {},
   subjectsBySurah: new Set<string>(),
   levelSurahIds: {},
   surahNames: {},

@@ -55,12 +55,14 @@ interface Roster {
 
 export interface AudienceChoices {
   levels: { id: string; name: string }[];
-  groups: { id: string; name: string }[];
   /**
-   * `name` is the circle's own («1»), which the composed title reads («الحلقة
-   * 1»); `label` is what the picker shows — the name, its Subject, and its
-   * branch once the circles on offer span more than one (R179 §4).
+   * `name` is the roster's own («1»), which the composed title reads; `label`
+   * is what the picker shows — a group as «1 — كتاكيت الأمل — مقر تاركة»
+   * (name, Level, branch; R179 §5), a circle as its name, its Subject and its
+   * branch (R179 §4) — the branch in both once the rosters on offer span
+   * more than one (the rooms' rule, R165 §6).
    */
+  groups: { id: string; name: string; label: string }[];
   circles: { id: string; name: string; label: string }[];
   /**
    * SRS Revision 165 §2 — **the Levels the selection actually addresses**: the
@@ -161,19 +163,43 @@ export function useAudienceFilters({
   );
   const groupChoices = useMemo(() => allGroups.filter(withinFilters), [allGroups, withinFilters]);
   const circleChoices = useMemo(() => allCircles.filter(withinFilters), [allCircles, withinFilters]);
-  // Named with the branch only once the circles on offer span more than one —
-  // the rule the rooms already follow (R165 §6); the Subject always, because a
-  // Level's «1» of أحكام التجويد and its «1» of حفظ القرآن are different rosters.
-  const circleLabels = useMemo(() => {
-    const spansBranches = new Set(circleChoices.map((c) => c.branchId ?? '')).size > 1;
-    return circleChoices.map((c) => ({
-      id: c.id,
-      name: c.name,
-      label: [c.name, c.subjectName, spansBranches ? c.branchName : null]
+  // Named with the branch only once the rosters on offer span more than one —
+  // the rule the rooms already follow (R165 §6). A circle always names its
+  // Subject (a Level's «1» of أحكام التجويد and its «1» of حفظ القرآن are
+  // different rosters); a group its Level (R179 §5 — «1 — كتاكيت الأمل — مقر
+  // تاركة»). The branch is read from the scope hook's own list for a group,
+  // which carries only its id on the wire.
+  const branchNames = useMemo(
+    () => Object.fromEntries(scope.options.branchId.map((o) => [o.value, o.label])),
+    [scope.options.branchId],
+  );
+  const labelled = (
+    rows: Roster[],
+    middle: (row: Roster) => string | undefined,
+    branchOf: (row: Roster) => string | null | undefined,
+  ) => {
+    const spansBranches = new Set(rows.map((r) => r.branchId ?? '')).size > 1;
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      label: [r.name, middle(r), spansBranches ? branchOf(r) : null]
         .filter((part): part is string => typeof part === 'string' && part !== '')
         .join(' — '),
     }));
-  }, [circleChoices]);
+  };
+  const groupLabels = useMemo(
+    () =>
+      labelled(
+        groupChoices,
+        (g) => scope.levelNames[g.levelId],
+        (g) => (g.branchId === null ? null : branchNames[g.branchId]),
+      ),
+    [groupChoices, scope.levelNames, branchNames],
+  );
+  const circleLabels = useMemo(
+    () => labelled(circleChoices, (c) => c.subjectName, (c) => c.branchName),
+    [circleChoices],
+  );
 
   // A choice its parent no longer offers is dropped rather than submitted
   // unseen — the picker would otherwise send a group the reader cannot see.
@@ -234,7 +260,7 @@ export function useAudienceFilters({
 
   return {
     levels: levelChoices.map((o) => ({ id: o.value, name: o.label })),
-    groups: groupChoices.map((g) => ({ id: g.id, name: g.name })),
+    groups: groupLabels,
     circles: circleLabels,
     levelIdsInPlay,
   };
@@ -341,7 +367,7 @@ export function AudienceFilters({
         label={t('admin.calendar.scopeGroup')}
         selected={selection.groupIds}
         onChange={setters.setGroupIds}
-        options={asOptions(choices.groups)}
+        options={choices.groups.map((g) => ({ value: g.id, label: g.label }))}
         emptyLabel={t('common.all')}
       />
       <MultiSelectField

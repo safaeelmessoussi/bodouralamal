@@ -352,7 +352,8 @@ check(
   'B1 · the «from this date onward» editor asks no «نمط التدريس» and opens on the class as it stands — its branch and its one group',
   editor.modeAsked === false &&
     editor.branches === '[dev-scenario] تاركة' &&
-    editor.groups === '[dev-scenario] المجموعة 1' &&
+    // R179 §5 — a group is named with its Level (and its branch once the offer spans more than one).
+    editor.groups === '[dev-scenario] المجموعة 1 — [dev-scenario] وميض الأمل' &&
     editor.levels === 'الكل' &&
     editor.circles === 'الكل',
   JSON.stringify(editor),

@@ -58,6 +58,7 @@ const EMPTY_SCOPE: ScopeOptions = {
   subjectsIndependentOfLevel: false,
   teacherHonorific: '',
   levelCategoryIds: {},
+  levelNames: {},
   subjectsBySurah: new Set<string>(),
   levelSurahIds: {},
   surahNames: {},
@@ -84,7 +85,7 @@ const audienceOf = (teachingGroupIds: string[] = []) => ({
   setters: SETTERS,
   choices: {
     levels: CHOICES,
-    groups: CHOICES,
+    groups: CHOICES.map((c) => ({ ...c, label: c.name })),
     circles: CHOICES.map((c) => ({ ...c, label: c.name })),
     levelIdsInPlay: [],
   },
@@ -259,11 +260,15 @@ describe('audience-filters — the payload, the rule, and the narrowing', () => 
     expect(FILTERS).not.toContain('branchId: null }');
   });
 
-  it('R179 §4 — a circle is named by its Subject, and by its branch once the offer spans more than one', () => {
+  it('R179 §4/§5 — a circle is named by its Subject, a group by its Level, both by their branch once the offer spans more than one', () => {
     // The picker shows `label`; the composed title keeps reading `name` («الحلقة 1»).
-    expect(FILTERS).toContain("[c.name, c.subjectName, spansBranches ? c.branchName : null]");
+    expect(FILTERS).toContain("label: [r.name, middle(r), spansBranches ? branchOf(r) : null]");
+    expect(FILTERS).toContain("(g) => scope.levelNames[g.levelId],");
+    expect(FILTERS).toContain("labelled(circleChoices, (c) => c.subjectName, (c) => c.branchName)");
+    expect(FILTERS).toContain("options={choices.groups.map((g) => ({ value: g.id, label: g.label }))}");
     expect(FILTERS).toContain("options={choices.circles.map((c) => ({ value: c.id, label: c.label }))}");
     expect(SCHEDULING_SOURCE).toContain("`الحلقة ${audienceChoices.circles.find((c) => teachingGroupIds.includes(c.id))!.name}`");
+    expect(SCHEDULING_SOURCE).toContain("audienceChoices.groups.find((g) => groupIds.includes(g.id))?.name ?? null");
   });
 
   it('derives the class\'s own branch from what she already said, in one fixed order', () => {

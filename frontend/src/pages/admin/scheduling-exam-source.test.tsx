@@ -197,6 +197,7 @@ describe('the authored physical-paper scheduling path (R136, completed here)', (
       ready: true,
       levelTeachesNothing: false,
       levelCategoryIds: {},
+      levelNames: {},
       subjectsBySurah: new Set<string>(),
       levelSurahIds: {},
       surahNames: {},
