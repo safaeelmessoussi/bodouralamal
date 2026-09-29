@@ -97,6 +97,7 @@ GET /partners                                 # R113 §14.1/§5.1; PUBLIC; live+
 GET /admin/partners                           # R113; Super Admin only; every live partner incl. withheld
 POST /admin/partners                          # R113; Super Admin only
 PATCH /admin/partners/{id}                    # R113; Super Admin only; TD-15
+PATCH /admin/partners/order                   # R178 §2; R76.4; the sequence; refused unless the exact live set
 DELETE /admin/partners/{id}                   # R113; Super Admin only; TD-5 soft delete (nothing references a Partner)
 
 # ── Public programme overview (Revision 144) — §5.1 landing section

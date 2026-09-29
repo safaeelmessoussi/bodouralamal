@@ -219,7 +219,8 @@ describe("a class of a Subject that works by Surah", () => {
     const mine = occurrences.find((o) => o.id === session.id);
     expect(mine?.surahNames).toEqual(["الفاتحة", "البقرة"]);
     // R166 §3 — and it is CALLED what it is: Subject — Surahs — date and time.
-    expect(mine?.itemTitle).toBe(`${TAG} مادة بالسور — الفاتحة، البقرة — ${FIRST} 15:00`);
+    // R178 §4 — «سورة» before each Surah, the date as a person says it.
+    expect(mine?.itemTitle).toBe(`${TAG} مادة بالسور — سورة الفاتحة، سورة البقرة — الثلاثاء 2 يونيو 2026 15:00`);
   });
 
   it("a Subject that is NOT taught by Surah refuses one rather than keeping an invented value", async () => {
@@ -571,12 +572,12 @@ describe("an exam of a Subject that works by Surah", () => {
     const subject = await prisma.subject.findUniqueOrThrow({ where: { id: tafseerId } });
     const composed = (await prisma.exam.findUniqueOrThrow({ where: { id } })).title;
     // Subject — Surah — date and time. No catalogue type and no supervisor here.
-    expect(composed).toBe(`${subject.name} — الفاتحة — 2026-06-10 09:00`);
+    expect(composed).toBe(`${subject.name} — سورة الفاتحة — الأربعاء 10 يونيو 2026 09:00`);
 
     const version = (await prisma.exam.findUniqueOrThrow({ where: { id } })).version;
     await updatePhysicalExam(prisma, superAdmin(), id, { version, surahId: BAQARA });
     expect((await prisma.exam.findUniqueOrThrow({ where: { id } })).title).toBe(
-      `${subject.name} — البقرة — 2026-06-10 09:00`,
+      `${subject.name} — سورة البقرة — الأربعاء 10 يونيو 2026 09:00`,
     );
 
     // Somebody types a title of her own: it is hers from then on.

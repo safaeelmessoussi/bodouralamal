@@ -6,6 +6,7 @@ import { Feedback } from '../ui/feedback.js';
 import { SelectField } from '../ui/field.js';
 import { subjectWorksBySurah, surahChoices } from '../scheduling/surahs.js';
 import { t } from '../../i18n/index.js';
+import { formatDateWithWeekday } from '../../lib/format-date.js';
 import type { UploadMeta } from '../../adapters/uploads.js';
 
 /**
@@ -46,6 +47,12 @@ export interface ContentScope {
   fields: ReactNode;
   /** What the write will be filed under. */
   meta: UploadMeta;
+  /**
+   * R178 §4 — the title the platform proposes from the scope chosen, in the
+   * wording every other title uses: «المادة — سورة X — الخميس 17 شتنبر 2026».
+   * Shown in the title field, editable, and followed until the person types.
+   */
+  suggestedTitle: string;
   /** Why it cannot proceed yet, in the person's terms — or `null`. */
   problem: string | null;
 }
@@ -143,6 +150,14 @@ export function useContentScope({
     [levelId, wholeOf, subjectId, academicYearId, branchId, visibility, locked, surahId, asksSurah],
   );
 
+  const suggestedTitle = useMemo(() => {
+    const subject = scope.options.subjectId.find((o) => o.value === subjectId)?.label ?? '';
+    const surah = surahId === null || !asksSurah ? '' : `سورة ${scope.surahNames[surahId] ?? ''}`.trim();
+    return [subject, surah, formatDateWithWeekday(new Date().toISOString().slice(0, 10))]
+      .filter((part) => part !== '' && part !== 'سورة')
+      .join(' — ');
+  }, [scope.options.subjectId, scope.surahNames, subjectId, surahId, asksSurah]);
+
   const problem = scope.wholeCategoryTeachesNothing
     ? t('scope.assignWholeCategorySubjectsHint')
     : scope.levelTeachesNothing
@@ -204,5 +219,5 @@ export function useContentScope({
     </>
   );
 
-  return { fields, meta, problem };
+  return { fields, meta, problem, suggestedTitle };
 }

@@ -23,13 +23,13 @@ const parts = {
 describe('the previewed title is the server’s wording', () => {
   it('type — Subject — Surah(s) — الأستاذة + main teacher — when', () => {
     expect(composeTitlePreview(parts)).toBe(
-      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — الأستاذة صفاء — 2026-09-22 15:00',
+      'حصة دراسية — تفسير القرآن — سورة الفاتحة، سورة البقرة — الأستاذة صفاء — الثلاثاء 22 شتنبر 2026 15:00',
     );
   });
 
   it('a repeating class’s own row carries its time alone', () => {
     expect(composeTitlePreview({ ...parts, date: null })).toBe(
-      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — الأستاذة صفاء — 15:00',
+      'حصة دراسية — تفسير القرآن — سورة الفاتحة، سورة البقرة — الأستاذة صفاء — 15:00',
     );
   });
 
@@ -44,7 +44,7 @@ describe('the previewed title is the server’s wording', () => {
         date: '2026-09-22',
         time: null,
       }),
-    ).toBe('فقه — 2026-09-22');
+    ).toBe('فقه — الثلاثاء 22 شتنبر 2026');
   });
 
   it('R172 §12 — the word is not in this file: the page hands it over from `/me/scope-options`', () => {
@@ -67,5 +67,23 @@ describe('where it is shown', () => {
   it('for the kinds that have no typed title — and a paper’s own title for a sitting scheduled from one', () => {
     expect(page).toContain('{...(spec.hasTitle ? {} : { titlePreview })}');
     expect(page).toContain("type === 'exam' && examSource.sourceId !== ''");
+  });
+});
+
+describe('R178 §4 — the audience and a repeating class’s weekday, mirrored from the server', () => {
+  it('names the circle between the Surahs and the teacher, and a weekday instead of a date', () => {
+    expect(
+      composeTitlePreview({
+        typeName: 'حصة',
+        subjectName: 'أحكام التجويد',
+        surahNames: [],
+        audienceName: 'الحلقة 1',
+        leadName: 'منى',
+        teacherHonorific: 'الأستاذة',
+        date: null,
+        weekday: 'الخميس',
+        time: '09:00',
+      }),
+    ).toBe('حصة — أحكام التجويد — الحلقة 1 — الأستاذة منى — الخميس 09:00');
   });
 });

@@ -59,6 +59,7 @@ import {
   surahChoices,
 } from '../../components/scheduling/surahs.js';
 import { composeTitlePreview } from '../../components/scheduling/title-preview.js';
+import { weekdayOf } from '../../lib/format-date.js';
 import {
   initialMediaMode,
   type DeliveryMode,
@@ -1805,10 +1806,21 @@ export function SchedulingDialog({
           leadName:
             teachers.find((x) => x.id === (canAssignStaff ? leadId : (me?.id ?? leadId)))
               ?.name_arabic ?? null,
+          // R178 §4 — the circle («الحلقة 1») or group the class is for, when
+          // it names one; the server composes the same word (`audienceTitle`).
+          audienceName:
+            type === 'class'
+              ? (audienceChoices.circles.find((c) => teachingGroupIds.includes(c.id))?.name !== undefined
+                  ? `الحلقة ${audienceChoices.circles.find((c) => teachingGroupIds.includes(c.id))!.name}`
+                  : (audienceChoices.groups.find((g) => groupIds.includes(g.id))?.name ?? null))
+              : null,
           // R172 §12 — the server's word, never a copy in the browser.
           teacherHonorific: scope.teacherHonorific,
           date:
             type === 'class' && recurrence.type !== 'none' ? null : recurrence.startDate || null,
+          // R178 §4 — a repeating class names its first occurrence's weekday.
+          weekday:
+            type === 'class' && recurrence.type !== 'none' ? weekdayOf(recurrence.startDate || null) : null,
           time: allDay ? null : startTime || null,
         });
 

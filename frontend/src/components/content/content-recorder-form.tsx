@@ -64,7 +64,7 @@ export function ContentRecorderForm({
   onSaved: () => void;
   onCancel: () => void;
 }): ReactNode {
-  const { fields, meta, problem } = useContentScope({ token, mayAssignGlobal, initial });
+  const { fields, meta, problem, suggestedTitle } = useContentScope({ token, mayAssignGlobal, initial });
 
   return (
     <>
@@ -79,7 +79,9 @@ export function ContentRecorderForm({
         }}
         meta={meta}
         token={token}
-        suggestedName={suggestedName}
+        // R178 §4 — the scope's own composed title first; the library's
+        // server-side suggestion when the scope names nothing yet.
+        suggestedName={suggestedTitle || suggestedName}
         saveBlockedReason={problem}
         onSaved={onSaved}
         onCancel={onCancel}

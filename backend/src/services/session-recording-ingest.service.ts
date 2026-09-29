@@ -14,6 +14,7 @@ import { segmentsPrefixFor } from "../policies/online-class.js";
 import { scheduleLevelIds } from "../policies/roster-resolution.js";
 import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
 import { publicDisplayName } from "../lib/display-name.js";
+import { audienceTitle } from "../lib/item-title.js";
 import {
   nextRecordingName,
   recordingBaseName,
@@ -152,8 +153,11 @@ const RECORDING_INCLUDE = {
           },
           subject: { select: { id: true, name: true } },
           level: { select: { id: true } },
-          administrativeGroup: { select: { levelId: true } },
-          teachingGroup: { select: { levelId: true } },
+          administrativeGroup: { select: { levelId: true, name: true } },
+          teachingGroup: { select: { levelId: true, name: true } },
+          // R178 §4 — a multi_dimension class's group or circle, for the name.
+          administrativeGroupScopes: { select: { administrativeGroup: { select: { name: true } } }, take: 1 },
+          teachingGroupScopes: { select: { teachingGroup: { select: { name: true } } }, take: 1 },
         },
       },
     },
@@ -377,6 +381,8 @@ export async function ingestRecording(
         ),
         teacherName: lead === null ? null : publicDisplayName(lead),
         at: recording.stoppedAt ?? recording.startedAt,
+        audienceName: classAudienceName(session.schedule),
+        media: stagingMime.startsWith('video/') ? 'video' : 'audio',
       }),
       await linkedTitles(tx, recording.sessionId),
     );
@@ -655,4 +661,17 @@ export async function requeueStrandedRecordings(
     reasons: [...new Set(stranded.map((r) => r.ingestionFailureReason ?? "(none recorded)"))],
     recording_ids: stranded.map((r) => r.id),
   };
+}
+
+/** R178 §4 — the title's audience word from the class's legacy target or its joins. */
+function classAudienceName(schedule: {
+  administrativeGroup: { name: string } | null;
+  teachingGroup: { name: string } | null;
+  administrativeGroupScopes: { administrativeGroup: { name: string } }[];
+  teachingGroupScopes: { teachingGroup: { name: string } }[];
+}): string | null {
+  return audienceTitle(
+    schedule.teachingGroup?.name ?? schedule.teachingGroupScopes[0]?.teachingGroup.name ?? null,
+    schedule.administrativeGroup?.name ?? schedule.administrativeGroupScopes[0]?.administrativeGroup.name ?? null,
+  );
 }

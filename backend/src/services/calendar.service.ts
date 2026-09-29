@@ -11,7 +11,7 @@ import {
   recordingBaseName,
 } from "../lib/recording-name.js";
 import { publicDisplayName } from "../lib/display-name.js";
-import { composeItemTitle } from "../lib/item-title.js";
+import { audienceTitle, composeItemTitle } from "../lib/item-title.js";
 import { baseHijri, sortMonthStarts, type MonthStart } from "../lib/hijri.js";
 import * as scope from "../policies/branch-scope.js";
 import { effectiveOn } from "../policies/effective-staffing.js";
@@ -666,6 +666,11 @@ function sessionOccurrence(
     session.surahs.length > 0 ? session.surahs : subject.requiresSurahs ? sch.surahs : []
   ).map((row) => row.surah.nameArabic);
   const lead = session.staff.find((person) => person.position === "teacher");
+  // R178 §4/§5 — the group or circle the class is for, in its title and on its
+  // chip: «أحكام التجويد — الحلقة 1» says which of the three Tuesday classes
+  // this is without opening it. A Level or a Category is not named here — the
+  // Subject already implies it.
+  const audienceWord = audienceTitle(audience.circles[0]?.name ?? null, audience.groups[0]?.name ?? null);
   return {
     kind: "session",
     schedulingTypeId: sch.schedulingType?.id ?? null,
@@ -677,7 +682,7 @@ function sessionOccurrence(
     attendanceMarking: sch.attendanceMarking,
     viewerMayMarkAttendance: false,
     id: session.id,
-    title: subject.name,
+    title: audienceWord === null ? subject.name : `${subject.name} — ${audienceWord}`,
     // **R166 §3 — COMPOSED, never a stored name**: this occurrence's own
     // Subject, Surahs and main teacher where it has its own, and its own date.
     // A cover teacher or a Surah changed for one date is therefore in the
@@ -686,6 +691,7 @@ function sessionOccurrence(
       typeName: sch.schedulingType?.name ?? null,
       subjectName: subject.name,
       surahNames,
+      audienceName: audienceWord,
       leadName: lead === undefined ? null : publicDisplayName(lead.user),
       date: iso(session.date),
       time: hhmm(session.startTime),

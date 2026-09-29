@@ -473,9 +473,17 @@ export function useScopeOptions({
       const taught = new Set(categorySubjects.get(wholeOf) ?? []);
       return allSubjects.filter((s) => taught.has(s.id));
     }
-    const taught = new Set(levelSubjects.get(value.levelId) ?? []);
+    // R178 §1 (Owner-reported, 2026-09-29) — a Level teaches its own Subjects
+    // AND every Subject taught to its whole Category (R172 §1), which is what
+    // the server's curriculum policy already accepts. Reading `LevelSubject`
+    // alone hid a Category-wide Subject the moment a Level was in play — and
+    // on «تعديل العنصر» that emptied the LOCKED Subject of the class itself.
+    const taught = new Set([
+      ...(levelSubjects.get(value.levelId) ?? []),
+      ...(categorySubjects.get(levels.find((l) => l.id === value.levelId)?.category_id ?? '') ?? []),
+    ]);
     return allSubjects.filter((s) => taught.has(s.id));
-  }, [value.levelId, wants, subjectsUnscoped, subjectsTaughtAnywhere, allSubjects, levelSubjects, categorySubjects]);
+  }, [value.levelId, wants, subjectsUnscoped, subjectsTaughtAnywhere, allSubjects, levelSubjects, categorySubjects, levels]);
 
   /* ── Groups depend on Level AND Branch together (§4.4c) ───────────────── */
   useEffect(() => {

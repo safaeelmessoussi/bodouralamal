@@ -118,13 +118,13 @@ describe('SRS Revision 165 §1 — what the platform’s own capture of a class 
         teacherName: 'صفاء',
         at,
       }),
-    ).toBe('حصة — تفسير القرآن — البقرة، آل عمران — الأستاذة صفاء — 2026-09-20 18:05');
+    ).toBe('تسجيل صوتي — حصة — تفسير القرآن — سورة البقرة، سورة آل عمران — الأستاذة صفاء — الأحد 20 شتنبر 2026 18:05');
   });
 
-  it('R172 §12 — a library recording: no type word, «المادة — الأستاذة من سجّلت — التاريخ الوقت»', () => {
+  it('R172 §12 / R178 §4 — a library recording: «تسجيل صوتي» ahead, no type word, «المادة — الأستاذة من سجّلت — التاريخ الوقت»', () => {
     expect(
       sessionRecordingBaseName({ typeName: null, subjectName: 'الفقه', surahNames: [], teacherName: 'فاطمة', at }),
-    ).toBe('الفقه — الأستاذة فاطمة — 2026-09-20 18:05');
+    ).toBe('تسجيل صوتي — الفقه — الأستاذة فاطمة — الأحد 20 شتنبر 2026 18:05');
   });
 
   it('omits what a class does not have rather than leaving empty separators', () => {
@@ -136,11 +136,28 @@ describe('SRS Revision 165 §1 — what the platform’s own capture of a class 
         teacherName: null,
         at,
       }),
-    ).toBe('فقه — 2026-09-20 18:05');
+    ).toBe('تسجيل صوتي — فقه — الأحد 20 شتنبر 2026 18:05');
   });
 
   it('answers the same on every attempt — the instant is the recording’s, never «now»', () => {
     const source = { typeName: 'حصة', subjectName: 'فقه', surahNames: [], teacherName: null, at };
     expect(sessionRecordingBaseName(source)).toBe(sessionRecordingBaseName(source));
+  });
+});
+
+describe('R178 §4 — a recording names what it recorded', () => {
+  const at = moroccoWallClockToInstant(2026, 9, 20, 18, 5, 0);
+  it('a video carries «تسجيل مرئي», and a class for a circle names it', () => {
+    expect(
+      sessionRecordingBaseName({
+        typeName: 'حصة',
+        subjectName: 'أحكام التجويد',
+        surahNames: [],
+        teacherName: 'منى',
+        at,
+        audienceName: 'الحلقة 1',
+        media: 'video',
+      }),
+    ).toBe('تسجيل مرئي — حصة — أحكام التجويد — الحلقة 1 — الأستاذة منى — الأحد 20 شتنبر 2026 18:05');
   });
 });

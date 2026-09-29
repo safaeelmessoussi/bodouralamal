@@ -1,4 +1,5 @@
 import { api } from '../lib/api.js';
+import { reorderResource } from './reorder.js';
 
 /**
  * Partners (NEW N).
@@ -62,4 +63,9 @@ export async function updatePartner(
 
 export async function deletePartner(id: string, token: string | null): Promise<void> {
   await api<void>(`/admin/partners/${id}`, { method: 'DELETE', token });
+}
+
+/** R178 §2 — `PATCH /admin/partners/order`: the sequence, exactly as Subjects (R76.4). */
+export async function reorderPartners(ids: readonly string[], token: string | null): Promise<string[]> {
+  return reorderResource('partners', ids, token);
 }

@@ -168,6 +168,27 @@ describe('the partners catalogue', () => {
     }
   });
 
+  it('R178 §2 — a Super Admin orders the partners by dragging, and the public list follows', async () => {
+    const a = (await call('POST', '/admin/partners', superAdmin, { name: `${TAG} شريك أ` })).body.data as { id: string };
+    const b = (await call('POST', '/admin/partners', superAdmin, { name: `${TAG} شريك ب` })).body.data as { id: string };
+    const everyLive = ((await call('GET', '/admin/partners', superAdmin)).body.data as { id: string }[]).map((p) => p.id);
+    // The exact live set, with ب ahead of أ.
+    const sequence = [b.id, a.id, ...everyLive.filter((id) => id !== a.id && id !== b.id)];
+
+    const res = await call('PATCH', '/admin/partners/order', superAdmin, { ids: sequence });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect((res.body.data as { ids: string[] }).ids).toEqual(sequence);
+
+    const publicNames = ((await call('GET', '/partners')).body.data as { name: string }[]).map((p) => p.name);
+    expect(publicNames.indexOf(`${TAG} شريك ب`)).toBeLessThan(publicNames.indexOf(`${TAG} شريك أ`));
+
+    // A partial sequence cannot say where the rest belong — refused by name.
+    const partial = await call('PATCH', '/admin/partners/order', superAdmin, { ids: [a.id] });
+    expect(partial.status).toBe(400);
+    // Admins are refused every partner write (OD-01), this one included.
+    expect((await call('PATCH', '/admin/partners/order', admin, { ids: sequence })).status).toBe(403);
+  });
+
   it('carries the description through create, read and the public list', async () => {
     // End to end: what a Super Admin types is what the landing page renders.
     const created = await call('POST', '/admin/partners', superAdmin, {

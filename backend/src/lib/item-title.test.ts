@@ -22,14 +22,14 @@ describe('what an item is called', () => {
     // R172 §12 (the Owner) — the word before the teacher's name, defined once
     // (`TEACHER_HONORIFIC`) on this composer: every title carries it.
     expect(composeItemTitle(parts)).toBe(
-      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — الأستاذة صفاء — 2026-09-22 15:00',
+      'حصة دراسية — تفسير القرآن — سورة الفاتحة، سورة البقرة — الأستاذة صفاء — الثلاثاء 22 شتنبر 2026 15:00',
     );
     expect(composeItemTitle(parts)).toContain(`${TEACHER_HONORIFIC} صفاء`);
   });
 
   it('a repeating class’s own row spans dates, so it carries its time alone', () => {
     expect(composeItemTitle({ ...parts, date: null })).toBe(
-      'حصة دراسية — تفسير القرآن — الفاتحة، البقرة — الأستاذة صفاء — 15:00',
+      'حصة دراسية — تفسير القرآن — سورة الفاتحة، سورة البقرة — الأستاذة صفاء — 15:00',
     );
   });
 
@@ -43,7 +43,7 @@ describe('what an item is called', () => {
         date: '2026-09-22',
         time: null,
       }),
-    ).toBe('فقه — 2026-09-22');
+    ).toBe('فقه — الثلاثاء 22 شتنبر 2026');
   });
 });
 
@@ -56,7 +56,7 @@ describe('where the text is stored in VARCHAR(120)', () => {
     // Surahs give way first, visibly, and «when» is kept whole.
     expect(title).toContain('سورة رقم 1');
     expect(title).toContain('…');
-    expect(title.endsWith('2026-09-22 15:00')).toBe(true);
+    expect(title.endsWith('الثلاثاء 22 شتنبر 2026 15:00')).toBe(true);
   });
 
   it('gives up the main teacher before it gives up «when»', () => {
@@ -66,7 +66,7 @@ describe('where the text is stored in VARCHAR(120)', () => {
     );
     expect(title.length).toBeLessThanOrEqual(80);
     expect(title).not.toContain('اسم طويل');
-    expect(title.endsWith('2026-09-22 15:00')).toBe(true);
+    expect(title.endsWith('الثلاثاء 22 شتنبر 2026 15:00')).toBe(true);
   });
 
   it('a recording’s title always fits its column, with room left for « 999»', () => {
@@ -80,6 +80,6 @@ describe('where the text is stored in VARCHAR(120)', () => {
     });
     expect(title.length).toBeLessThanOrEqual(RECORDING_TITLE_LIMIT);
     expect(`${title} 999`.length).toBeLessThanOrEqual(120);
-    expect(title.endsWith('2026-09-21 06:10')).toBe(true);
+    expect(title.endsWith('الاثنين 21 شتنبر 2026 06:10')).toBe(true);
   });
 });

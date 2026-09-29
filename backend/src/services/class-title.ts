@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { publicDisplayName } from '../lib/display-name.js';
-import { calendarDateIso, composeItemTitle, wallClockHHMM } from '../lib/item-title.js';
+import { arabicWeekday, audienceTitle, calendarDateIso, composeItemTitle, wallClockHHMM } from '../lib/item-title.js';
 
 /**
  * **What a class and each of its occurrences is CALLED, read from what the rows
@@ -43,6 +43,11 @@ export async function scheduleTitles(
       schedulingType: { select: { name: true } },
       subject: { select: { name: true } },
       surahs: SURAH_NAMES,
+      // R178 §4 — the group or circle the class is for, for its title.
+      administrativeGroup: { select: { name: true } },
+      teachingGroup: { select: { name: true } },
+      administrativeGroupScopes: { select: { administrativeGroup: { select: { name: true } } }, take: 1 },
+      teachingGroupScopes: { select: { teachingGroup: { select: { name: true } } }, take: 1 },
       staff: {
         where: { deletedAt: null, position: 'teacher' },
         select: { effectiveFrom: true, effectiveUntil: true, user: PERSON },
@@ -65,8 +70,11 @@ export async function scheduleTitles(
           typeName: row.schedulingType?.name ?? null,
           subjectName: row.subject.name,
           surahNames: row.surahs.map((s) => s.surah.nameArabic),
+          audienceName: scheduleAudience(row),
           leadName: lead === null ? null : publicDisplayName(lead),
           date: row.recurrence === 'none' ? calendarDateIso(row.anchorDate) : null,
+          // R178 §4 — a repeating class names its first occurrence's weekday.
+          weekday: row.recurrence === 'none' ? null : arabicWeekday(calendarDateIso(row.anchorDate)),
           time: wallClockHHMM(row.startTime),
         }),
       ];
@@ -100,6 +108,11 @@ export async function sessionTitles(
           schedulingType: { select: { name: true } },
           subject: { select: { name: true, requiresSurahs: true } },
           surahs: SURAH_NAMES,
+          // R178 §4 — the group or circle the class is for, for its title.
+          administrativeGroup: { select: { name: true } },
+          teachingGroup: { select: { name: true } },
+          administrativeGroupScopes: { select: { administrativeGroup: { select: { name: true } } }, take: 1 },
+          teachingGroupScopes: { select: { teachingGroup: { select: { name: true } } }, take: 1 },
         },
       },
     },
@@ -112,6 +125,7 @@ export async function sessionTitles(
         composeItemTitle({
           typeName: row.schedule.schedulingType?.name ?? null,
           subjectName: (row.subject ?? row.schedule.subject).name,
+          audienceName: scheduleAudience(row.schedule),
           // Codex review, 2026-09-22 — inherited only while the Subject taught
           // works by Surah (the same rule as `calendar.service.ts`).
           surahNames: (
@@ -155,6 +169,9 @@ export async function examTitle(db: Db, examId: string): Promise<string> {
       schedulingType: { select: { name: true } },
       subject: { select: { name: true } },
       surah: { select: { nameArabic: true } },
+      // R178 §4 — a sitting names at most one group or circle (R58/R136).
+      administrativeGroup: { select: { name: true } },
+      teachingGroup: { select: { name: true } },
       staff: {
         where: { deletedAt: null, position: 'supervisor' },
         select: { user: PERSON },
@@ -169,10 +186,24 @@ export async function examTitle(db: Db, examId: string): Promise<string> {
       typeName: exam.schedulingType?.name ?? null,
       subjectName: exam.subject?.name ?? null,
       surahNames: exam.surah ? [exam.surah.nameArabic] : [],
+      audienceName: audienceTitle(exam.teachingGroup?.name ?? null, exam.administrativeGroup?.name ?? null),
       leadName: lead === null ? null : publicDisplayName(lead),
       date: calendarDateIso(exam.date),
       time: wallClockHHMM(exam.startTime),
     },
     EXAM_TITLE_LIMIT,
+  );
+}
+
+/** R178 §4 — the title's audience word from a class's legacy target or its joins. */
+function scheduleAudience(schedule: {
+  administrativeGroup: { name: string } | null;
+  teachingGroup: { name: string } | null;
+  administrativeGroupScopes: { administrativeGroup: { name: string } }[];
+  teachingGroupScopes: { teachingGroup: { name: string } }[];
+}): string | null {
+  return audienceTitle(
+    schedule.teachingGroup?.name ?? schedule.teachingGroupScopes[0]?.teachingGroup.name ?? null,
+    schedule.administrativeGroup?.name ?? schedule.administrativeGroupScopes[0]?.administrativeGroup.name ?? null,
   );
 }

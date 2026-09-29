@@ -9,24 +9,34 @@
  * A repeating class's own row carries its time and no date — each of its
  * sessions then carries its own date. A one-off, and an exam, carry both.
  */
+import { formatDateWithWeekday } from '../../lib/format-date.js';
+
 export function composeTitlePreview(parts: {
   typeName: string | null;
   subjectName: string | null;
   surahNames: readonly string[];
+  /** R178 §4 — «الحلقة 1» or the group's name, when the class names one. */
+  audienceName?: string | null;
   leadName: string | null;
   /** R172 §12 — the server's word before the teacher's name (`teacher_honorific`
    *  on `/me/scope-options`); `''` until it arrives, so the preview never
    *  guesses a word the server defines. */
   teacherHonorific: string;
+  /** `YYYY-MM-DD`; rendered «الخميس 17 شتنبر 2026» (R178 §4). */
   date: string | null;
+  /** R178 §4 — a repeating class's first-occurrence weekday, when `date` is null. */
+  weekday?: string | null;
   time: string | null;
 }): string {
-  const when = [parts.date ?? '', parts.time ?? ''].filter((x) => x !== '').join(' ');
+  const dateWord = parts.date ? formatDateWithWeekday(parts.date) : (parts.weekday ?? '');
+  const when = [dateWord, parts.time ?? ''].filter((x) => x !== '').join(' ');
   const lead = (parts.leadName ?? '').trim();
   return [
     parts.typeName ?? '',
     parts.subjectName ?? '',
-    parts.surahNames.join('، '),
+    // Each Surah as a person names it: «سورة الفاتحة» (R178 §4).
+    parts.surahNames.map((name) => `سورة ${name.trim()}`).join('، '),
+    parts.audienceName ?? '',
     lead === '' ? '' : [parts.teacherHonorific.trim(), lead].filter((x) => x !== '').join(' '),
     when,
   ]

@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { applyOrder } from '../lib/reorder.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
@@ -204,4 +205,27 @@ export async function deletePartner(
       detail: {},
     });
   });
+}
+
+/**
+ * `PATCH /admin/partners/order` — the partners, in the order given (R178 §2;
+ * R76.4's rule, the same `applyOrder` the Subjects use: refused unless the
+ * sequence is exactly the live set). The landing page reads `display_order`
+ * (`PARTNER_ORDER`), so the order chosen here is the order shown to visitors.
+ */
+export async function reorderPartners(
+  prisma: PrismaClient,
+  actor: Actor,
+  ids: readonly string[],
+): Promise<string[]> {
+  await assertFreshActive(prisma, actor.userId, PARTNER_ADMIN_ROLES, actor.activeRole);
+  return applyOrder(
+    prisma,
+    {
+      liveIds: async (tx) =>
+        (await tx.partner.findMany({ where: { deletedAt: null }, select: { id: true } })).map((r) => r.id),
+      write: (tx, id, displayOrder) => tx.partner.update({ where: { id }, data: { displayOrder } }),
+    },
+    ids,
+  );
 }

@@ -45,3 +45,27 @@ export function formatDate(value: string | null | undefined): string {
  * standard is the opposite: **Arabic text, Western numerals.** If you are
  * reaching for a converter, the answer is that numbers are printed as they are.
  */
+
+/**
+ * R178 §4 — a date as a title says it: «الخميس 17 شتنبر 2026». The weekday
+ * comes from the catalogue's Monday-first list (`calendar.weekdaysShort`), so
+ * the wording is the Owner's, and it matches the server's composer exactly.
+ */
+export function formatDateWithWeekday(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return iso;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const mondayFirst = (date.getUTCDay() + 6) % 7;
+  const weekday = tList('calendar.weekdaysShort')[mondayFirst] ?? '';
+  return `${weekday} ${formatDate(iso)}`.trim();
+}
+
+/** The weekday alone — a repeating class's «when» (R178 §4). */
+export function weekdayOf(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return tList('calendar.weekdaysShort')[(date.getUTCDay() + 6) % 7] ?? null;
+}

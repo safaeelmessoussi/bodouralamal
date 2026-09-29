@@ -200,3 +200,19 @@ describe('R172 §1 — whole-Category Subjects, and the Level-free Subject', () 
     expect(code(HOOK)).toContain('subjectsIndependentOfLevel: subjectsUnscoped || subjectsTaughtAnywhere,');
   });
 });
+
+/**
+ * R178 §1 (Owner-reported, 2026-09-29) — with a Level chosen, the Subjects
+ * offered are the Level's own AND every Subject taught to its whole Category
+ * (R172 §1), which is exactly what the server's curriculum policy accepts.
+ * Reading `LevelSubject` alone hid a Category-wide Subject the moment a Level
+ * was in play — and on «تعديل العنصر» it emptied the locked Subject of the
+ * class being edited, which then refused to save with «اختاري المادة.».
+ */
+describe('a Level offers its Category-wide Subjects too (R178 §1)', () => {
+  it('unions the Level’s Subjects with its Category’s', () => {
+    const source = code(HOOK);
+    expect(source).toContain('...(levelSubjects.get(value.levelId) ?? []),');
+    expect(source).toContain("...(categorySubjects.get(levels.find((l) => l.id === value.levelId)?.category_id ?? '') ?? []),");
+  });
+});

@@ -553,6 +553,8 @@ export function createApp(
   // NEW N — Super Admin only (OD-01's sub-decision), asserted in the service.
   guarded.get('/admin/partners', partners.list(prisma));
   guarded.post('/admin/partners', partners.create(prisma));
+  // R178 §2 — before `/:id`, or «order» would be read as a partner id.
+  guarded.patch('/admin/partners/order', partners.reorder(prisma));
   guarded.patch('/admin/partners/:id', partners.update(prisma));
   guarded.delete('/admin/partners/:id', partners.remove(prisma));
   guarded.post('/family-links', familyLinks.create(prisma));

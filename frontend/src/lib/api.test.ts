@@ -88,3 +88,41 @@ describe('R172 §5 — an expired access token is renewed and the request made o
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
+
+describe('R178 §3 — a rate-limited READ is retried once after the edge’s pause', () => {
+  const limited = () =>
+    new Response(JSON.stringify({ error: { code: 'RATE_LIMITED', message_key: 'errors.rate_limited', message: '', details: {}, request_id: 'r1' } }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '1' },
+    });
+
+  it('waits Retry-After, then succeeds on the second attempt', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(limited())
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: 'ok' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const promise = api<{ data: string }>('/library', { token: 't' });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await promise).toEqual({ data: 'ok' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  it('never repeats a refused WRITE, and a second refusal on a read is answered', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(limited());
+    vi.stubGlobal('fetch', fetchMock);
+    const write = api('/events', { token: 't', method: 'POST', body: {} });
+    await expect(write).rejects.toMatchObject({ status: 429 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const read = api('/library', { token: 't' });
+    // Attached before the clock moves, so the rejection is awaited, never unhandled.
+    const refused = expect(read).rejects.toMatchObject({ status: 429 });
+    await vi.advanceTimersByTimeAsync(4000);
+    await refused;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+});

@@ -5020,6 +5020,57 @@
         }
       }
     },
+    "/admin/partners/order": {
+      "patch": {
+        "summary": "Reorder partners",
+        "description": "R178 §2 (Owner, 2026-09-29) — «شركاؤنا» is ordered by dragging a row, exactly as Subjects are (R76.4): body `{ ids }` is **the sequence itself**, the server assigns `display_order` from each id's position, the sequence must be the exact live set (`DUPLICATE_ID` / `UNKNOWN_ID` / `INCOMPLETE_ORDER`), one transaction, idempotent, `1..n`. Super Admin only, as every partner write is (R113). The landing page reads the same `display_order`, so the order chosen here is the order visitors see.",
+        "responses": {
+          "200": {
+            "description": "The resulting order."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, or a sequence that is not the exact live set; details.reason names which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/levels/order": {
       "patch": {
         "summary": "Reorder one Category's levels",

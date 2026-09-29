@@ -81,7 +81,7 @@ export function ContentUploadForm({
 
   // The scope block is shared with the recorder (§10): same object, same
   // four-part scope, same visibility rule — so one implementation.
-  const { fields, meta, problem } = useContentScope({
+  const { fields, meta, problem, suggestedTitle } = useContentScope({
     token,
     mayAssignGlobal,
     initial,
@@ -100,7 +100,7 @@ export function ContentUploadForm({
         token={token}
         {...(replacing
           ? { initialTitle: replacing.title, initialDescription: replacing.description }
-          : {})}
+          : { suggestedTitle })}
         submitLabel={submitLabel}
         disabledReason={locked ? null : problem}
         onCancel={onCancel}

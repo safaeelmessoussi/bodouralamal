@@ -7,6 +7,7 @@ import {
   updatePartner,
   type Partner,
   type PartnerInput,
+  reorderPartners,
 } from '../../adapters/partners.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
@@ -130,6 +131,12 @@ export function PartnersPage(): ReactNode {
         status={status}
         rowKey={(r) => r.id}
         onRetry={() => void load()}
+        // R178 §2 — ordered by dragging, like Subjects; the landing page shows
+        // this order. `DataTable` offers no header sorting on a reorderable table.
+        onReorder={async (ids) => {
+          await reorderPartners(ids, accessToken);
+          await load();
+        }}
       />
 
       {editing === null ? null : (

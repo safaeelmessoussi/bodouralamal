@@ -1617,7 +1617,8 @@ describe("one Session, one naming namespace (R75.6) — and what the platform's 
       where: { id: subjectAudio },
       select: { name: true },
     });
-    const captured = `${subject.name} — 2026-06-02 18:05`;
+    // R178 §4 — a recording says it is one, and its date reads as a person says it.
+    const captured = `تسجيل صوتي — ${subject.name} — الثلاثاء 2 يونيو 2026 18:05`;
     expect(new Set(titles).size).toBe(3);
     expect(titles).toContain(browser.title);
     expect(titles).toContain(captured);
@@ -1635,7 +1636,9 @@ describe("one Session, one naming namespace (R75.6) — and what the platform's 
     // A key carries a slug of its file name (TD-9): Subject and date only —
     // never the time of day the title carries, and never a person's name.
     expect(content.originalFilename).toMatch(/— \d{4}-\d{2}-\d{2}\.ogg$/);
-    expect(content.title).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    // R178 §4 — the title's date reads «الثلاثاء 2 يونيو 2026 18:05»; the
+    // filename keeps the ISO date, which is what stays sortable and ASCII-safe.
+    expect(content.title).toMatch(/ \d{1,2} \S+ \d{4} \d{2}:\d{2}$/);
     expect(content.originalFilename).not.toContain(":");
   });
 });

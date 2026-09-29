@@ -7,12 +7,14 @@ import {
   deletePartner,
   listPartners,
   listPublicPartners,
+  reorderPartners,
   updatePartner,
   type PartnerRow,
   type PublicPartner,
 } from '../services/partner.service.js';
 import { idParam, parse } from './parse.js';
 import { createPartnerSchema, updatePartnerSchema } from '../validators/partner.validators.js';
+import { reorderSchema } from '../validators/reorder.validators.js';
 
 /**
  * Partners over HTTP (NEW N).
@@ -100,5 +102,14 @@ export function remove(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     await deletePartner(prisma, requireActor(req), idParam(req, 'id'));
     res.status(204).end();
+  };
+}
+
+/** `PATCH /admin/partners/order` — the partners, in the order given (R178 §2). */
+export function reorder(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(reorderSchema, req.body ?? {});
+    const ids = await reorderPartners(prisma, requireActor(req), body.ids);
+    res.json({ data: { ids } });
   };
 }

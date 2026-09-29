@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { uploadFile, type UploadMeta, type UploadStage } from '../../adapters/uploads.js';
 import { t } from '../../i18n/index.js';
@@ -48,6 +48,8 @@ export interface FileUploaderProps {
   token: string | null;
   /** Prefilled when replacing: the record keeps its title unless changed. */
   initialTitle?: string;
+  /** R178 §4 — a composed title the field shows and follows until the person types. */
+  suggestedTitle?: string;
   initialDescription?: string;
   submitLabel: string;
   onUploaded: (contentId: string) => void;
@@ -61,6 +63,7 @@ export function FileUploader({
   meta,
   token,
   initialTitle = '',
+  suggestedTitle = '',
   initialDescription = '',
   submitLabel,
   onUploaded,
@@ -68,7 +71,11 @@ export function FileUploader({
   disabledReason = null,
 }: FileUploaderProps): ReactNode {
   const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState(initialTitle);
+  const [title, setTitle] = useState(initialTitle || suggestedTitle);
+  const [titleTouched, setTitleTouched] = useState(initialTitle !== '');
+  useEffect(() => {
+    if (!titleTouched) setTitle(suggestedTitle);
+  }, [suggestedTitle, titleTouched]);
   const [description, setDescription] = useState(initialDescription);
   /**
    * **R99.12 — the upload boundary must be able to say *this is a class
@@ -163,9 +170,13 @@ export function FileUploader({
       <TextField
         label={t('content.upload.title')}
         value={title}
-        onChange={setTitle}
+        onChange={(next) => {
+          setTitleTouched(true);
+          setTitle(next);
+        }}
         required
         disabled={busy}
+        {...(suggestedTitle !== '' && !titleTouched ? { hint: t('content.upload.titleSuggested') } : {})}
       />
       <TextArea
         label={t('content.upload.description')}

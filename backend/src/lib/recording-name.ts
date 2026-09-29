@@ -128,7 +128,13 @@ export interface SessionRecordingNameSource {
   /** Her public display name (§20 rule 12) — never her civil name. */
   teacherName: string | null;
   at: Date;
+  /** R178 §4 — the group or circle the class was for, when it named one. */
+  audienceName?: string | null;
+  /** R178 §4 — «تسجيل صوتي» or «تسجيل مرئي» ahead of the class's title. */
+  media?: 'audio' | 'video';
 }
+
+export const RECORDING_PREFIX = { audio: 'تسجيل صوتي', video: 'تسجيل مرئي' } as const;
 
 /**
  * A recording's title is STORED, in `EducationalContent.title` — `VARCHAR(120)`.
@@ -143,9 +149,12 @@ export const RECORDING_TITLE_LIMIT = 120 - 6;
 export function sessionRecordingBaseName(source: SessionRecordingNameSource): string {
   return composeItemTitle(
     {
+      // R178 §4 — a recording says it is one, ahead of the class it recorded.
+      prefix: RECORDING_PREFIX[source.media ?? 'audio'],
       typeName: source.typeName,
       subjectName: source.subjectName,
       surahNames: source.surahNames,
+      audienceName: source.audienceName ?? null,
       leadName: source.teacherName,
       date: localDateIso(source.at),
       time: moroccoTimeHHMM(source.at),
