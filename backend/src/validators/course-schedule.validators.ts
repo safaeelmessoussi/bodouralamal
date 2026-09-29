@@ -212,8 +212,8 @@ export const createCourseScheduleSchema = z
     target_id: uuid.optional(),
     dimensions: courseScheduleDimensions.optional(),
     /**
-     * R165 §2 — the Surahs this class is about (1–114). Whether any is
-     * REQUIRED is the Subject's `requires_surahs`, decided by the service
+     * R165 §2 — the Surahs this class is about (1–114); optional on every
+     * Subject since R179 §2, refused where the Subject is not taught by Surah
      * (`resolveSurahs`); the shape alone is checked here.
      */
     surah_ids: z.array(z.number().int().min(1).max(114)).max(114).optional(),
@@ -427,8 +427,8 @@ export const updateCourseScheduleSchema = z
      */
     dimensions: courseScheduleDimensions.optional(),
     /**
-     * R165 §2 — the Surahs this class is about (1–114). Whether any is
-     * REQUIRED is the Subject's `requires_surahs`, decided by the service
+     * R165 §2 — the Surahs this class is about (1–114); optional on every
+     * Subject since R179 §2, refused where the Subject is not taught by Surah
      * (`resolveSurahs`); the shape alone is checked here.
      */
     surah_ids: z.array(z.number().int().min(1).max(114)).max(114).optional(),

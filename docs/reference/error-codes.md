@@ -86,8 +86,7 @@ Canonical catalogue; every service uses exactly these identifiers; extensible on
 | `NO_LEVEL_TEACHES_SUBJECT` | `POST`/`PATCH /admin/course-schedules` (R169 §7) | «الكل» on Level, group, circle = every Level teaching the Subject, and none does; replaces `MULTI_DIMENSION_NEEDS_A_LEVEL` |
 | `BIRTH_DATE_REQUIRED` | `POST /profile/role-requests` | Beneficiary request without a recorded birth date must bring one (R130) |
 | `NOT_IN_BUNDLE` | Approval | Placement named somebody this approval does not admit |
-| `SURAHS_REQUIRED` | Class, occurrence or exam writes (R165 §2) | Surah Subject: a class names one or more, an exam exactly one; empty «مقرر الحفظ» is set by the Super Admin first |
-| `SURAH_NOT_IN_SYLLABUS` | Same | `details.surah_ids` outside every addressed Level's «مقرر الحفظ» |
+| `SURAH_NOT_IN_SYLLABUS` | Class, occurrence, exam or content writes (R165 §2; a Surah is optional everywhere since R179 §2 — `SURAHS_REQUIRED` retired) | `details.surah_ids` outside every addressed Level's «مقرر الحفظ» |
 | `SURAHS_NOT_APPLICABLE` | Same | Surah named for a non-Surah Subject; remove it (never stored as an extra) |
 | `TRACKER_REQUIRES_SURAHS` | Editing a Subject | The memorisation Subject always works by Surah; un-mark tracker first |
 

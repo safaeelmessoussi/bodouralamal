@@ -216,6 +216,8 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     teaching_group_names: o.teachingGroupNames,
     subject_id: o.subjectId,
     subject_name: o.subjectName,
+    // R179 §1 — the group/circle word the month cell shows on its own line.
+    audience_name: o.audienceName,
     teaching_mode: o.teachingMode,
     audience_label: o.audienceLabel,
     status: o.status,

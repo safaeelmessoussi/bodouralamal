@@ -417,6 +417,9 @@ const OCCURRENCE_KEYS = [
   "attendance_marking",
   "attendance_mode",
   "audience_label",
+  // R179 §1 — the group/circle word («الحلقة 1») apart from `title`, so a
+  // month cell shows it on its own line instead of cutting the title.
+  "audience_name",
   // R136 clause 16/17 — the Student-access gate, separate from `visibility`.
   // See `Occurrence.availableFrom`'s own docstring.
   "available_from",

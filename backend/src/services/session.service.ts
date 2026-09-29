@@ -315,9 +315,9 @@ export async function overrideSession(
 
   /**
    * **R165 §2/§5 — the Surahs of this one occurrence.** Asked whenever the edit
-   * names Surahs OR moves the Subject, because either can leave a by-Surah
-   * Subject with no Surah (a fiqh class retaught as تفسير for one day) or a
-   * Surah on a Subject that has none. `surahPlan` is what to store: `undefined`
+   * names Surahs OR moves the Subject, because either can leave a Surah on a
+   * Subject that has none (R179 §2: a by-Surah Subject with no Surah is an
+   * accepted state, not a refusal). `surahPlan` is what to store: `undefined`
    * leaves the rows alone, `[]` clears them (inherit the class's).
    */
   let surahPlan: number[] | undefined;
@@ -364,11 +364,9 @@ export async function overrideSession(
           chosen.every((id, index) => id === classSurahs[index]);
         surahPlan = sameAsClass ? [] : resolved;
       }
-    } else if (inherited.length === 0) {
-      throw new AppError("VALIDATION_FAILED", "this subject needs at least one surah", {
-        reason: "SURAHS_REQUIRED",
-      });
     } else if (data.surahIds !== undefined) {
+      // R179 §2 — none named is a valid answer: the occurrence inherits the
+      // class's Surahs, which may themselves be none.
       surahPlan = [];
     }
   }

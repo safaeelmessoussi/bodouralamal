@@ -168,12 +168,16 @@ export async function assertSubjectTaughtAtLevel(
  * which is exactly the count at which `assertSubjectTaughtAtLevel` above was
  * found enforced in two places out of three; so it has one home from the start.
  *
- * - The Subject works by Surah and none is named → `SURAHS_REQUIRED`.
- * - It does not, and one is named → `SURAHS_NOT_APPLICABLE` (a Surah on a fiqh
- *   class is an invented value, not a harmless extra).
+ * - The Subject does not work by Surah, and one is named →
+ *   `SURAHS_NOT_APPLICABLE` (a Surah on a fiqh class is an invented value, not
+ *   a harmless extra).
  * - A Surah outside the «مقرر الحفظ» of EVERY Level addressed →
  *   `SURAH_NOT_IN_SYLLABUS`. One Level is enough: a class for two Levels may
  *   study a Surah only one of them has reached.
+ * - **R179 §2 (Owner, 2026-09-29) — naming none is always accepted.** The
+ *   Surah is optional on every surface: a by-Surah Subject's class, occurrence
+ *   or exam MAY say which Surah it is about, and one that says nothing is
+ *   stored with none. `SURAHS_REQUIRED` was withdrawn with the rule.
  *
  * Returns the Surahs to store — deduplicated, in Mushaf order.
  */
@@ -201,11 +205,7 @@ export async function resolveSurahs(
     return [];
   }
 
-  if (requested.length === 0) {
-    throw new AppError('VALIDATION_FAILED', 'this subject needs at least one surah', {
-      reason: 'SURAHS_REQUIRED',
-    });
-  }
+  if (requested.length === 0) return [];
 
   const inSyllabus = await db.levelSurah.findMany({
     where: {

@@ -259,6 +259,14 @@ export interface Occurrence {
      no lifecycle, so these stay null for it rather than being invented. */
   subjectId: string | null;
   subjectName: string | null;
+  /**
+   * R179 §1 — the group or circle the item is for, as ONE word the month cell
+   * shows on its own line («الحلقة 1»): the same word `title` carries after its
+   * «—» (R178 §5), sent apart so the cell never has to cut a title to fit and
+   * never has to split one. `null` where no group or circle is named, and for
+   * every activity.
+   */
+  audienceName: string | null;
   teachingMode: string | null;
   /**
    * **Who the class is for**, in one string the calendar can render without a
@@ -715,6 +723,7 @@ function sessionOccurrence(
     description: session.description,
     subjectId: subject.id,
     subjectName: subject.name,
+    audienceName: audienceWord,
     teachingMode: sch.teachingMode,
     // The most specific single name, as before — now from the same five-way
     // answer, so a `multi_dimension` class has one too.
@@ -1642,6 +1651,7 @@ export async function readCalendar(
         surahIds: [],
         subjectId: null,
         subjectName: null,
+        audienceName: null,
         teachingMode: null,
         audienceLabel: null,
         status: null,
@@ -1857,6 +1867,8 @@ export async function readCalendar(
       teachingGroupNames: exam.teachingGroup ? [exam.teachingGroup.name] : [],
       subjectId: exam.subjectId,
       subjectName: exam.subject?.name ?? null,
+      // The sitting's one group or circle, in the word `examTitle` uses.
+      audienceName: audienceTitle(exam.teachingGroup?.name ?? null, exam.administrativeGroup?.name ?? null),
       teachingMode: null,
       /**
        * **R136 — the two arms this label always knew (a named Administrative

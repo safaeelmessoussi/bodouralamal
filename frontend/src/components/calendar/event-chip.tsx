@@ -27,8 +27,8 @@ export function EventChip({
   // without relying on the colour that marks it.
   const kindKey = OCCURRENCE_KIND_LABEL[occurrence.kind];
   // Title first, time second — the priority order that matters when a cell is
-  // scanned. Both live on ONE line: a two-line chip halves how many activities
-  // a cell can show, and the time is short enough to sit beside the title.
+  // scanned. The time sits beside the title's first line; since R179 §1 the
+  // title itself takes as many lines as it needs (the row grows with it).
   /**
    * **R97 — online is marked; in-person is not** (§18).
    *
@@ -61,9 +61,25 @@ export function EventChip({
   const announced =
     holiday && occurrence.scheduling_type_name ? occurrence.scheduling_type_name : t(kindKey);
 
+  /**
+   * **R179 §1 (Owner, 2026-09-29) — everything the cell shows is readable
+   * without opening it.** A class's `title` is «Subject — الحلقة 1» (R178 §5),
+   * and on one line it was cut to «أحكام التجويد — الحلقة…» — which named the
+   * circle and then hid its number. The Subject and the circle now sit on
+   * two lines of their own, no «—» between them, and the title WRAPS instead
+   * of ending in an ellipsis (`calendar.css`). The server sends the audience
+   * word apart (`audience_name`); a class from a server without it keeps its
+   * one-line title, still wrapped, never cut.
+   */
+  const audience =
+    occurrence.kind === 'session' && occurrence.audience_name ? occurrence.audience_name : null;
+  const head =
+    audience !== null && occurrence.subject_name ? occurrence.subject_name : occurrence.title;
+
   const inner = (
     <>
-      <span className="event-chip__title">{occurrence.title}</span>
+      <span className="event-chip__title">{head}</span>
+      {audience !== null ? <span className="event-chip__audience">{audience}</span> : null}
       {holiday && occurrence.scheduling_type_name ? (
         <span className="event-chip__tag">{occurrence.scheduling_type_name}</span>
       ) : null}

@@ -49,9 +49,9 @@ export function surahNamesOf(
 }
 
 /**
- * A class's Surahs — one or more. `inheritLabel` is what the empty state reads:
- * «اختاري» where a choice is required, or the class's own Surahs where one
- * occurrence may simply keep them.
+ * A class's Surahs — any number, none included (R179 §2). `inheritLabel` is
+ * what the empty state reads: «اختاري» on the class itself, or the class's own
+ * Surahs where one occurrence may simply keep them.
  */
 export function SurahsField({
   facts,
@@ -79,7 +79,7 @@ export function SurahsField({
   );
 }
 
-/** An exam's one Surah. Any number of exams may examine the same Surah. */
+/** An exam's one Surah, or none (R179 §2). Any number of exams may examine the same Surah. */
 export function SurahField({
   facts,
   levelIds,
@@ -99,7 +99,7 @@ export function SurahField({
       onChange={(next: string) => onChange(next === '' ? null : Number(next))}
       hint={choices.length === 0 ? t('scheduling.surahs.noSyllabus') : t('scheduling.surahs.examHint')}
       options={[
-        { value: '', label: t('common.choose') },
+        { value: '', label: t('scheduling.surahs.none') },
         ...choices.map((s) => ({ value: String(s.id), label: s.name })),
       ]}
     />

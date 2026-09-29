@@ -78,7 +78,7 @@ export const createExamSchema = z
     visibility: visibility.optional(),
     staff: staff.optional(),
     /** R165 §2 — the Surah this sitting examines (1–114). Whether one is
-     *  REQUIRED is the Subject's `requires_surahs` (`resolveSurahs`). */
+     *  refused where the Subject is not taught by Surah (`resolveSurahs`); optional otherwise (R179 §2). */
     surah_id: z.number().int().min(1).max(114).nullable().optional(),
   })
   .strict();
@@ -120,7 +120,7 @@ export const updateExamSchema = z
     visibility: visibility.optional(),
     staff: staff.optional(),
     /** R165 §2 — the Surah this sitting examines (1–114). Whether one is
-     *  REQUIRED is the Subject's `requires_surahs` (`resolveSurahs`). */
+     *  refused where the Subject is not taught by Surah (`resolveSurahs`); optional otherwise (R179 §2). */
     surah_id: z.number().int().min(1).max(114).nullable().optional(),
   })
   .strict();

@@ -188,27 +188,25 @@ const filled = await page(`
   await wait(1500);
   const subject = setSelect('المادة', (o) => o.textContent.includes('[dev-scenario] تفسير'));
   await wait(400);
-  const year = setSelect('السنة الدراسية', (o) => o.value !== '');
-  await wait(300);
+  // R178 §6(a) — «السنة الدراسية» is no longer on the form: the server
+  // derives the year from the date.
+  const yearAsked = fieldOf('السنة الدراسية') !== undefined;
   // (The date went in above; the class saving below is what proves it.)
   const start = setInput('من الساعة', '07:00');
   const end = setInput('إلى الساعة', '08:00');
   await wait(300);
-  return { level: level.ticked, levelSummary: level.summary, subject, year, start, end };
+  return { level: level.ticked, levelSummary: level.summary, subject, yearAsked, start, end };
 `);
 check(
-  '5a · a Level, its Subject, the year and the times are all reachable on the form',
-  filled.level && filled.subject && filled.year && filled.start && filled.end,
+  '5a · a Level, its Subject and the times are all reachable on the form — and no year is asked (R178 §6(a))',
+  filled.level && filled.subject && !filled.yearAsked && filled.start && filled.end,
   JSON.stringify(filled),
 );
 
 const surah = await page(`
   const asked = fieldOf('السور') !== undefined;
-  // Without a Surah the form must say so, and send nothing.
-  const save = [...dlg().querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ');
-  save.click();
-  await wait(1000);
-  const refusedInWords = dlg() !== null && (dlg().textContent ?? '').includes('اختاري السورة');
+  // R179 §2 — the Surah is optional, and the field says so where it is asked.
+  const optionalInWords = [...(fieldOf('السور')?.querySelectorAll('.field__hint') ?? [])].some((h) => (h.textContent ?? '').includes('اختياري'));
   const offered = await multi('السور', 'الفاتحة');
   await wait(500);
   // R167 §1 — nothing is TYPED, and the composed title is SHOWN while composing.
@@ -216,12 +214,12 @@ const surah = await page(`
   const shown = dlg().querySelector('[data-generated-title]');
   const titleShown = shown ? (shown.querySelector('output')?.textContent ?? '') : null;
   const titleHint = shown ? (shown.querySelector('.field__hint')?.textContent ?? '') : null;
-  return { asked, refusedInWords, offered: offered.options, ticked: offered.ticked, summary: offered.summary, titleAsked, titleShown, titleHint };
+  return { asked, optionalInWords, offered: offered.options, ticked: offered.ticked, summary: offered.summary, titleAsked, titleShown, titleHint };
 `);
 check(
-  '5e · a by-Surah Subject asks «السور» — the Level’s «مقرر الحفظ» and nothing else — and refuses to save without one',
+  '5e · a by-Surah Subject asks «السور» — the Level’s «مقرر الحفظ» and nothing else — and says the choice is optional (R179 §2)',
   surah.asked === true &&
-    surah.refusedInWords === true &&
+    surah.optionalInWords === true &&
     JSON.stringify(surah.offered) === JSON.stringify(['الفاتحة', 'البقرة']) &&
     surah.ticked === true &&
     surah.summary === 'الفاتحة',
@@ -296,11 +294,11 @@ check(
   JSON.stringify(stored),
 );
 check(
-  '5g · and it is CALLED what it is: type — Subject — Surah — when (a one-off carries its date)',
+  '5g · and it is CALLED what it is: type — Subject — سورة — when, the date as a person says it (R178 §4; a one-off carries its date)',
   stored !== null &&
     typeof stored.title === 'string' &&
-    stored.title.startsWith(CLASS_TYPE + ' — [dev-scenario] تفسير القرآن — الفاتحة') &&
-    /\d{4}-\d{2}-\d{2} 07:00$/.test(stored.title),
+    stored.title.startsWith(CLASS_TYPE + ' — [dev-scenario] تفسير القرآن — سورة الفاتحة — ') &&
+    /— [^\d—]+ \d{1,2} [^\d ]+ \d{4} 07:00$/.test(stored.title),
   JSON.stringify({ title: stored?.title }),
 );
 check(

@@ -476,14 +476,19 @@ tr:last-child .cal-cell {
  */
 .event-chip {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-2);
+  gap: 0.1rem var(--space-2);
   width: 100%;
   padding: 0.35rem var(--space-2) 0.35rem var(--space-3);
   border: 0;
   border-radius: var(--radius-sm);
   font: inherit;
-  font-size: var(--font-size-xs);
+  /* R179 §1 — a step under `--font-size-xs`: the chip is read in a cell, not
+     in running text, and the smaller step lets «أحكام التجويد» sit beside its
+     time on one line more often. Still ~14 px on a laptop; the phone rule
+     below keeps its own 0.78 rem. */
+  font-size: 0.82rem;
   line-height: 1.35;
   text-align: start;
   background: var(--color-primary-soft);
@@ -534,18 +539,35 @@ tr:last-child .cal-cell {
   filter: brightness(0.96);
   transform: translateX(-1px);
 }
-/* Title first and allowed to shrink; the time is short and never truncates.
-   `min-width: 0` is what actually lets the ellipsis appear inside a flex
-   ancestor — without it the text forces the cell wider instead. */
+/* **R179 §1 (Owner, 2026-09-29) — the title WRAPS; nothing on a chip is cut.**
+   It ended in an ellipsis before («أحكام التجويد — الحلقة…»), which named the
+   circle and hid its number — the one thing R178 §5 put there. `flex-basis: 0`
+   with `min-width: 0` is what keeps the time on the title's FIRST line: with
+   `auto` a long title claims the whole line first and pushes the time under
+   it. `overflow-wrap: anywhere` only ever bites on a phone's ~48 px cell,
+   where a single word can be wider than the line. A table cell's height is a
+   floor, so a day with more than the cell's height of chips makes its row
+   taller — everything stays on the page. */
 /* 600, not 700: the day numerals are 700, and matching them would put the two
    at the same level in the hierarchy. */
 .event-chip__title {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* The group or circle («الحلقة 1»), on a line of its own under the title —
+   `order` puts it after the time, and the full basis makes it a new line. A
+   step lighter than the title: it says *which* class, the title says *what*. */
+.event-chip__audience {
+  order: 10;
+  flex: 0 0 100%;
+  min-width: 0;
+  font-weight: 500;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: color-mix(in srgb, currentcolor 80%, transparent);
 }
 /* **R97 — the عن بُعد marker on a month chip.**
 
@@ -727,8 +749,8 @@ tr:last-child .cal-cell {
    * `min-height` stays — `--space-10` (2.5rem = 40px) keeps every chip a real
    * tap target regardless of how few lines a short title needs
    * (`calendar-geometry.mjs`'s `tappable` check requires ≥32px), while a
-   * longer title simply grows the box past that floor via the wrap rule on
-   * `.event-chip__title` below. One full-width target per occurrence; the
+   * longer title simply grows the box past that floor via the base wrap rule
+   * on `.event-chip__title`. One full-width target per occurrence; the
    * complete accessible label and canonical dialog retain the time, delivery
    * and kind this width no longer has room to show as separate text.
    */
@@ -738,26 +760,11 @@ tr:last-child .cal-cell {
     align-items: flex-start;
   }
   /**
-   * **Wrap, don't ellipsis — this is the actual defect being fixed.**
-   *
-   * «حصة تجويد القرآن» read as «حـ…» under `white-space: nowrap` +
-   * `text-overflow: ellipsis`, which is a title a reader cannot identify her
-   * own class from. `-webkit-line-clamp` (supported in every engine this
-   * project targets, Chromium/WebKit/Firefox alike, despite the vendor
-   * prefix) is the same idiom `.content-card__description` already uses for
-   * exactly this shape of problem — let Arabic wrap across up to 3 lines,
-   * using nearly the full cell width the mobile query already frees up by
-   * hiding time/delivery/tag, and clip only once that space is genuinely
-   * spent rather than after a handful of characters.
+   * **Wrap, don't ellipsis.** «حصة تجويد القرآن» once read as «حـ…» here;
+   * R138 let it wrap across up to 3 lines and clipped the rest. R179 §1
+   * lifted the clamp too: the title now takes the lines it needs on every
+   * width (the base rule above), and the row grows past the cell's height.
    */
-  .event-chip__title {
-    white-space: normal;
-    overflow-wrap: break-word;
-    text-overflow: clip;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-  }
   .cal-day__gregorian {
     font-size: var(--font-size-sm);
   }

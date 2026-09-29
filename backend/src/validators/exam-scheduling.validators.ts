@@ -84,7 +84,7 @@ export const scheduleExamSchema = z
     visibility: visibility.optional(),
     staff: staff.optional(),
     /** R165 §2 — the Surah this sitting examines (1–114). Whether one is
-     *  REQUIRED is the Subject's `requires_surahs` (`resolveSurahs`). */
+     *  refused where the Subject is not taught by Surah (`resolveSurahs`); optional otherwise (R179 §2). */
     surah_id: z.number().int().min(1).max(114).nullable().optional(),
     availability,
     /** Required exactly when `source_exam_id` is absent for a `physical`
@@ -116,7 +116,7 @@ export const updateExamScheduleSchema = z
     visibility: visibility.optional(),
     staff: staff.optional(),
     /** R165 §2 — the Surah this sitting examines (1–114). Whether one is
-     *  REQUIRED is the Subject's `requires_surahs` (`resolveSurahs`). */
+     *  refused where the Subject is not taught by Surah (`resolveSurahs`); optional otherwise (R179 §2). */
     surah_id: z.number().int().min(1).max(114).nullable().optional(),
     availability,
   })

@@ -145,7 +145,7 @@ All under `scripts/dev/browser/` (`.sh` wrapper + `.mjs`); fuller descriptions a
 | `verify-calendar-surfaces.sh` | AO five calendar surfaces, one contract matrix | 23/23 |
 | `verify-circle-branch.sh` | R172 §15 circles carry and filter by branch (`?branch_id=`) | 10/10 |
 | `verify-circles-reorder.sh` | R78.1 حلقات المواد drag and ↑/↓ persisted; by seeded id | 9/9 |
-| `verify-class-filters.sh` | R163 §5/R165–R167 five-filter class form, server-composed name, «السور», split editor, journeys C (`200`, one class) and D (one `PATCH /sessions/{id}`) | 20/20 |
+| `verify-class-filters.sh` | R163 §5/R165–R167/R178/R179 five-filter class form, server-composed name, «السور» optional, no year asked, split editor, journeys C (`200`, one class) and D (one `PATCH /sessions/{id}`) | 21/21 |
 | `verify-consent-disclosure.sh` | `[hidden]` hides by computed style (rule AG), legend spacing, wording = `GET /registration/consent-text`, 360 px | 19/19 |
 | `verify-content-scope.sh` | NEW D مؤطِّرة: admin routes 403, `/me/scope-options`, Level narrows المادة to `subject_ids`, results change, rule AX | 14/14 |
 | `verify-content-visibility.sh` | §14.1 selector operated; `/uploads/initiate` carries `visibility: "private"`; no «استبدال الملف»; real upload removed | 24/24 |

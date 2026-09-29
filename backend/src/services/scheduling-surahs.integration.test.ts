@@ -179,10 +179,17 @@ const surahsOf = async (scheduleId: string): Promise<number[]> =>
   ).map((row) => row.surahId);
 
 describe("a class of a Subject that works by Surah", () => {
-  it("cannot be scheduled without saying which Surah", async () => {
-    expect(
-      await reason(() => createCourseSchedule(prisma, superAdmin(), classInput(), NOW)),
-    ).toBe("SURAHS_REQUIRED");
+  it("R179 §2 — may be scheduled without saying which Surah; it is stored with none and named without one", async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), classInput(), NOW);
+    expect(await surahsOf(id)).toEqual([]);
+    const occurrences = await calendarOn(FIRST);
+    const session = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day(FIRST) },
+      select: { id: true },
+    });
+    const mine = occurrences.find((o) => o.id === session.id);
+    expect(mine?.surahNames).toEqual([]);
+    expect(mine?.itemTitle).toBe(`${TAG} مادة بالسور — الثلاثاء 2 يونيو 2026 15:00`);
   });
 
   it("refuses a Surah the Level's «مقرر الحفظ» does not hold", async () => {
@@ -244,7 +251,7 @@ describe("a class of a Subject that works by Surah", () => {
     expect(await surahsOf(id)).toEqual([]);
   });
 
-  it("an edit of the whole series replaces them, and cannot empty them", async () => {
+  it("an edit of the whole series replaces them — and may empty them (R179 §2)", async () => {
     const { id } = await createCourseSchedule(
       prisma,
       superAdmin(),
@@ -253,14 +260,12 @@ describe("a class of a Subject that works by Surah", () => {
     );
     await updateCourseSchedule(prisma, superAdmin(), id, { version: 0, surahIds: [BAQARA] }, NOW);
     expect(await surahsOf(id)).toEqual([BAQARA]);
-    expect(
-      await reason(() =>
-        updateCourseSchedule(prisma, superAdmin(), id, { version: 1, surahIds: [] }, NOW),
-      ),
-    ).toBe("SURAHS_REQUIRED");
     // An edit that does not mention them leaves them alone.
     await updateCourseSchedule(prisma, superAdmin(), id, { version: 1, description: `${TAG} حلقة 2` }, NOW);
     expect(await surahsOf(id)).toEqual([BAQARA]);
+    // Naming none is an answer, not a refusal.
+    await updateCourseSchedule(prisma, superAdmin(), id, { version: 2, surahIds: [] }, NOW);
+    expect(await surahsOf(id)).toEqual([]);
   });
 
   it("a «from this date onward» split hands them to the successor — or the ones it names", async () => {
@@ -404,7 +409,7 @@ describe("§5 — one occurrence may name its own Surahs", () => {
     ).toBe("SURAH_NOT_IN_SYLLABUS");
   });
 
-  it("an ordinary class retaught by Surah for one day must say which Surah", async () => {
+  it("an ordinary class retaught by Surah for one day may say which Surah, or none (R179 §2)", async () => {
     const { id } = await createCourseSchedule(
       prisma,
       superAdmin(),
@@ -412,22 +417,20 @@ describe("§5 — one occurrence may name its own Surahs", () => {
       NOW,
     );
     const session = await firstSession(id);
-    expect(
-      await reason(() =>
-        overrideSession(prisma, superAdmin(), session.id, {
-          version: session.version,
-          subjectId: tafseerId,
-        }),
-      ),
-    ).toBe("SURAHS_REQUIRED");
+    // Retaught with no Surah named: accepted, and none stored.
     await overrideSession(prisma, superAdmin(), session.id, {
       version: session.version,
       subjectId: tafseerId,
-      surahIds: [FATIHA],
     });
-    // …and returning it to the class's own Subject clears the leftover Surah.
+    expect(await prisma.sessionSurah.count({ where: { sessionId: session.id } })).toBe(0);
     await overrideSession(prisma, superAdmin(), session.id, {
       version: session.version + 1,
+      surahIds: [FATIHA],
+    });
+    expect(await prisma.sessionSurah.count({ where: { sessionId: session.id } })).toBe(1);
+    // …and returning it to the class's own Subject clears the leftover Surah.
+    await overrideSession(prisma, superAdmin(), session.id, {
+      version: session.version + 2,
       subjectId: null,
     });
     expect(await prisma.sessionSurah.count({ where: { sessionId: session.id } })).toBe(0);
@@ -547,8 +550,9 @@ describe("an exam of a Subject that works by Surah", () => {
       ...(over.surahId === undefined ? {} : { surahId: over.surahId }),
     });
 
-  it("must name its Surah, from the Level's «مقرر الحفظ»", async () => {
-    expect(await reason(() => sitting())).toBe("SURAHS_REQUIRED");
+  it("may name its Surah, from the Level's «مقرر الحفظ» — or none (R179 §2)", async () => {
+    const bare = await sitting();
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id: bare.id } })).surahId).toBeNull();
     expect(await reason(() => sitting({ surahId: NAS }))).toBe(
       "SURAH_NOT_IN_SYLLABUS",
     );
@@ -591,16 +595,13 @@ describe("an exam of a Subject that works by Surah", () => {
     );
   });
 
-  it("its Surah is editable, and held to the same rule", async () => {
+  it("its Surah is editable, and may be removed (R179 §2)", async () => {
     const { id } = await sitting({ surahId: FATIHA });
     const version = (await prisma.exam.findUniqueOrThrow({ where: { id } })).version;
     await updatePhysicalExam(prisma, superAdmin(), id, { version, surahId: BAQARA });
     expect((await prisma.exam.findUniqueOrThrow({ where: { id } })).surahId).toBe(BAQARA);
-    expect(
-      await reason(() =>
-        updatePhysicalExam(prisma, superAdmin(), id, { version: version + 1, surahId: null }),
-      ),
-    ).toBe("SURAHS_REQUIRED");
+    await updatePhysicalExam(prisma, superAdmin(), id, { version: version + 1, surahId: null });
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id } })).surahId).toBeNull();
   });
 });
 

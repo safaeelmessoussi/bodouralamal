@@ -108,6 +108,11 @@ export interface ClassSectionProps {
     setters: AudienceSetters;
     choices: AudienceChoices;
   };
+  /**
+   * R179 §3 — the row's own Subject (id and name) on a locked form, shown
+   * from the row rather than from the scope hook's clearable copy.
+   */
+  frozenSubject?: { value: string; label: string } | null;
 }
 
 export function ClassSection({
@@ -130,6 +135,7 @@ export function ClassSection({
   scheduleUntil,
   staffLocked,
   audience,
+  frozenSubject,
 }: ClassSectionProps): ReactNode {
   return (
     <>
@@ -176,6 +182,9 @@ export function ClassSection({
         fields={['subjectId']}
         mode="form"
         locked={locked ? ['subjectId'] : []}
+        // R179 §3 — on edit the Subject is the ROW's, shown from the row: the
+        // hook may clear its own copy while the class's circles load.
+        {...(locked && frozenSubject ? { pinned: { subjectId: frozenSubject } } : {})}
       />
       {surahs ?? null}
 

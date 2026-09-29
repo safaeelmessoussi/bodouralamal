@@ -97,9 +97,10 @@ describe('SRS Revision 166 §3 — a class and an exam are CALLED what they are;
 });
 
 describe('the forms that ask', () => {
-  it('«إضافة عنصر» requires a Surah of a by-Surah class and exam', () => {
-    expect(schedulingPage).toContain("if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.surahs');");
-    expect(schedulingPage).toContain("return t('scheduling.invalid.examSurah');");
+  it('«إضافة عنصر» asks for a Surah of a by-Surah class and exam, and never requires one (R179 §2)', () => {
+    expect(schedulingPage).not.toContain("scheduling.invalid.surahs");
+    expect(schedulingPage).not.toContain("scheduling.invalid.examSurah");
+    expect(sessionsPage).not.toContain("scheduling.invalid.surahs");
     // Sent only for the kind that owns the key, and only when it was asked.
     expect(schedulingPage).toContain("type === 'class' && asksSurahs ? { surahIds }");
     expect(schedulingPage).toContain("type === 'exam' && asksSurahs ? { examSurahId: surahIds[0] ?? null }");

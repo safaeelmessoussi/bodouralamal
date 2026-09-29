@@ -974,11 +974,12 @@ export async function createCourseSchedule(
       );
     }
 
-    // R165 §2 — which Surah(s), when the Subject works by Surah. **After the
-    // capability check above, deliberately**: asked first, a مؤطِّرة with no
-    // authority over this Level was answered `400 SURAHS_REQUIRED` — a fact
-    // about a class she may not create — instead of the refusal she is owed
-    // (§20 rule 17; caught by the journey test, 2026-09-20).
+    // R165 §2 — which Surah(s), when the Subject works by Surah (none is an
+    // answer since R179 §2). **After the capability check above,
+    // deliberately**: asked first, a مؤطِّرة with no authority over this Level
+    // was answered a `400` about her Surahs — a fact about a class she may not
+    // create — instead of the refusal she is owed (§20 rule 17; caught by the
+    // journey test, 2026-09-20).
     const surahIds = await resolveSurahs(tx, {
       subjectId: input.subjectId,
       levelIds: target.effectiveLevelIds,

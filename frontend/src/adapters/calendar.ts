@@ -131,6 +131,13 @@ export interface Occurrence {
      no lifecycle, so these are null for it rather than invented. */
   subject_id: string | null;
   subject_name: string | null;
+  /**
+   * R179 §1 — the group or circle word («الحلقة 1») `title` carries after its
+   * «—», sent apart so a month cell shows it on its own line instead of
+   * cutting the title. `null` where none is named; optional while a server
+   * older than this field could still answer.
+   */
+  audience_name?: string | null;
   teaching_mode: string | null;
   /** Who the class is *for*: the group's name, or the Level's, by mode. */
   audience_label: string | null;

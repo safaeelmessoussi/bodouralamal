@@ -1957,9 +1957,7 @@ export function SchedulingDialog({
        * hides that whole picker for `mode === 'online' && locked` rather
        * than showing a required control with nothing chosen against it.
        */
-      // R165 §2 — asked on Edit too: a sitting saved before the rule existed
-      // opens without a Surah, and the server will require one on save.
-      if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.examSurah');
+      // R179 §2 — the Surah is optional on every surface; nothing to check.
       if (item) return null;
       if (examSource.sourceId === '') return t('scheduling.exam.paperRequired');
       if (examSource.targetKind !== 'level' && examSource.targetId === '') {
@@ -2022,7 +2020,6 @@ export function SchedulingDialog({
           if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
         }
       }
-      if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.examSurah');
       if (roomId === '') return t('scheduling.invalid.room');
       if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
       // R176 §1 — the supervisor is OPTIONAL. This form used to refuse an
@@ -2091,11 +2088,14 @@ export function SchedulingDialog({
       // rows a Level teaches nothing, so *choose a subject* is unanswerable —
       // the remedy is on another screen, and naming it turns a dead end into a
       // next step (R43, R55).
-      if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
-      if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
+      // R179 §3 — neither question on EDIT: the Subject is the row's, frozen
+      // and never sent (`surahSubjectId` reads it from the row), and the hook's
+      // own copy may have been cleared while the class's circles loaded.
+      if (!editing && scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
+      if (surahSubjectId === '') return t('scheduling.invalid.subject');
       // R178 §6(a) — «السنة الدراسية» is no longer asked: the server derives it
       // from the start date (a period covering it, else the current year).
-      if (asksSurahs && surahIds.length === 0) return t('scheduling.invalid.surahs');
+      // R179 §2 — the Surahs are optional: none chosen is sent as none.
       if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
       // A weekday-set pattern IS its days (§4.4) — an empty set produces a
       // schedule that materializes nothing, which looks like a silent failure.
@@ -2456,6 +2456,12 @@ export function SchedulingDialog({
           <ClassSection
             scope={scope}
             locked={editing}
+            // R179 §3 — the row's Subject, shown from the row on edit.
+            frozenSubject={
+              editing && item?.ids.subjectId
+                ? { value: item.ids.subjectId, label: item.subjectName ?? '' }
+                : null
+            }
             mode={mode}
             rooms={rooms}
             roomId={roomId}

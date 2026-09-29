@@ -69,6 +69,17 @@ export interface ScopeSelectorsProps {
    * sometimes offers a non-branch.
    */
   extraOptions?: Partial<Record<ScopeField, Option[]>>;
+  /**
+   * **R179 §3 — a field frozen to the ROW's own value**, shown as-is whatever
+   * the hook currently offers or holds. `locked` only disables the control:
+   * its value still came from the hook, which clears a Subject the moment its
+   * Level moves — and on «تعديل العنصر» the representative Level of a
+   * filter-built class moves once its circles load, so the frozen Subject
+   * went blank and the save was refused with «اختاري المادة.» although the
+   * Subject is never sent on an edit. A pinned field is disabled and reads
+   * the row's value and label, and nothing else.
+   */
+  pinned?: Partial<Record<ScopeField, Option>>;
 }
 
 export function ScopeSelectors({
@@ -77,10 +88,24 @@ export function ScopeSelectors({
   mode,
   locked = [],
   extraOptions = {},
+  pinned = {},
 }: ScopeSelectorsProps): ReactNode {
   return (
     <>
       {fields.map((field) => {
+        const pin = pinned[field];
+        if (pin !== undefined) {
+          return (
+            <SelectField
+              key={field}
+              label={t(LABEL_KEY[field])}
+              value={pin.value}
+              onChange={() => undefined}
+              disabled
+              options={[pin]}
+            />
+          );
+        }
         /**
          * **A filter's Subject has no unmet dependency** (Owner, 2026-08-17).
          *

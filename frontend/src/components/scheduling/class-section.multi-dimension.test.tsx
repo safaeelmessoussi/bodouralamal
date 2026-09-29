@@ -281,3 +281,47 @@ describe('audience-filters — the payload, the rule, and the narrowing', () => 
     expect(SESSIONS_SOURCE).toContain("teaching_mode: 'multi_dimension',");
   });
 });
+
+/**
+ * **R179 §3 (Owner-reported, 2026-09-29) — «تعديل العنصر» shows and keeps
+ * the row's own Subject.** She removed the assigned teacher, saved, and was
+ * refused with «اختاري المادة.» — the frozen Subject had gone blank: the
+ * hook clears its Subject whenever its Level moves, and a filter-built
+ * class's representative Level moves once its circles load. The Subject is
+ * never sent on an edit, so the form now reads it from the ROW: pinned on
+ * the control, and read from the row by the completeness rule.
+ */
+describe('R179 §3 — the frozen Subject is the row\'s, not the hook\'s', () => {
+  it('shows the row\'s Subject, disabled, although the hook holds none', () => {
+    const html = renderToStaticMarkup(
+      <ClassSection
+        {...baseProps}
+        locked
+        frozenSubject={{ value: 's1', label: '[تجريبي] أحكام التجويد' }}
+        audience={audienceOf(['l1'])}
+      />,
+    );
+    expect(html).toContain('[تجريبي] أحكام التجويد');
+    expect(html).toMatch(/<select[^>]*disabled[^>]*>(?:(?!<\/select>).)*\[تجريبي\] أحكام التجويد/s);
+  });
+
+  it('on create the control is the hook\'s, and a pin is never applied', () => {
+    const html = renderToStaticMarkup(
+      <ClassSection
+        {...baseProps}
+        frozenSubject={{ value: 's1', label: '[تجريبي] أحكام التجويد' }}
+        audience={emptyAudience}
+      />,
+    );
+    expect(html).not.toContain('[تجريبي] أحكام التجويد');
+  });
+
+  it('the page pins the row\'s Subject on edit and asks for one only from what the row or the hook holds', () => {
+    expect(SCHEDULING_SOURCE).toContain(
+      "? { value: item.ids.subjectId, label: item.subjectName ?? '' }",
+    );
+    expect(SCHEDULING_SOURCE).toContain("if (surahSubjectId === '') return t('scheduling.invalid.subject');");
+    expect(SCHEDULING_SOURCE).toContain("if (!editing && scope.levelTeachesNothing) return t('scope.assignSubjectsHint');");
+    expect(SCHEDULING_SOURCE).not.toContain("if (scope.value.subjectId === '') return t('scheduling.invalid.subject');\n      // R178 §6(a)");
+  });
+});

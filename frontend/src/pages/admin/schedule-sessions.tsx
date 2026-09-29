@@ -1396,14 +1396,11 @@ function ScopeDialog({
                   return;
                 }
               }
-              // R165 §2 — required wherever a Surah CAN be chosen. A class
-              // scheduled before the rule, at a Level whose «مقرر الحفظ» is
-              // still empty, stays editable: nothing is asked and nothing sent.
+              // R165 §2 — sent wherever a Surah CAN be chosen; none chosen is
+              // an answer since R179 §2. A class at a Level whose «مقرر
+              // الحفظ» is still empty stays editable: nothing is asked and
+              // nothing sent.
               const sendsSurahs = token !== null && asksSurahs && surahsOnOffer;
-              if (sendsSurahs && surahIds.length === 0) {
-                setIdentityNotice(t('scheduling.invalid.surahs'));
-                return;
-              }
               const sameAsClass =
                 surahIds.length === classSurahIds.length &&
                 surahIds.every((id) => classSurahIds.includes(id));

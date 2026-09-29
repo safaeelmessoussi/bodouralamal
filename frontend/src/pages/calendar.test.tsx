@@ -601,6 +601,48 @@ describe('event details', () => {
     expect(html.indexOf('event-chip__title')).toBeLessThan(html.indexOf('event-chip__time'));
   });
 
+  /**
+   * **R179 §1 (Owner, 2026-09-29) — the circle on its own line, whole.** The
+   * title «أحكام التجويد — الحلقة 1» was cut at «الحلقة…» on one line; the
+   * chip now shows the Subject and the circle word as two lines, no «—»,
+   * from the fields the server sends apart. Nothing else changes for a chip
+   * whose server does not send the word, or whose kind has none.
+   */
+  it('shows a class\'s Subject and its circle as two lines, without the dash', () => {
+    const html = renderToStaticMarkup(
+      <EventChip
+        occurrence={occurrence({
+          title: 'أحكام التجويد — الحلقة 1',
+          subject_name: 'أحكام التجويد',
+          audience_name: 'الحلقة 1',
+        })}
+      />,
+    );
+    expect(html).toContain('class="event-chip__title">أحكام التجويد</span>');
+    expect(html).toContain('class="event-chip__audience">الحلقة 1</span>');
+    expect(html).not.toContain('أحكام التجويد — الحلقة 1</span>');
+  });
+
+  it('keeps the one-line title for a class with no group or circle, and for every other kind', () => {
+    const bare = renderToStaticMarkup(
+      <EventChip occurrence={occurrence({ subject_name: 'حفظ القرآن', audience_name: null })} />,
+    );
+    expect(bare).toContain('class="event-chip__title">حلقة تحفيظ</span>');
+    expect(bare).not.toContain('event-chip__audience');
+    const exam = renderToStaticMarkup(
+      <EventChip
+        occurrence={occurrence({
+          kind: 'exam',
+          title: 'اختبار — تفسير القرآن — الحلقة 1',
+          subject_name: 'تفسير القرآن',
+          audience_name: 'الحلقة 1',
+        })}
+      />,
+    );
+    expect(exam).toContain('class="event-chip__title">اختبار — تفسير القرآن — الحلقة 1</span>');
+    expect(exam).not.toContain('event-chip__audience');
+  });
+
   it('the dialog renders nothing until an event is chosen', () => {
     const html = renderToStaticMarkup(
       <EventDetailsDialog occurrence={null} branchNames={new Map()} onClose={() => undefined} />,
