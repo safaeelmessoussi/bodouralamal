@@ -2280,6 +2280,9 @@ export interface EventDefinitionDto {
   /** Empty means the **Global** scope (§4.4): the event belongs to every branch
    *  rather than to none, which is why it is a list and not a nullable id. */
   branch_ids: string[];
+  category_ids: string[];
+  level_ids: string[];
+  group_ids: string[];
   /** R71 — who answers for it. Empty for every event created before R71 and for
    *  any an Admin has not assigned, which is a real state rather than a gap. */
   staff: {
@@ -2305,6 +2308,9 @@ export function eventDefinitionDto(row: {
   recurrenceType: string;
   recurrenceEndDate: Date | null;
   branchScopes: { branchId: string }[];
+  categoryScopes: { categoryId: string }[];
+  levelScopes: { levelId: string }[];
+  administrativeGroupScopes: { administrativeGroupId: string }[];
   staff: { userId: string; position: string; name?: string }[];
   version: number;
 }): EventDefinitionDto {
@@ -2324,6 +2330,10 @@ export function eventDefinitionDto(row: {
     recurrence: String(row.recurrenceType),
     recurrence_end_date: dateOnly(row.recurrenceEndDate),
     branch_ids: row.branchScopes.map((b) => b.branchId),
+    // R176 §2 — the whole scope, so an edit can start from it.
+    category_ids: row.categoryScopes.map((c) => c.categoryId),
+    level_ids: row.levelScopes.map((l) => l.levelId),
+    group_ids: row.administrativeGroupScopes.map((g) => g.administrativeGroupId),
     staff: row.staff.map((x) => ({
       user_id: x.userId,
       position: String(x.position),

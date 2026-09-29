@@ -17,6 +17,7 @@ Production go-live: **on hold (Owner)** — no Production action, nothing ordere
 | D8 | `business-rules.md` has two `### BR-20` headings (Global reach · Seeded-not-immutable) — which number is which? | reference/business-rules.md |
 | D9 | «المحتوى التعليمي» grouped «per Surah» (item 8, 2026-09-25): content carries no Surah in the model (§4.9); add `EducationalContent ↔ Surah`? | R174 §3 |
 | D7 | Menu/route: TD-3.7 route; backup-freshness + TLS-expiry alarms on «حالة النظام» need a host-side publisher (design choice) | R169 §11 |
+| D10 | «تعديل العنصر» for an activity (item 2, 2026-09-28): a circle and a Surah on an *activity* would be new domain relationships (§7 — Event has no circle arm, no Surah); add `EventTeachingGroup`/`EventSurah`, or keep them class-only as built? | R176 §2 |
 
 ## Temporary Production at `bodouralamal.com` (R175 — OVH, outside Morocco)
 

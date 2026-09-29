@@ -1326,11 +1326,14 @@ export function SchedulingDialog({
    * state disagreed until the reader reselected it). See `ActivitySection`'s own
    * doc comment for the full R139 union semantics.
    */
+  // R176 §2 — seeded from the item on edit, so «تعديل العنصر» opens on what
+  // the activity is addressed to. A `global` event was stored as every branch
+  // operational at the time, and that is what it shows: those branches.
   const [global, setGlobal] = useState(false);
-  const [branchIds, setBranchIds] = useState<string[]>([]);
-  const [categoryIds, setCategoryIds] = useState<string[]>([]);
-  const [levelIds, setLevelIds] = useState<string[]>([]);
-  const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [branchIds, setBranchIds] = useState<string[]>(() => item?.ids.scope.branchIds ?? []);
+  const [categoryIds, setCategoryIds] = useState<string[]>(() => item?.ids.scope.categoryIds ?? []);
+  const [levelIds, setLevelIds] = useState<string[]>(() => item?.ids.scope.levelIds ?? []);
+  const [groupIds, setGroupIds] = useState<string[]>(() => item?.ids.scope.groupIds ?? []);
   /**
    * **Owner-reported, 2026-09-16 — SRS Revision 155's fifth dimension, a
    * Teaching Circle, which `الجدولة`'s event scope never needed** (an Event
@@ -1339,7 +1342,7 @@ export function SchedulingDialog({
    * form uses them for a given dialog, never both at once — but no
    * pre-existing state fits a circle, so this is the one genuinely new array.
    */
-  const [teachingGroupIds, setTeachingGroupIds] = useState<string[]>([]);
+  const [teachingGroupIds, setTeachingGroupIds] = useState<string[]>(() => item?.ids.scope.circleIds ?? []);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /**
@@ -1413,10 +1416,13 @@ export function SchedulingDialog({
     // Mirrors the initialiser above — the pair §A proved has to agree.
     schedulingTypeId: item?.ids.schedulingTypeId ?? null,
     global: false,
-    branchIds: [] as string[],
-    categoryIds: [] as string[],
-    levelIds: [] as string[],
-    groupIds: [] as string[],
+    // R176 §2 — mirrors the initialisers, so an untouched scope is not dirty
+    // and, on save, is not sent (a re-sent scope would be a re-resolution).
+    branchIds: [...(item?.ids.scope.branchIds ?? [])].sort(),
+    categoryIds: [...(item?.ids.scope.categoryIds ?? [])].sort(),
+    levelIds: [...(item?.ids.scope.levelIds ?? [])].sort(),
+    groupIds: [...(item?.ids.scope.groupIds ?? [])].sort(),
+    teachingGroupIds: [...(item?.ids.scope.circleIds ?? [])].sort(),
     // Mirrors the initialiser above — a pristine baseline that disagreed with
     // it is what kept `dirty` false while the value was wrong (§A).
     attendanceMarking: item?.attendanceMarking ?? 'staff_only',
@@ -1451,10 +1457,25 @@ export function SchedulingDialog({
       categoryIds: [...categoryIds].sort(),
       levelIds: [...levelIds].sort(),
       groupIds: [...groupIds].sort(),
+      teachingGroupIds: [...teachingGroupIds].sort(),
       attendanceMarking,
     },
     pristine,
   );
+  /**
+   * R176 §2 — whether the activity's scope differs from the item's. Same
+   * comparison `dirty` makes, narrowed to the four lists and the flag, so the
+   * save path can omit an untouched scope from an edit.
+   */
+  const sameIds = (a: string[], b: string[]): boolean =>
+    a.length === b.length && [...a].sort().every((v, k) => v === [...b].sort()[k]);
+  const scopeChanged =
+    global !== pristine.global ||
+    !sameIds(branchIds, pristine.branchIds) ||
+    !sameIds(categoryIds, pristine.categoryIds) ||
+    !sameIds(levelIds, pristine.levelIds) ||
+    !sameIds(groupIds, pristine.groupIds) ||
+    !sameIds(teachingGroupIds, pristine.teachingGroupIds);
 
   /**
    * **SRS §2 — a مؤطِّرة's own declared-capability scope for a CLASS, never the
@@ -1698,7 +1719,9 @@ export function SchedulingDialog({
    * `audience-filters.tsx` (SRS Revision 163 §5), shared with the «from this
    * date onward» editor so the two cannot drift.
    */
-  const filtering = type === 'class' && mode === 'multi_dimension' && !editing;
+  // R176 §2 — on edit too: the five pickers are seeded from the class's own
+  // `dimensions` and sent back only when the reader changed them.
+  const filtering = type === 'class' && mode === 'multi_dimension';
   const audienceSelection = { branchIds, categoryIds, levelIds, groupIds, teachingGroupIds };
   const audienceChoices = useAudienceFilters({
     active: filtering,
@@ -2022,8 +2045,10 @@ export function SchedulingDialog({
        * replacing the single `scopeKind`/`scopeIds` pair): at least ONE of
        * them must carry a choice, or `global` must be checked where offered.
        */
+      // R176 §2 — on edit as on create: the lists are seeded from the item
+      // now, so an edit touching nothing about the scope still passes, and
+      // one that cleared every dimension is told so rather than sent.
       if (
-        !editing &&
         !global &&
         branchIds.length === 0 &&
         categoryIds.length === 0 &&
@@ -2130,19 +2155,25 @@ export function SchedulingDialog({
            * category" is a real, single request now rather than a choice
            * between the two.
            */
-          scope: global
-            ? { global: true }
-            : branchIds.length === 0 &&
-                categoryIds.length === 0 &&
-                levelIds.length === 0 &&
-                groupIds.length === 0
+          scope:
+            // R176 §2 — on edit, ONLY when the reader changed it: an untouched
+            // scope is not re-sent, because the server takes a sent scope as
+            // the complete new answer and would re-resolve `global`.
+            editing && !scopeChanged
               ? undefined
-              : {
-                  ...(branchIds.length > 0 ? { branchIds } : {}),
-                  ...(categoryIds.length > 0 ? { categoryIds } : {}),
-                  ...(levelIds.length > 0 ? { levelIds } : {}),
-                  ...(groupIds.length > 0 ? { groupIds } : {}),
-                },
+              : global
+                ? { global: true }
+                : branchIds.length === 0 &&
+                    categoryIds.length === 0 &&
+                    levelIds.length === 0 &&
+                    groupIds.length === 0
+                  ? undefined
+                  : {
+                      ...(branchIds.length > 0 ? { branchIds } : {}),
+                      ...(categoryIds.length > 0 ? { categoryIds } : {}),
+                      ...(levelIds.length > 0 ? { levelIds } : {}),
+                      ...(groupIds.length > 0 ? { groupIds } : {}),
+                    },
           subjectId: scope.value.subjectId,
           levelId: scope.value.levelId,
           // `null` is the whole Level sitting together (R58), not a gap.
@@ -2258,8 +2289,11 @@ export function SchedulingDialog({
                   ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
                 ],
           teachingMode: mode,
+          // R176 §2 — on edit, the audience travels only when it changed.
           ...(mode === 'multi_dimension'
-            ? { dimensions: audienceDimensions(audienceSelection) }
+            ? editing && !scopeChanged
+              ? {}
+              : { dimensions: audienceDimensions(audienceSelection) }
             : { targetId }),
           // R165 §2 — sent only when the form asked: a Subject that has no
           // Surahs sends none, rather than an empty list to be interpreted.
@@ -2597,7 +2631,6 @@ export function SchedulingDialog({
             assistantIds={assistantIds}
             onAssistants={setAssistantIds}
             canAssignStaff={canAssignStaff}
-            locked={editing}
             hideStaffing={type === 'holiday'}
           />
         )}

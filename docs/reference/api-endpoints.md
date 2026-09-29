@@ -266,7 +266,7 @@ Carries the Subject, one teaching mode with exactly one target, branch, room, st
 - `teaching_mode` + `target_id`, never three nullable columns. Times are TD-11 wall-clock `HH:MM`; an ISO instant is refused.
 - Materialization is eager for conflict detection: room, teacher and assistant checked against existing Sessions with governing rows `FOR UPDATE` (TD-15.2); a clash is [`SCHEDULE_CONFLICT`](error-codes.md), not `STATE_CONFLICT`; room capacity never consulted (BR-23).
 - Writes report what they did not do: `materialization.protected_sessions` with every reason; `retained` on delete.
-- Subject, target, branch and academic year are not editable (re-creations). `PATCH` `scope` (§4.4, R50): `all_sessions` (default, future un-overridden Sessions rewritten) or `this_and_future` with `from_date`: the current schedule closes at `from_date − 1 day` via `effective_until`, a successor with the new values and copied staff is anchored at `from_date`; past/overridden Sessions untouched (R43.6); the response is the successor plus `split_from_schedule_id`. "This session only" is `PATCH /sessions/{id}`.
+- Subject, target, branch and academic year are not editable (re-creations). `dimensions` is the one in-place exception since R176 §2, for a `multi_dimension` class only: the five joins are replaced wholesale (a dimension left out is «الكل»), curriculum-checked as on create; any other mode is refused `DIMENSIONS_REQUIRE_MULTI_DIMENSION`. `PATCH` `scope` (§4.4, R50): `all_sessions` (default, future un-overridden Sessions rewritten) or `this_and_future` with `from_date`: the current schedule closes at `from_date − 1 day` via `effective_until`, a successor with the new values and copied staff is anchored at `from_date`; past/overridden Sessions untouched (R43.6); the response is the successor plus `split_from_schedule_id`. "This session only" is `PATCH /sessions/{id}`.
 
 ### Sessions — the individual occurrence
 
@@ -330,7 +330,7 @@ Not under `/admin/`: TD-2 gives a Teacher write access to sessions they staff; s
 | | Path | Audience · semantics |
 |---|---|---|
 | `POST` | `/events` | 🔒 Writes the four-way scope joins explicitly at creation |
-| `PATCH` `DELETE` | `/events/{id}` | 🔒 |
+| `PATCH` `DELETE` | `/events/{id}` | 🔒 `PATCH` re-addresses with the five scope keys as a whole (R176 §2) |
 | `POST` | `/events/{id}/notify` | 🔒 Optional post-change announcement, see [Notifications](#notifications) |
 | `GET` `POST` | `/admin/branches/{id}/event-backfill` | 🔒 Manual backfill on branch activation; an Admin capability (operational work) |
 

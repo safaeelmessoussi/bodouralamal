@@ -1632,3 +1632,51 @@ describe("Revision 157 — this_and_future splits a multi_dimension schedule", (
     expect(res.status).toBe(400);
   });
 });
+
+describe("R176 §2 — a multi_dimension class is re-addressed IN PLACE", () => {
+  it("replaces the five joins wholesale and the response shows the new answer", async () => {
+    const created = await call(
+      "POST",
+      "/admin/course-schedules",
+      superAdmin,
+      scheduleBody({
+        teaching_mode: "multi_dimension",
+        target_id: undefined,
+        dimensions: { level_ids: [levelId], branch_ids: [branchA] },
+        staff: [],
+      }),
+    );
+    expect(created.status).toBe(201);
+    const { id, version } = created.body.schedule as { id: string; version: number };
+
+    const res = await call("PATCH", `/admin/course-schedules/${id}`, superAdmin, {
+      version,
+      dimensions: { administrative_group_ids: [groupA] },
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect((res.body.schedule as { dimensions: Record<string, string[]> }).dimensions).toEqual({
+      branch_ids: [],
+      category_ids: [],
+      level_ids: [],
+      administrative_group_ids: [groupA],
+      teaching_group_ids: [],
+    });
+    // The Level was NOT carried over: the submitted dimensions are the whole answer.
+    expect(await prisma.courseScheduleLevel.count({ where: { scheduleId: id } })).toBe(0);
+    expect(await prisma.courseScheduleBranch.count({ where: { scheduleId: id } })).toBe(0);
+  });
+
+  it("a legacy single-target class is still a re-creation: dimensions in place is refused in words", async () => {
+    const created = await call("POST", "/admin/course-schedules", superAdmin, scheduleBody({ staff: [] }));
+    expect(created.status).toBe(201);
+    const { id, version, teaching_mode } = created.body.schedule as { id: string; version: number; teaching_mode: string };
+    expect(teaching_mode).not.toBe("multi_dimension");
+
+    const res = await call("PATCH", `/admin/course-schedules/${id}`, superAdmin, {
+      version,
+      dimensions: { administrative_group_ids: [groupA] },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.["reason"]).toBe("DIMENSIONS_REQUIRE_MULTI_DIMENSION");
+  });
+});

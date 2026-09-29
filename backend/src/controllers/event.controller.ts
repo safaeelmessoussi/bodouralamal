@@ -87,17 +87,24 @@ const createSchema = z
   .strict();
 
 /**
- * `PATCH /events/{id}` — the event's own attributes only.
+ * `PATCH /events/{id}` — the event's own attributes, and (R176 §2) optionally
+ * a whole new scope.
  *
- * `.strict()` matters here: scope keys (`global`, `branch_ids`, …) are **not**
- * editable, and a strict schema **rejects** them with a 400 rather than
- * accepting the request and silently dropping them. §4.4 materialises scope at
- * creation and provides the manual backfill action for later attachment; see
- * `updateEvent` for why re-resolving on edit would break that rule.
+ * `.strict()` still matters: an unknown key is refused with a 400 rather than
+ * accepted and silently dropped. Scope keys were among the refused until R176
+ * §2 — see `updateEvent` for the distinction the Owner drew between an
+ * explicit replacement and the silent re-resolution §4.4 forbids. When any of
+ * `global`/`branch_ids`/`category_ids`/`level_ids`/`group_ids` is present the
+ * set is taken as the COMPLETE new scope: a dimension left out is «الكل».
  */
 const patchSchema = z
   .object({
     version: z.number().int().min(0),
+    global: z.boolean().optional(),
+    branch_ids: z.array(z.uuid()).max(50).optional(),
+    category_ids: z.array(z.uuid()).max(50).optional(),
+    level_ids: z.array(z.uuid()).max(100).optional(),
+    group_ids: z.array(z.uuid()).max(200).optional(),
     title: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(2000).nullable().optional(),
     /** R110 — editable. Absent leaves the type alone; it is never cleared by
@@ -182,11 +189,28 @@ export function update(prisma: PrismaClient) {
     const id = pathId(req);
     const parsed = patchSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      throw new AppError('VALIDATION_FAILED', 'invalid event patch; scope is not editable');
+      throw new AppError('VALIDATION_FAILED', 'invalid event patch');
     }
     const { version, ...b } = parsed.data;
+    const scopeGiven =
+      b.global !== undefined ||
+      b.branch_ids !== undefined ||
+      b.category_ids !== undefined ||
+      b.level_ids !== undefined ||
+      b.group_ids !== undefined;
 
     const event = await updateEvent(prisma, actorOf(req), id, version, {
+      ...(scopeGiven
+        ? {
+            scope: {
+              global: b.global === true,
+              branchIds: b.branch_ids ?? [],
+              categoryIds: b.category_ids ?? [],
+              levelIds: b.level_ids ?? [],
+              groupIds: b.group_ids ?? [],
+            },
+          }
+        : {}),
       ...(b.title !== undefined ? { title: b.title } : {}),
       ...(b.description !== undefined ? { description: b.description } : {}),
       ...(b.scheduling_type_id !== undefined

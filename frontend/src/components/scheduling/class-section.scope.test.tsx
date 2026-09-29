@@ -203,25 +203,37 @@ describe('the submitted scope carries every dimension the reader chose, combined
     );
   });
 
-  it('the scope-required check on activity/holiday creation is skipped on edit — the picker is locked and hidden there', () => {
+  it('R176 §2 — the scope-required check applies on edit as on create, because the lists are seeded from the item', () => {
     expect(source).toMatch(
-      /!editing &&\s*\n\s*!global &&\s*\n\s*branchIds\.length === 0 &&\s*\n\s*categoryIds\.length === 0 &&\s*\n\s*levelIds\.length === 0 &&\s*\n\s*groupIds\.length === 0/,
+      /!global &&\s*\n\s*branchIds\.length === 0 &&\s*\n\s*categoryIds\.length === 0 &&\s*\n\s*levelIds\.length === 0 &&\s*\n\s*groupIds\.length === 0/,
     );
+    expect(source).not.toMatch(/!editing &&\s*\n\s*!global &&/);
+  });
+
+  it('R176 §2 — the four lists and the circles are seeded from the item, and the baseline mirrors them', () => {
+    for (const key of ['branchIds', 'categoryIds', 'levelIds', 'groupIds', 'circleIds']) {
+      expect(source).toContain(`item?.ids.scope.${key}`);
+    }
+  });
+
+  it('R176 §2 — on edit the scope is sent only when it changed', () => {
+    expect(source).toContain('editing && !scopeChanged');
+    expect(source).toMatch(/scope:\s*\n[\s\S]{0,400}editing && !scopeChanged\s*\n\s*\? undefined/);
+    expect(source).toMatch(/mode === 'multi_dimension'\s*\n\s*\? editing && !scopeChanged\s*\n\s*\? \{\}/);
   });
 });
 
-describe('locked (editing) shows the fixed-at-creation notice and nothing choosable', () => {
-  it('renders no picker and no hints once locked', () => {
+describe('R176 §2 — editing shows the same pickers as creation', () => {
+  it('renders the picker on edit; the fixed-at-creation sentence is gone', () => {
     const html = renderToStaticMarkup(
       <ActivitySection
         {...baseProps}
-        locked
         dimensions={['branch']}
         values={{ branch: dim(['b1']), category: dim(), level: dim(), group: dim() }}
       />,
     );
-    expect(html).toContain(t('admin.calendar.scopeFixed'));
-    expect(html).not.toContain(t('admin.calendar.scopeTargetLabel'));
-    expect(html).not.toContain(t('admin.calendar.scopeCombineHint'));
+    // A picker (the branch multi-select) is on screen, and the sentence is not.
+    expect(html).toContain('dropdown-trigger');
+    expect(html).not.toContain('النطاق يُحدَّد عند الإنشاء');
   });
 });

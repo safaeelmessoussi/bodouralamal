@@ -187,6 +187,98 @@ async function assertMayScope(
   }
 }
 
+/** The four join sets an event's scope materialises to (§4.4). */
+interface ResolvedEventScope {
+  branchIds: string[];
+  categoryIds: string[];
+  levelIds: string[];
+  groupIds: string[];
+}
+
+/**
+ * **Authorises and resolves a requested scope — the one answer for creating an
+ * event and for re-addressing one (R176 §2).** The requested set is authorised
+ * BEFORE the operational-date projection (filtering foreign branches could turn
+ * a refused request into Global); `global: true` is R139's «all MY permitted
+ * branches» for a scoped Admin — an expansion of an explicit choice, never the
+ * silent dropping of part of a requested set; every named Category, Level and
+ * group must be live and, for a scoped Admin, within reach.
+ */
+async function resolveEventScope(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  input: EventInput,
+  today: Date,
+): Promise<ResolvedEventScope> {
+  await assertMayScope(tx, actor, input);
+
+  const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+  if (isAdmin(actor) && reachable !== null &&
+      input.branchIds?.some((id) => !reachable.includes(id))) {
+    throw new AppError('NOT_FOUND', 'branch not found');
+  }
+  if (input.global && input.branchIds?.length) {
+    throw new AppError('VALIDATION_FAILED', 'choose explicit branches or all permitted branches');
+  }
+  let branchIds = await resolveBranches(tx, input, today);
+  if (input.global && reachable !== null) {
+    branchIds = branchIds.filter((b) => reachable.includes(b));
+  }
+  if ((input.global || input.branchIds?.length) && branchIds.length === 0) {
+    throw new AppError('NOT_FOUND', 'no operational branch in the requested scope');
+  }
+  if (input.branchIds?.length) {
+    const live = await tx.branch.count({
+      where: { id: { in: [...new Set(input.branchIds)] }, deletedAt: null },
+    });
+    if (live !== new Set(input.branchIds).size) throw new AppError('NOT_FOUND', 'branch not found');
+  }
+  const [categories, levels, groups] = await Promise.all([
+    tx.category.count({ where: { id: { in: input.categoryIds ?? [] }, deletedAt: null } }),
+    tx.level.count({ where: { id: { in: input.levelIds ?? [] }, deletedAt: null } }),
+    tx.administrativeGroup.findMany({
+      where: { id: { in: input.groupIds ?? [] }, deletedAt: null },
+      select: { id: true, branchId: true },
+    }),
+  ]);
+  if (categories !== new Set(input.categoryIds ?? []).size ||
+      levels !== new Set(input.levelIds ?? []).size ||
+      groups.length !== new Set(input.groupIds ?? []).size ||
+      (isAdmin(actor) && reachable !== null && groups.some((g) => !reachable.includes(g.branchId)))) {
+    throw new AppError('NOT_FOUND', 'event scope not found');
+  }
+  if (isAdmin(actor) && reachable !== null && branchIds.length === 0 && groups.length === 0) {
+    throw new AppError('FORBIDDEN', 'an explicit permitted branch scope is required');
+  }
+  return {
+    branchIds,
+    categoryIds: [...new Set(input.categoryIds ?? [])],
+    levelIds: [...new Set(input.levelIds ?? [])],
+    groupIds: [...new Set(input.groupIds ?? [])],
+  };
+}
+
+/** Writes the four join sets. Revision 43: events scope to **Administrative
+ *  Groups** (§7), never to Teaching Groups, which are subject-specific. */
+async function writeEventScope(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  resolved: ResolvedEventScope,
+): Promise<void> {
+  for (const branchId of resolved.branchIds) {
+    await tx.eventBranch.create({ data: { eventId, branchId } });
+  }
+  for (const categoryId of resolved.categoryIds) {
+    await tx.eventCategory.create({ data: { eventId, categoryId } });
+  }
+  for (const levelId of resolved.levelIds) {
+    await tx.eventLevel.create({ data: { eventId, levelId } });
+  }
+  for (const administrativeGroupId of resolved.groupIds) {
+    await tx.eventAdministrativeGroup.create({ data: { eventId, administrativeGroupId } });
+  }
+}
+
 export interface CreatedEvent {
   event: Event;
   attached: { branches: number; categories: number; levels: number; groups: number };
@@ -204,51 +296,7 @@ export async function createEvent(
   assertValidDates(input);
 
   return prisma.$transaction(async (tx) => {
-    await assertMayScope(tx, actor, input);
-
-    // Authorize the requested set BEFORE the operational-date projection.
-    // Filtering foreign branches could turn a refused request into Global.
-    const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
-    if (isAdmin(actor) && reachable !== null &&
-        input.branchIds?.some((id) => !reachable.includes(id))) {
-      throw new AppError('NOT_FOUND', 'branch not found');
-    }
-    if (input.global && input.branchIds?.length) {
-      throw new AppError('VALIDATION_FAILED', 'choose explicit branches or all permitted branches');
-    }
-    let branchIds = await resolveBranches(tx, input, today);
-    if (input.global && reachable !== null) {
-      // R139 explicitly defines global:true as all MY permitted branches for
-      // a scoped Admin. This is expansion of an explicit choice, not silently
-      // dropping part of a requested set.
-      branchIds = branchIds.filter((b) => reachable.includes(b));
-    }
-    if ((input.global || input.branchIds?.length) && branchIds.length === 0) {
-      throw new AppError('NOT_FOUND', 'no operational branch in the requested scope');
-    }
-    if (input.branchIds?.length) {
-      const live = await tx.branch.count({
-        where: { id: { in: [...new Set(input.branchIds)] }, deletedAt: null },
-      });
-      if (live !== new Set(input.branchIds).size) throw new AppError('NOT_FOUND', 'branch not found');
-    }
-    const [categories, levels, groups] = await Promise.all([
-      tx.category.count({ where: { id: { in: input.categoryIds ?? [] }, deletedAt: null } }),
-      tx.level.count({ where: { id: { in: input.levelIds ?? [] }, deletedAt: null } }),
-      tx.administrativeGroup.findMany({
-        where: { id: { in: input.groupIds ?? [] }, deletedAt: null },
-        select: { id: true, branchId: true },
-      }),
-    ]);
-    if (categories !== new Set(input.categoryIds ?? []).size ||
-        levels !== new Set(input.levelIds ?? []).size ||
-        groups.length !== new Set(input.groupIds ?? []).size ||
-        (isAdmin(actor) && reachable !== null && groups.some((g) => !reachable.includes(g.branchId)))) {
-      throw new AppError('NOT_FOUND', 'event scope not found');
-    }
-    if (isAdmin(actor) && reachable !== null && branchIds.length === 0 && groups.length === 0) {
-      throw new AppError('FORBIDDEN', 'an explicit permitted branch scope is required');
-    }
+    const { branchIds, categoryIds, levelIds, groupIds } = await resolveEventScope(tx, actor, input, today);
 
     // R110 — checked before the row is written, so a bad type is a coded
     // refusal rather than a foreign-key violation surfacing as a 500.
@@ -285,27 +333,7 @@ export async function createEvent(
     });
 
     // §4.4: written HERE, at creation. Never a wildcard resolved at read time.
-    const categoryIds = [...new Set(input.categoryIds ?? [])];
-    const levelIds = [...new Set(input.levelIds ?? [])];
-    const groupIds = [...new Set(input.groupIds ?? [])];
-
-    for (const branchId of branchIds) {
-      await tx.eventBranch.create({ data: { eventId: event.id, branchId } });
-    }
-    for (const categoryId of categoryIds) {
-      await tx.eventCategory.create({ data: { eventId: event.id, categoryId } });
-    }
-    for (const levelId of levelIds) {
-      await tx.eventLevel.create({ data: { eventId: event.id, levelId } });
-    }
-    for (const groupId of groupIds) {
-      // Revision 43: events scope to **Administrative Groups** (§7) — the
-      // organisational unit — never to Teaching Groups, which are
-      // subject-specific. `EventGroup` is retired with the `Group` it pointed at.
-      await tx.eventAdministrativeGroup.create({
-        data: { eventId: event.id, administrativeGroupId: groupId },
-      });
-    }
+    await writeEventScope(tx, event.id, { branchIds, categoryIds, levelIds, groupIds });
 
     // **R71.3 — creating an event is what makes a مؤطرة answerable for it.**
     // Structural, not a grant: assigning staff is otherwise Admin-and-above, and
@@ -428,20 +456,27 @@ export async function assertMayEdit(
   }
 }
 
-/** The event's own attributes. Scope is deliberately absent — see `updateEvent`. */
-export type EventPatch = Partial<Omit<EventInput, keyof EventScopes>>;
+/**
+ * The event's own attributes, and — since R176 §2 — optionally a whole new
+ * scope. `scope` is all-or-nothing: when present it REPLACES every dimension,
+ * so the caller states the complete answer rather than a delta.
+ */
+export type EventPatch = Partial<Omit<EventInput, keyof EventScopes>> & { scope?: EventScopes };
 
 /**
  * `PATCH /events/{id}` (TD-3.4) — edits the event's own attributes under TD-15
- * optimistic locking.
+ * optimistic locking, and, when `scope` is given, re-addresses it.
  *
- * **Scope is not editable here, by design.** §4.4 populates the four join
- * tables *"at creation time"* and provides the manual **backfill** action as the
- * one sanctioned way to attach a branch afterwards. Re-resolving scope on edit
- * would mean a global event silently gaining every branch that opened since it
- * was created — precisely the auto-fill §4.4 forbids (*"never silently
- * auto-filled and never silently ignored"*). Scope keys are therefore rejected
- * at the API boundary rather than quietly ignored.
+ * **Scope was not editable here until R176 §2, and the reason is worth keeping
+ * because it still bounds what this does.** §4.4 populates the four join
+ * tables *"at creation time"*, and re-RESOLVING scope on edit would let a
+ * global event silently gain every branch opened since — the auto-fill §4.4
+ * forbids. The Owner's decision (2026-09-28) distinguishes that from an
+ * explicit replacement: an administrator submitting the complete scope is not
+ * a silent re-resolution. So `scope` is authorised and resolved by the SAME
+ * function a creation uses, then written wholesale in place of the old joins;
+ * nothing is derived from the old rows, and an edit that carries no `scope`
+ * leaves them exactly as they were.
  */
 export async function updateEvent(
   prisma: PrismaClient,
@@ -449,6 +484,7 @@ export async function updateEvent(
   id: string,
   expectedVersion: number,
   patch: EventPatch,
+  today: Date = new Date(),
 ): Promise<Event> {
   if (!isAdmin(actor) && !isTeacher(actor)) {
     throw new AppError('FORBIDDEN', 'editing events requires staff');
@@ -482,8 +518,15 @@ export async function updateEvent(
       recurrenceType: (patch.recurrenceType ?? existing.recurrenceType) as EventInput['recurrenceType'],
       recurrenceEndDate:
         patch.recurrenceEndDate === undefined ? existing.recurrenceEndDate : patch.recurrenceEndDate,
+      // R176 §2 — the scope the event WILL have, so the عطلة shape check below
+      // sees the new one. Absent, the joins stand untouched and are not
+      // re-examined: an edit that names no scope changes nothing about it.
+      ...(patch.scope ?? {}),
     };
     assertValidDates(merged);
+    // R176 §2 — authorised and resolved exactly as a creation is, before
+    // anything is written.
+    const replacement = patch.scope ? await resolveEventScope(tx, actor, merged, today) : null;
     // R110 — re-checked on the MERGED value, so an edit cannot move an activity
     // onto a type that routes somewhere else.
     if (merged.schedulingTypeId) {
@@ -522,6 +565,16 @@ export async function updateEvent(
       },
     });
 
+    if (replacement) {
+      // Wholesale, per dimension: the joins are the materialised reach of the
+      // event and carry no history of their own (TD-5's own reasoning).
+      await tx.eventBranch.deleteMany({ where: { eventId: id } });
+      await tx.eventCategory.deleteMany({ where: { eventId: id } });
+      await tx.eventLevel.deleteMany({ where: { eventId: id } });
+      await tx.eventAdministrativeGroup.deleteMany({ where: { eventId: id } });
+      await writeEventScope(tx, id, replacement);
+    }
+
     await reconcileEventNotificationVisibility(
       tx,
       id,
@@ -538,6 +591,16 @@ export async function updateEvent(
       targetId: id,
       detail: {
         fields_changed: Object.keys(patch),
+        ...(replacement
+          ? {
+              scope_replaced: {
+                branches: replacement.branchIds.length,
+                categories: replacement.categoryIds.length,
+                levels: replacement.levelIds.length,
+                groups: replacement.groupIds.length,
+              },
+            }
+          : {}),
         // Recorded explicitly: a visibility change moves the event between
         // audience tiers, which is the edit most worth being able to trace.
         ...(patch.visibility && patch.visibility !== existing.visibility
@@ -997,6 +1060,9 @@ export async function listEvents(
   Page<
     Event & {
       branchScopes: { branchId: string }[];
+      categoryScopes: { categoryId: string }[];
+      levelScopes: { levelId: string }[];
+      administrativeGroupScopes: { administrativeGroupId: string }[];
       staff: { userId: string; position: 'responsible' | 'assistant'; name: string }[];
     }
   >
@@ -1058,6 +1124,11 @@ export async function listEvents(
       orderBy: [{ startDate: 'asc' }, { startTime: 'asc' }, { id: 'asc' }],
       include: {
         branchScopes: { select: { branchId: true } },
+        // R176 §2 — the other three dimensions, so «تعديل العنصر» can seed
+        // its pickers with what the activity is addressed to today.
+        categoryScopes: { select: { categoryId: true } },
+        levelScopes: { select: { levelId: true } },
+        administrativeGroupScopes: { select: { administrativeGroupId: true } },
         // R71 — live rows only. A tombstoned assignment is somebody who USED to
         // answer for this, and prefilling the form with them would re-assign
         // them on the next save.

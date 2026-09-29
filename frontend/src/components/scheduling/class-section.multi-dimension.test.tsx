@@ -149,21 +149,20 @@ describe('multi_dimension renders five independent pickers, never the legacy bra
   });
 });
 
-describe('locked (editing) states the fixed-at-creation notice, never five empty-looking pickers', () => {
-  it('renders the same scopeFixed sentence Event\'s own locked scope uses, and no picker', () => {
+describe('R176 §2 — editing a multi_dimension class shows the five pickers, seeded from the row', () => {
+  it('renders the circle picker on edit; the fixed-at-creation sentence is gone', () => {
     const html = renderToStaticMarkup(
       <ClassSection {...baseProps} locked audience={emptyAudience} />,
     );
-    expect(html).toContain(t('admin.calendar.scopeFixed'));
-    expect(html).not.toContain(t('admin.calendar.scopeCircle'));
-    expect(html).not.toContain('تتقاطع فيما بينها');
+    expect(html).not.toContain('النطاق يُحدَّد عند الإنشاء');
+    expect(html).toContain(t('admin.calendar.scopeCircle'));
   });
 
   it('every other mode keeps its own existing locked behaviour (the ordinary pair, disabled)', () => {
     const html = renderToStaticMarkup(
       <ClassSection {...baseProps} mode="entire_level" locked audience={emptyAudience} />,
     );
-    expect(html).not.toContain(t('admin.calendar.scopeFixed'));
+    expect(html).not.toContain(t('admin.calendar.scopeCircle'));
   });
 });
 
@@ -186,7 +185,7 @@ describe('scheduling.tsx wires multi_dimension end to end', () => {
   });
 
   it('builds the payload and the create-only rule from the shared module, never a second copy', () => {
-    expect(source).toContain('? { dimensions: audienceDimensions(audienceSelection) }');
+    expect(source).toContain(': { dimensions: audienceDimensions(audienceSelection) }');
     // R169 §7 — the create-only «needs a Level» pre-check is GONE: «الكل» on
     // Level, group and circle is a real answer (every Level teaching the
     // Subject), so the form refuses nothing here and the server's one refusal
@@ -201,10 +200,8 @@ describe('scheduling.tsx wires multi_dimension end to end', () => {
     expect(FILTERS_RAW).toContain("t('admin.calendar.scopeEveryLevelHint')");
   });
 
-  it('runs the filters only where they are on screen — a new class, for an administrator', () => {
-    expect(source).toContain(
-      "const filtering = type === 'class' && mode === 'multi_dimension' && !editing;",
-    );
+  it('runs the filters only where they are on screen — a multi_dimension class, new or edited (R176 §2)', () => {
+    expect(source).toContain("const filtering = type === 'class' && mode === 'multi_dimension';");
     expect(source).toContain('active: filtering,');
   });
 

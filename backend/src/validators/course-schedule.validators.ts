@@ -440,6 +440,9 @@ export const updateCourseScheduleSchema = z
     path: ["from_date"],
     message: "from_date is only meaningful with scope this_and_future",
   })
+  // R176 §2 — `dimensions` left this list: a `multi_dimension` class is
+  // re-addressed IN PLACE (the service refuses it for any other mode). The
+  // other five stay re-creations, as the 2026-09-15 docstring above says.
   .refine(
     (v) =>
       v.scope === "this_and_future" ||
@@ -447,8 +450,7 @@ export const updateCourseScheduleSchema = z
         v.branch_id === undefined &&
         v.academic_year_id === undefined &&
         v.teaching_mode === undefined &&
-        v.target_id === undefined &&
-        v.dimensions === undefined),
+        v.target_id === undefined),
     {
       path: ["scope"],
       message:
@@ -492,11 +494,23 @@ export const updateCourseScheduleSchema = z
           message: "dimensions is used only by multi_dimension",
         });
       }
-    } else if (v.target_id !== undefined || v.dimensions !== undefined) {
+    } else if (v.target_id !== undefined) {
       ctx.addIssue({
         code: "custom",
         path: ["target_id"],
         message: "teaching_mode and target_id are named together or not at all",
+      });
+    }
+    // R176 §2 — `dimensions` with no `teaching_mode` is the IN-PLACE
+    // re-addressing of a class already in `multi_dimension` (the service
+    // refuses it for any other mode). On a split the successor reads
+    // `dimensions` only beside an explicit mode (`splitCourseSchedule`), so a
+    // bare one there would be silently ignored — refused instead.
+    if (v.dimensions !== undefined && v.teaching_mode === undefined && v.scope === "this_and_future") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["dimensions"],
+        message: "on a split, dimensions is named with teaching_mode multi_dimension",
       });
     }
   })

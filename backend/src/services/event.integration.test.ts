@@ -726,9 +726,9 @@ describe("TD-15 / §4.4 — editing an event", () => {
     expect(ok.recurrenceType).toBe("none");
   });
 
-  it("§4.4: scope is untouched by an edit", async () => {
-    // The joins are materialised at creation and changed only by backfill; an
-    // edit must not re-resolve them.
+  it("§4.4: an edit that names no scope leaves it untouched", async () => {
+    // The joins are materialised at creation; an edit must never RE-RESOLVE
+    // them (R176 §2 lets an administrator REPLACE them, explicitly — below).
     const branchId = await makeBranch("مراكش");
     const { event } = await createEvent(
       prisma,
@@ -744,6 +744,40 @@ describe("TD-15 / §4.4 — editing an event", () => {
       where: { eventId: event.id },
     });
     expect(rows.map((r) => r.branchId)).toEqual([branchId]);
+  });
+
+  it("R176 §2: an explicit scope replaces every dimension wholesale — a dimension left out is «الكل»", async () => {
+    const first = await makeBranch("مراكش");
+    const second = await makeBranch("الرباط");
+    const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
+    const level = await prisma.level.create({ data: { name: `${TAG} مستوى`, categoryId: category.id } });
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [first], levelIds: [level.id] }),
+      TODAY,
+    );
+
+    const updated = await updateEvent(prisma, superAdmin(), event.id, event.version, {
+      scope: { branchIds: [second], categoryIds: [category.id], levelIds: [], groupIds: [] },
+    });
+    expect(updated.version).toBe(event.version + 1);
+
+    const [branches, categories, levels] = await Promise.all([
+      prisma.eventBranch.findMany({ where: { eventId: event.id }, select: { branchId: true } }),
+      prisma.eventCategory.findMany({ where: { eventId: event.id }, select: { categoryId: true } }),
+      prisma.eventLevel.findMany({ where: { eventId: event.id }, select: { levelId: true } }),
+    ]);
+    expect(branches.map((r) => r.branchId)).toEqual([second]);
+    expect(categories.map((r) => r.categoryId)).toEqual([category.id]);
+    // The Level was NOT carried over: the submitted scope is the whole answer.
+    expect(levels).toEqual([]);
+
+    // The joins reference the Category (RESTRICT); `clear()` removes them
+    // with the event, then these can go.
+    await prisma.eventCategory.deleteMany({ where: { eventId: event.id } });
+    await prisma.level.delete({ where: { id: level.id } });
+    await prisma.category.delete({ where: { id: category.id } });
   });
 
   it("a branch-scoped Admin cannot edit an event reaching a branch they do not manage", async () => {

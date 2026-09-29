@@ -51,6 +51,18 @@ describe('the public calendar read sends every filter it is given', () => {
     expect(url).toContain('level_id=l1');
   });
 
+  it('R176 §4 — the Surah reaches the URL as surah_id', async () => {
+    const { fetchOccurrences } = await import('./calendar.js');
+    await fetchOccurrences({ ...RANGE, surahId: '112' });
+    expect(urlOf()).toContain('surah_id=112');
+  });
+
+  it('R176 §4 — a cleared Surah is omitted, not sent empty', async () => {
+    const { fetchOccurrences } = await import('./calendar.js');
+    await fetchOccurrences({ ...RANGE, surahId: null });
+    expect(urlOf()).not.toContain('surah_id');
+  });
+
   it('OMITS a cleared filter rather than sending it empty', async () => {
     // Clearing must widen the result set, not narrow it to rows whose subject
     // is the empty string — TD-10's rule that an unanswered filter narrows

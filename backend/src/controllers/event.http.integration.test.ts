@@ -199,10 +199,15 @@ describe("POST /events — R110's type, over real HTTP", () => {
     if (!eventId) throw new Error('created Event has no id');
     expect(await prisma.eventBranch.findMany({ where: { eventId }, select: { branchId: true } }))
       .toEqual([{ branchId: allowed }]);
+    // R176 §2 — a scope on PATCH is authorised exactly as on POST: a branch
+    // outside this Admin's reach is NOT_FOUND (§20 rule 17), and the whole
+    // edit rolls back with it — the title must not persist either.
     const rejectedEdit = await call('PATCH', `/events/${explicit.body.id}`, token,
       { version: 0, branch_ids: [foreign], title: 'must not persist' });
-    expect(rejectedEdit.status).toBe(400);
+    expect(rejectedEdit.status).toBe(404);
     expect((await prisma.event.findUniqueOrThrow({ where: { id: eventId } })).title).toBe(payload().title);
+    expect(await prisma.eventBranch.findMany({ where: { eventId }, select: { branchId: true } }))
+      .toEqual([{ branchId: allowed }]);
     const unscoped = await call('POST', '/events', token, payload());
     expect(unscoped.status).toBe(403);
   });
@@ -563,9 +568,10 @@ describe("PATCH /events/{id}", () => {
     expect(second.body.error?.code).toBe("VERSION_CONFLICT");
   });
 
-  it("REJECTS scope keys rather than silently dropping them", async () => {
-    // §4.4 materialises scope at creation; a request that believes it is
-    // re-scoping must be told it is not, not answered 200.
+  it("R176 §2 — scope keys RE-ADDRESS the event, wholesale, on the wire", async () => {
+    // Until R176 §2 this was answered 400: §4.4 materialises scope at creation
+    // and re-RESOLVING it on edit was forbidden. An explicit replacement is
+    // not that, and the Owner chose to allow it (2026-09-28).
     const branchId = await makeBranch("مراكش");
     const other = await makeBranch("أكادير");
     const event = await makeEvent(branchId);
@@ -574,14 +580,22 @@ describe("PATCH /events/{id}", () => {
       version: event.version,
       branch_ids: [other],
     });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.version).toBe(event.version + 1);
+
+    const rows = await prisma.eventBranch.findMany({ where: { eventId: event.id }, select: { branchId: true } });
+    expect(rows.map((r) => r.branchId)).toEqual([other]);
+  });
+
+  it("an unknown key is still refused rather than silently dropped", async () => {
+    const branchId = await makeBranch("مراكش");
+    const event = await makeEvent(branchId);
+    const res = await call("PATCH", `/events/${event.id}`, superToken, {
+      version: event.version,
+      teaching_group_ids: ["00000000-0000-0000-0000-000000000000"],
+    });
     expect(res.status).toBe(400);
     expect(res.body.error?.code).toBe("VALIDATION_FAILED");
-
-    expect(
-      await prisma.eventBranch.count({
-        where: { eventId: event.id, branchId: other },
-      }),
-    ).toBe(0);
   });
 
   it("refuses a malformed date or clock value at the boundary", async () => {

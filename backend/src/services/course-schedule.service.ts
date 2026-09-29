@@ -1527,9 +1527,72 @@ export async function updateCourseSchedule(
       },
     });
 
+    /**
+     * **R176 §2 — who the class is for, replaced whole when this edit names
+     * it.** «تعديل العنصر» answered «النطاق يُحدَّد عند الإنشاء ولا يُعدَّل»
+     * until the Owner decided (2026-09-28) that an administrator's explicit
+     * replacement is not the silent re-resolution §4.4 forbids. Only a
+     * `multi_dimension` class: its five joins ARE its audience, read at every
+     * occurrence, so every future occurrence follows the class at once, and an
+     * occurrence with its own R92 audience keeps it. A legacy-mode class's
+     * single target stays a re-creation (R50 `this_and_future`), exactly as
+     * the 2026-09-15 rule for Subject/branch/year still says. Resolved and
+     * checked against the curriculum precisely as a creation is.
+     */
+    if (data.dimensions !== undefined) {
+      if (existing.teachingMode !== "multi_dimension") {
+        throw new AppError(
+          "VALIDATION_FAILED",
+          "only a multi_dimension class is re-addressed in place; a single target is changed with scope this_and_future",
+          { reason: "DIMENSIONS_REQUIRE_MULTI_DIMENSION" },
+        );
+      }
+      const target = await resolveTarget(
+        tx,
+        "multi_dimension",
+        undefined,
+        existing.branchId,
+        data.dimensions,
+        existing.subjectId,
+      );
+      for (const levelId of target.effectiveLevelIds) {
+        await assertSubjectTaughtAtLevel(tx, levelId, existing.subjectId);
+      }
+      const rows = target.scopeRows!;
+      await Promise.all([
+        tx.courseScheduleBranch.deleteMany({ where: { scheduleId: id } }),
+        tx.courseScheduleCategory.deleteMany({ where: { scheduleId: id } }),
+        tx.courseScheduleLevel.deleteMany({ where: { scheduleId: id } }),
+        tx.courseScheduleAdministrativeGroup.deleteMany({ where: { scheduleId: id } }),
+        tx.courseScheduleTeachingGroup.deleteMany({ where: { scheduleId: id } }),
+      ]);
+      await Promise.all([
+        rows.branchIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleBranch.createMany({ data: rows.branchIds.map((branchId) => ({ scheduleId: id, branchId })) }),
+        rows.categoryIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleCategory.createMany({ data: rows.categoryIds.map((categoryId) => ({ scheduleId: id, categoryId })) }),
+        rows.levelIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleLevel.createMany({ data: rows.levelIds.map((levelId) => ({ scheduleId: id, levelId })) }),
+        rows.administrativeGroupIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleAdministrativeGroup.createMany({
+              data: rows.administrativeGroupIds.map((administrativeGroupId) => ({ scheduleId: id, administrativeGroupId })),
+            }),
+        rows.teachingGroupIds.length === 0
+          ? Promise.resolve()
+          : tx.courseScheduleTeachingGroup.createMany({
+              data: rows.teachingGroupIds.map((teachingGroupId) => ({ scheduleId: id, teachingGroupId })),
+            }),
+      ]);
+    }
+
     // R165 §2 — the class's Surahs, replaced whole when this edit names them.
-    // The Subject and the Levels are frozen on this scope (§4.4), so they are
-    // read from the row rather than from the request.
+    // The Subject is frozen on this scope (§4.4); the Levels are read from the
+    // row — after the block above, so a re-addressed class validates its
+    // Surahs against the Levels it now reaches.
     if (data.surahIds !== undefined) {
       const surahIds = await resolveSurahs(tx, {
         subjectId: existing.subjectId,

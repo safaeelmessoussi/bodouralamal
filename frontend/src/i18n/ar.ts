@@ -2016,7 +2016,8 @@ export const ar = {
       eventAssistants: 'المؤطِّرات المساعدات',
       eventAssistantsHint: 'المسؤولة تدير النشاط؛ المساعدات يطّلعن عليه دون تعديله.',
       staffAdminOnly: 'إسناد المسؤولية عن النشاط من صلاحيات الإدارة.',
-      scopeFixed: 'النطاق يُحدَّد عند الإنشاء ولا يُعدَّل.',
+      // R176 §2 — «النطاق يُحدَّد عند الإنشاء ولا يُعدَّل.» was withdrawn: the scope
+      // pickers render on edit, seeded from the item.
       scopeCategory: 'فئات',
       scopeGroup: 'مجموعات مستوى',
       scopeLevel: 'مستويات',

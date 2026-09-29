@@ -201,6 +201,20 @@ export interface SchedulingIds {
    *  wherever the Subject is not taught by Surah. Carried so Edit opens on what
    *  the row has rather than on nothing (the `visibility` lesson, again). */
   surahIds: number[];
+  /**
+   * **R176 §2 — the WHOLE scope, so «تعديل العنصر» opens on what the item is
+   * addressed to** (the `visibility` lesson, once more). An activity's four
+   * event dimensions (§4.4 — no circle); a `multi_dimension` class's five;
+   * every list empty for any other kind or mode, which have a single target
+   * stated by the fields above.
+   */
+  scope: {
+    branchIds: string[];
+    categoryIds: string[];
+    levelIds: string[];
+    groupIds: string[];
+    circleIds: string[];
+  };
   /** R91 — each assignment with its inclusive effective period; `null` at
    *  either end is open-ended there. */
   staff: {
@@ -229,6 +243,10 @@ interface EventDefinitionWire {
   recurrence: string;
   recurrence_end_date: string | null;
   branch_ids: string[];
+  /** R176 §2 — the other three dimensions, so an edit can start from them. */
+  category_ids?: string[];
+  level_ids?: string[];
+  group_ids?: string[];
   /** R71 — who answers for it. Empty for events created before R71. */
   /** R91 — each assignment with its inclusive effective period; `null` at
    *  either end is open-ended there. */
@@ -252,6 +270,7 @@ const EMPTY_IDS: SchedulingIds = {
   groupId: null,
   teachingMode: null,
   surahIds: [],
+  scope: { branchIds: [], categoryIds: [], levelIds: [], groupIds: [], circleIds: [] },
   subjectId: null,
   academicYearId: null,
   staff: [],
@@ -325,6 +344,14 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
       groupId: row.teaching_mode === 'administrative_group' ? row.target_id : null,
       teachingMode: row.teaching_mode,
       surahIds: row.surah_ids ?? [],
+      // R176 §2 — `dimensions` is `null` for every mode but `multi_dimension`.
+      scope: {
+        branchIds: row.dimensions?.branch_ids ?? [],
+        categoryIds: row.dimensions?.category_ids ?? [],
+        levelIds: row.dimensions?.level_ids ?? [],
+        groupIds: row.dimensions?.administrative_group_ids ?? [],
+        circleIds: row.dimensions?.teaching_group_ids ?? [],
+      },
       subjectId: row.subject_id,
       academicYearId: row.academic_year_id,
       staff: row.staff.map((x) => ({
@@ -393,6 +420,14 @@ export function fromEvent(
     ids: {
       ...EMPTY_IDS,
       schedulingTypeId: row.scheduling_type_id ?? null,
+      // R176 §2 — an activity's four dimensions; it has no circle (§7).
+      scope: {
+        branchIds: row.branch_ids,
+        categoryIds: row.category_ids ?? [],
+        levelIds: row.level_ids ?? [],
+        groupIds: row.group_ids ?? [],
+        circleIds: [],
+      },
       staff: row.staff.map((x) => ({
         user_id: x.user_id,
         position: x.position,
@@ -444,6 +479,9 @@ function fromExam(row: Exam): SchedulingItem {
       schedulingTypeId: row.scheduling_type_id ?? null,
       branchId: row.branch_id,
       roomId: row.room_id,
+      // R176 §2 — a sitting names its Level and at most one group through the
+      // single fields; the multi-list scope is a class's and an activity's.
+      scope: EMPTY_IDS.scope,
       // R97 — an Exam sitting is physical by §4.6 and carries no delivery
       // model; `null` says so rather than defaulting it to in-person.
       deliveryMode: null,
@@ -785,6 +823,20 @@ export async function saveSchedulingItem(
           ...(input.staff ? { staff: input.staff } : {}),
           // R165 §2 — the class's Surahs, replaced whole when the form asked.
           ...(input.surahIds !== undefined ? { surah_ids: input.surahIds } : {}),
+          // R176 §2 — a `multi_dimension` class's audience, replaced whole,
+          // sent ONLY when the form says it changed (it passes `undefined`
+          // otherwise): the server takes it as the complete new answer.
+          ...(input.dimensions !== undefined
+            ? {
+                dimensions: {
+                  branch_ids: input.dimensions.branchIds ?? [],
+                  category_ids: input.dimensions.categoryIds ?? [],
+                  level_ids: input.dimensions.levelIds ?? [],
+                  administrative_group_ids: input.dimensions.administrativeGroupIds ?? [],
+                  teaching_group_ids: input.dimensions.teachingGroupIds ?? [],
+                },
+              }
+            : {}),
           // R138 §4.4 item 5 — the caller has already asked, when it mattered.
           overwrite_manually_edited: input.overwriteManuallyEdited ?? false,
         },
@@ -1040,15 +1092,31 @@ export async function saveSchedulingItem(
     end_time: input.endTime,
     recurrence_type: input.recurrence as EventInput['recurrence_type'],
     recurrence_end_date: input.repeatUntil,
-    ...(existing
+    /**
+     * **R176 §2 — on an edit, `scope` is sent ONLY when the form says it
+     * changed** (the page passes `undefined` otherwise). The server takes any
+     * scope key as the COMPLETE new scope, and a re-sent `global: true` would
+     * re-expand to every operational branch — the silent re-resolution §4.4
+     * forbids. So on edit every dimension is stated, empty lists included: a
+     * dimension the reader cleared must arrive as cleared, not as absent.
+     */
+    ...(input.scope === undefined
       ? {}
-      : {
-          ...(input.scope?.global ? { global: true } : {}),
-          ...(input.scope?.branchIds ? { branch_ids: input.scope.branchIds } : {}),
-          ...(input.scope?.categoryIds ? { category_ids: input.scope.categoryIds } : {}),
-          ...(input.scope?.levelIds ? { level_ids: input.scope.levelIds } : {}),
-          ...(input.scope?.groupIds ? { group_ids: input.scope.groupIds } : {}),
-        }),
+      : existing
+        ? {
+            global: input.scope.global === true,
+            branch_ids: input.scope.branchIds ?? [],
+            category_ids: input.scope.categoryIds ?? [],
+            level_ids: input.scope.levelIds ?? [],
+            group_ids: input.scope.groupIds ?? [],
+          }
+        : {
+            ...(input.scope.global ? { global: true } : {}),
+            ...(input.scope.branchIds ? { branch_ids: input.scope.branchIds } : {}),
+            ...(input.scope.categoryIds ? { category_ids: input.scope.categoryIds } : {}),
+            ...(input.scope.levelIds ? { level_ids: input.scope.levelIds } : {}),
+            ...(input.scope.groupIds ? { group_ids: input.scope.groupIds } : {}),
+          }),
   };
   // **Two calls, and deliberately so.** R71 made assigning staff its own
   // capability with its own audit action — *who answers for this celebration*

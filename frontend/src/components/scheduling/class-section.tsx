@@ -138,19 +138,12 @@ export function ClassSection({
           lives in `dimensions`, not in `scope.value.branchId`/`levelId`.
           Every other mode is unaffected: the pair below is exactly what it
           always was. */}
-      {mode === 'multi_dimension' && locked ? (
-        /**
-         * **Never re-editable, on the SAME §4.4 rule `ActivitySection`'s own
-         * locked scope already states** (Owner-reported, 2026-09-16): the
-         * five arrays are never seeded from the row being edited (matching
-         * `ActivitySection`'s own "never on edit" — R139's rule, restated
-         * here rather than re-derived), so five empty, disabled pickers
-         * would look exactly like an audience nobody chose. Stated
-         * plainly instead — the identical sentence Event's own locked
-         * scope already uses.
-         */
-        <p className="muted">{t('admin.calendar.scopeFixed')}</p>
-      ) : mode === 'multi_dimension' && audience ? (
+      {/* **R176 §2 — editable on edit, as on create** (Owner, 2026-09-28):
+          until then a locked `multi_dimension` class showed «النطاق يُحدَّد
+          عند الإنشاء ولا يُعدَّل» here. The page now seeds the five pickers
+          from the row's own `dimensions` and sends them back only when the
+          reader changed them; the server replaces the joins wholesale. */}
+      {mode === 'multi_dimension' && audience ? (
         <AudienceFilters
           scope={scope}
           selection={audience.selection}
@@ -313,7 +306,6 @@ export function ActivitySection({
   allowGlobal,
   global,
   onGlobal,
-  locked,
   staff,
   leadStaff,
   responsibleLocked = false,
@@ -338,10 +330,6 @@ export function ActivitySection({
   allowGlobal: boolean;
   global: boolean;
   onGlobal: (v: boolean) => void;
-  /** Scope is set at creation and refused on edit — §4.4 populates the four-way
-   *  joins explicitly, and re-pointing them later would silently change who has
-   *  been seeing the event. */
-  locked: boolean;
   staff: DirectoryEntry[];
   responsibleId: string;
   onResponsible: (v: string) => void;
@@ -370,10 +358,8 @@ export function ActivitySection({
 }): ReactNode {
   return (
     <>
-      {locked ? (
-        <p className="muted">{t('admin.calendar.scopeFixed')}</p>
-      ) : (
-        <>
+      {/* R176 §2 — rendered on edit as well as creation, seeded from the item. */}
+      <>
           {/* **"Platform-wide" and "all my branches" are one control**
               (R139), because the server already tells them apart correctly
               — a branch-scoped actor's own `global` choice never reaches
@@ -414,8 +400,7 @@ export function ActivitySection({
               ) : null}
             </>
           )}
-        </>
-      )}
+      </>
 
       {/* R71 — who answers for it. Rendered on edit as well as creation,
           because staffing is a decision an Admin revisits: the responsible
