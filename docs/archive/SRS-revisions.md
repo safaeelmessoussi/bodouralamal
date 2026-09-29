@@ -1,9 +1,25 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–174 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–182 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 182 (Document Owner's second review of the journey, 2026-09-30 — seven points):** **BUILT.**
+
+**§1 — THE SHARED SUBJECTS, ONCE.** A Category's whole-Category Subjects (R172 §1) are said once, as a small note under the Category's name on its stage («مواد مشتركة في كل المستويات: …»), not on every Level; a Level's card lists its OWN Subjects only. `GET /programs` carries them as the store does: `subjects[]` on the Category and, per Level, its own rows.
+
+**§2 — THE WAYS IN AS A NOTE.** «مداخل أخرى إلى هذه الفئة» is a small note beside the first step — the direct entry in two lines (who, from what age), the preparatory programme in two (name and ages; what it is and what it leads to, with «التفاصيل» for the rest) — and one arrow to the step; never a panel taller than the cards.
+
+**§3 — «حفظ وتفسير: 10 أحزاب», THEN THE SURAHS.** The memorisation line is named by the Level's by-Surah Subjects (§4.4c `works_by_surah`, never a name): their names without the word «القرآن», joined by «و», then the amount in Hizb (R181 §6); a Level with no by-Surah Subject keeps «مقرر الحفظ». Under it the Level's Surahs themselves — whole on a laptop; on a phone the first two lines and «…», which opens the rest.
+
+**§4 — THE SUMMIT IS THE ATTIRE.** The image is cropped to the outfit so it is plainly visible; «متى يحين دورُك؟» stays under it (the outfit's own banner is not legible at that size); «قمة الرحلة» is gone.
+
+**§5 — «للنساء فقط».** An adult Category — the one whose beneficiaries hold their own login (R170 §6 `holds_own_login`, a marker, never a name; carried on `/programs`) — says «للنساء فقط» / «للنساء والرجال»; a younger one «للفتيات فقط» / «للبنات والبنين». The sex is still the steps' own restriction (R181 §7).
+
+**§6 — ARROWS, NOT PRINTS.** The shoe prints are withdrawn. From each step to the next, and from the ways in to the first step, one rising arrow with chevrons along it, drawn on as its stretch of road comes into view (still under `prefers-reduced-motion`, and without JavaScript); `check-journey-css.sh` holds the stylesheet to it and refuses any return of the prints.
+
+**§7 — THE PANEL OPENS ON المرأة.** Most visitors are women: the road opens scrolled to the adult Category (§5's marker) when there is one; the Categories before it are a swipe away, the nav chips and arrows unchanged.
 
 **Revision 181 (Document Owner's review of the journey, 2026-09-30 — eleven points):** **BUILT.**
 

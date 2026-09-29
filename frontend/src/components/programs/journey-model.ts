@@ -13,7 +13,7 @@ import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/p
  *
  * - **a direct entry** into a Category other than the first — a learner who
  *   did not walk the previous Category joins at its FIRST step, and never at
- *   a later one; drawn as prints arriving from outside the road;
+ *   a later one; said in a note beside that step, with an arrow to it;
  * - **a preparatory programme** (§6; `journey_role = preparatory`, a column,
  *   never a name) — such as a literacy programme — which leads INTO the
  *   Category's first step and is not required of a learner who enters there.
@@ -35,6 +35,10 @@ export interface JourneyCategory {
   /** R180 §4 — derived by the server from the first and last Level. */
   minAge: number | null;
   maxAge: number | null;
+  /** R182 §1 — the Subjects every step shares, said once under the name. */
+  sharedSubjects: PublicProgramCategory['subjects'];
+  /** R182 §5 — an adult Category (its beneficiaries hold the login). */
+  adult: boolean;
   /** In the Category's own order (§2.2), ordinary steps only. */
   steps: JourneyStep[];
   /** §6 — the programmes that lead into the first step. */
@@ -64,7 +68,9 @@ export interface Journey {
  * is not on the road at all (nothing to walk) and is listed only in the text
  * view's count of Categories.
  */
-export function journeyOrder(categories: readonly PublicProgramCategory[]): PublicProgramCategory[] {
+export function journeyOrder(
+  categories: readonly PublicProgramCategory[],
+): PublicProgramCategory[] {
   const walkable = categories.filter((category) => category.levels.length > 0);
   const everyAged = walkable.length > 0 && walkable.every((category) => category.min_age !== null);
   if (!everyAged) return walkable;
@@ -85,6 +91,8 @@ export function buildJourney(categories: readonly PublicProgramCategory[]): Jour
       description: source.description,
       minAge: source.min_age,
       maxAge: source.max_age,
+      sharedSubjects: source.subjects,
+      adult: source.holds_own_login === true,
       steps: [],
       preparatory: source.levels.filter((level) => level.journey_role === 'preparatory'),
       position: index + 1,
@@ -108,36 +116,67 @@ export function buildJourney(categories: readonly PublicProgramCategory[]): Jour
 
 /** R181 §7 — see `JourneyCategory.audience`. Empty → `any`. */
 export function categoryAudience(levels: readonly PublicProgramLevel[]): 'any' | 'girls' | 'boys' {
-  if (levels.length > 0 && levels.every((level) => level.gender_restriction === 'girls_only')) return 'girls';
-  if (levels.length > 0 && levels.every((level) => level.gender_restriction === 'boys_only')) return 'boys';
+  if (levels.length > 0 && levels.every((level) => level.gender_restriction === 'girls_only'))
+    return 'girls';
+  if (levels.length > 0 && levels.every((level) => level.gender_restriction === 'boys_only'))
+    return 'boys';
   return 'any';
 }
 
 /**
- * R181 §6 — «مقرر الحفظ» as the Owner counts it: in Hizb where the Level
- * states a count («5 أحزاب», «10 أحزاب», with Arabic's own plural forms), else
- * as how many Surahs the list holds, else nothing.
+ * R182 §5 — the audience in words: an adult Category (its beneficiaries hold
+ * the login) says «للنساء فقط», a younger one «للفتيات فقط»; the sex is the
+ * steps' own restriction (R181 §7), the adulthood the Category's marker.
  */
-export function memorisationWords(level: PublicProgramLevel, t: (key: string) => string): string | null {
+export function audienceKey(category: Pick<JourneyCategory, 'audience' | 'adult'>): string {
+  return `${category.adult ? 'adult' : 'young'}.${category.audience}`;
+}
+
+/**
+ * R182 §3 — the by-Surah Subjects of a Level, as one word each: «حفظ القرآن»
+ * and «تفسير القرآن» read «حفظ وتفسير» — the word «القرآن» dropped, joined
+ * with «و». Nothing by Surah → the generic «مقرر الحفظ».
+ */
+export function surahSubjectsLabel(level: PublicProgramLevel, t: (key: string) => string): string {
+  const words = level.subjects
+    .filter((subject) => subject.works_by_surah)
+    .map((subject) => subject.name.replace(/\s*القرآن\s*/g, ' ').trim())
+    .filter((word) => word !== '');
+  return words.length > 0 ? words.join(' و') : t('programs.journey.memorisationFallback');
+}
+
+/**
+ * R181 §6 — how much, as the Owner counts it: in Hizb where the Level states
+ * a count («5 أحزاب», «10 أحزاب», with Arabic's own plural forms), else as
+ * how many Surahs the list holds, else nothing.
+ */
+export function memorisationAmount(
+  level: PublicProgramLevel,
+  t: (key: string) => string,
+): string | null {
   const hizb = level.memorisation_hizb;
   if (hizb !== null) {
-    const words =
-      hizb === 1
-        ? t('programs.journey.hizbOne')
-        : hizb === 2
-          ? t('programs.journey.hizbTwo')
-          : hizb >= 3 && hizb <= 10
-            ? t('programs.journey.hizbFew').replace('{n}', String(hizb))
-            : t('programs.journey.hizbMany').replace('{n}', String(hizb));
-    return t('programs.journey.memorisation').replace('{amount}', words);
+    return hizb === 1
+      ? t('programs.journey.hizbOne')
+      : hizb === 2
+        ? t('programs.journey.hizbTwo')
+        : hizb >= 3 && hizb <= 10
+          ? t('programs.journey.hizbFew').replace('{n}', String(hizb))
+          : t('programs.journey.hizbMany').replace('{n}', String(hizb));
   }
-  if (level.surahs.length > 0) {
-    return t('programs.journey.memorisation').replace(
-      '{amount}',
-      t('programs.journey.surahAmount').replace('{n}', String(level.surahs.length)),
-    );
-  }
+  if (level.surahs.length > 0)
+    return t('programs.journey.surahAmount').replace('{n}', String(level.surahs.length));
   return null;
+}
+
+/** «حفظ وتفسير: 10 أحزاب» — or nothing when the Level has neither. */
+export function memorisationWords(
+  level: PublicProgramLevel,
+  t: (key: string) => string,
+): string | null {
+  const amount = memorisationAmount(level, t);
+  if (amount === null) return null;
+  return `${surahSubjectsLabel(level, t)}: ${amount}`;
 }
 
 /**
@@ -155,12 +194,17 @@ export function ageWords(
       .replace('{min}', String(range.minAge))
       .replace('{max}', String(range.maxAge));
   }
-  if (range.minAge !== null) return t('admin.taxonomy.ageFrom').replace('{min}', String(range.minAge));
-  if (range.maxAge !== null) return t('admin.taxonomy.ageUpTo').replace('{max}', String(range.maxAge));
+  if (range.minAge !== null)
+    return t('admin.taxonomy.ageFrom').replace('{min}', String(range.minAge));
+  if (range.maxAge !== null)
+    return t('admin.taxonomy.ageUpTo').replace('{max}', String(range.maxAge));
   return null;
 }
 
 /** A Level's own range, in the same words. */
-export function levelAgeWords(level: PublicProgramLevel, t: (key: string) => string): string | null {
+export function levelAgeWords(
+  level: PublicProgramLevel,
+  t: (key: string) => string,
+): string | null {
   return ageWords({ minAge: level.min_age, maxAge: level.max_age }, t);
 }

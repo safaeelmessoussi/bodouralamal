@@ -4,7 +4,13 @@ import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/p
 import { t } from '../../i18n/index.js';
 import { Badge } from '../ui/badge.js';
 import { Dialog } from '../ui/dialog.js';
-import { ageWords, levelAgeWords, memorisationWords, type Journey } from './journey-model.js';
+import {
+  ageWords,
+  audienceKey,
+  levelAgeWords,
+  memorisationWords,
+  type Journey,
+} from './journey-model.js';
 
 /**
  * **«عرض جميع البرامج» — the same journey, to scan** (SRS Revision 180 §10).
@@ -13,8 +19,8 @@ import { ageWords, levelAgeWords, memorisationWords, type Journey } from './jour
  * is on and closes back to it. It reads the SAME `Journey` the illustration
  * reads — Categories in journey order, each with its derived age range, its
  * preparatory programme where it has one, its steps in order with their own
- * ages, descriptions, Subjects and «مقرر الحفظ», and the graduation that ends
- * it — so the two can never say different things. A Category with no Levels
+ * ages, descriptions, Subjects, «حفظ وتفسير: N أحزاب» and Surahs (R182 §3),
+ * and the graduation that ends it — so the two can never say different things. A Category with no Levels
  * (not on the road) is still listed here, honestly empty.
  */
 export function ProgramsTextView({
@@ -54,19 +60,29 @@ export function ProgramsTextView({
           >
             <header className="programs-text__head">
               <h3 id={`programs-text-category-${category.id}`}>
-                {t('programs.textView.categoryOrdinal').replace('{n}', String(category.position))} {category.name}
+                {t('programs.textView.categoryOrdinal').replace('{n}', String(category.position))}{' '}
+                {category.name}
               </h3>
               <p className="programs-text__age">
-                {[ageWords(category, t), t(`programs.journey.audience.${category.audience}`)]
+                {[ageWords(category, t), t(`programs.journey.audience.${audienceKey(category)}`)]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
               {category.description ? <p className="muted">{category.description}</p> : null}
+              {/* R182 §1 — the Subjects every step shares, once under the name. */}
+              {category.sharedSubjects.length > 0 ? (
+                <p className="programs__row">
+                  <span className="programs__rowLabel">{t('programs.journey.sharedSubjects')}</span>
+                  {category.sharedSubjects.map((subject) => (
+                    <Badge key={subject.id}>{subject.name}</Badge>
+                  ))}
+                </p>
+              ) : null}
               {category.directEntry ? (
                 // R181 §7 — and who may take that entrance (the steps' own restriction).
                 <p className="muted">
                   {t('programs.journey.directEntry').replace('{category}', category.name)}{' '}
-                  {t(`programs.journey.audienceEntry.${category.audience}`)}.
+                  {t(`programs.journey.audienceEntry.${audienceKey(category)}`)}.
                 </p>
               ) : null}
             </header>
@@ -146,11 +162,12 @@ function LevelRow({
           ))}
         </p>
       ) : null}
-      {/* R181 §6 — the Owner's measure first, then the Surahs themselves. */}
-      {level.memorisation_hizb !== null ? <p className="muted">{memorisationWords(level, t)}</p> : null}
+      {/* R181 §6 / R182 §3 — «حفظ وتفسير: N أحزاب», then the Surahs themselves. */}
+      {memorisationWords(level, t) !== null ? (
+        <p className="programs-text__memo">{memorisationWords(level, t)}</p>
+      ) : null}
       {level.surahs.length > 0 ? (
         <p className="programs__row programs__row--text">
-          <span className="programs__rowLabel">{t('programs.surahsLabel')}</span>
           {level.surahs.map((s) => s.name).join('، ')}
         </p>
       ) : null}

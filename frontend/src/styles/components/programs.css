@@ -218,6 +218,15 @@
   font-size: var(--font-size-xs);
   opacity: 0.85;
 }
+/* R182 §1 — the Subjects every step of the Category shares, said once. */
+.stage__shared {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  opacity: 0.9;
+}
+.stage__sharedLabel {
+  font-weight: 700;
+}
 .stage__body {
   display: flex;
   align-items: flex-end;
@@ -233,9 +242,13 @@
 .stage__cell--stop {
   width: var(--journey-card-w, 16rem);
 }
-.stage__cell--walk,
-.stage__cell--start {
+.stage__cell--walk {
   width: var(--journey-walk-w, 84px);
+}
+/* The start cell is as wide as its flag needs (R182 — the flag no longer
+   hangs past the road's edge on a phone), never narrower than a walk. */
+.stage__cell--start {
+  min-width: var(--journey-walk-w, 84px);
 }
 .stage__cell--prize {
   width: 10rem;
@@ -244,12 +257,11 @@
   margin-inline-end: var(--space-3);
 }
 .stage__start {
-  position: relative;
+  display: grid;
+  justify-items: end;
+  gap: var(--space-1);
 }
 .stage__startFlag {
-  position: absolute;
-  inset-inline-end: 0;
-  top: -1.75rem;
   margin: 0;
   padding: 0.15rem var(--space-3);
   border-radius: var(--radius-pill);
@@ -315,9 +327,38 @@
   gap: 0.35rem;
   margin: 0;
 }
-.journey__cardRow--muted {
+.journey__cardRowLabel {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+}
+/* R182 §3 — «حفظ وتفسير: 10 أحزاب», then the Surahs themselves. */
+.journey__cardMemo {
+  margin: 0;
+  font-weight: 700;
+  color: var(--color-primary-strong);
+}
+.journey__surahs {
+  position: relative;
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  text-wrap: pretty;
+}
+/* «…» opens the rest — on a phone only; a laptop shows the whole list. */
+.journey__surahsMore {
+  display: none;
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font: inherit;
+  font-weight: 700;
+  line-height: inherit;
+  cursor: pointer;
 }
 .journey__more {
   justify-self: start;
@@ -325,45 +366,65 @@
   min-block-size: var(--tap-min);
 }
 
-/* ── Walks: the shoe prints up each riser ────────────────────────────────── */
+/* ── Walks: one rising arrow from each step to the next (R182 §6) ────────── */
 .journey__walk {
   position: relative;
   display: block;
 }
-.journey__riser {
-  position: absolute;
-  inset: 0;
+.journey__arrow {
   display: block;
+  overflow: visible;
 }
-.journey__riserLine {
+.journey__arrowLine {
   fill: none;
   stroke: var(--color-primary);
-  stroke-width: 3;
+  stroke-width: 2.5;
   stroke-linecap: round;
-  stroke-dasharray: 6 8;
-  opacity: 0.35;
 }
-.journey__prints {
-  position: relative;
-  display: block;
-  color: var(--color-primary-strong);
-  fill: currentcolor;
-  opacity: 0.95;
+.journey__arrowhead {
+  fill: var(--color-primary);
 }
-.journey__prints--entry {
-  color: var(--color-accent);
+.journey__arrowhead--accent {
+  fill: var(--color-accent);
 }
-/* §9 — revealed print by print as a walk comes into view. Only once the
-   component has said it will animate (`journey--animate`): without JavaScript
-   or under reduced motion every print simply stands there. */
-.journey--animate .journey__print {
+.journey__chevron {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.journey__arrow--entry .journey__arrowLine,
+.journey__arrow--entry .journey__chevron {
+  stroke: var(--color-accent);
+}
+/* §9 — drawn on as a walk comes into view: the line from its foot to its
+   head (`pathLength` 100 → dash offset 100 → 0), then the chevrons one by
+   one. Only once the component has said it will animate (`journey--animate`):
+   without JavaScript or under reduced motion every arrow simply stands. */
+.journey--animate .journey__arrowLine {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+}
+.journey--animate .journey__chevron {
   opacity: 0;
 }
-.journey--animate .is-walked .journey__print {
-  animation: journey-print-in 320ms ease-out both;
-  animation-delay: calc(var(--i, 0) * 130ms);
+.journey--animate .is-walked .journey__arrowLine {
+  animation: journey-arrow-draw 560ms ease-out both;
 }
-/* Opacity only: a CSS `transform` here would replace the print's own SVG
+.journey--animate .is-walked .journey__chevron {
+  animation: journey-print-in 320ms ease-out both;
+  animation-delay: calc(240ms + var(--i, 0) * 160ms);
+}
+@keyframes journey-arrow-draw {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* Opacity only: a CSS `transform` here would replace the chevron's own SVG
    transform (its place and its direction of travel). */
 @keyframes journey-print-in {
   from {
@@ -374,60 +435,66 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .journey--animate .journey__print {
+  .journey--animate .journey__arrowLine {
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+  .journey--animate .journey__chevron {
     opacity: 1;
     animation: none;
   }
 }
 
-/* ── Entrances: the ways in from outside the road (R181 §5) ──────────────── */
+/* ── Entrances: the ways in from outside the road (R181 §5, R182 §2) ──────── */
+/* A note beside the first step — its words, then one arrow to the step — not
+   a panel: the road's own cards stay the biggest thing on it. */
 .entrances {
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  padding-block-start: var(--space-6);
-  border: 1.5px dashed var(--color-accent);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--color-accent-soft) 55%, var(--color-surface-raised));
-  position: relative;
+  gap: var(--space-1);
+}
+.entrances__words {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 15rem;
+  padding: var(--space-2) var(--space-3);
+  border-inline-start: 3px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent-soft) 45%, var(--color-surface-raised));
 }
 .entrances__title {
-  position: absolute;
-  inset-block-start: var(--space-2);
-  inset-inline-start: var(--space-3);
   margin: 0;
   font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--color-accent);
-  white-space: nowrap;
 }
-/* Each way in: its words or its card, then its prints toward the first step
-   (which stands to the left, where the road continues). */
 .entrances__item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: var(--space-2);
-  max-width: 17rem;
-}
-.entrances__words {
-  display: grid;
   gap: 0.15rem;
+  margin: 0;
+  font-size: var(--font-size-xs);
 }
 .entrances__lead {
-  margin: 0;
   font-weight: 700;
   color: var(--color-primary-strong);
 }
+.entrances__age {
+  font-weight: 600;
+  color: var(--color-accent);
+}
 .entrances__note {
-  margin: 0;
-  font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
 }
-.journey__card--prep {
-  border-block-end-color: var(--color-accent);
+.entrances__more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary-strong);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* ── Milestones: the trophy, and the summit ──────────────────────────────── */
@@ -519,10 +586,6 @@
   font-weight: 700;
   color: var(--color-accent);
 }
-.journey__summit .journey__milestoneTitle {
-  color: var(--color-accent);
-  font-size: var(--font-size-md);
-}
 
 /* ── The text view (§10): the same data, to scan ─────────────────────────── */
 .programs__row {
@@ -588,6 +651,11 @@
 .programs-text__level--focus {
   box-shadow: var(--shadow-focus);
 }
+.programs-text__memo {
+  margin: 0;
+  font-weight: 700;
+  color: var(--color-primary-strong);
+}
 .programs-text__levelName {
   display: flex;
   flex-wrap: wrap;
@@ -623,8 +691,18 @@
     inset-inline-start: var(--space-4);
     max-width: 16rem;
   }
-  .entrances__item {
-    max-width: 14rem;
+  .entrances__words {
+    max-width: 12rem;
+  }
+  /* R182 §3 — a long Surah list shows its first lines and «…». */
+  .journey__surahs:not(.is-expanded) .journey__surahsText {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .journey__surahs:not(.is-expanded) .journey__surahsMore {
+    display: inline-block;
   }
   .journey__summit {
     width: 15rem;

@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/programs.js';
 import { t } from '../../i18n/index.js';
-import { ageWords, buildJourney, categoryAudience, journeyOrder, memorisationWords } from './journey-model.js';
+import {
+  ageWords,
+  audienceKey,
+  buildJourney,
+  categoryAudience,
+  journeyOrder,
+  memorisationWords,
+  surahSubjectsLabel,
+} from './journey-model.js';
 
 /**
  * **SRS Revision 180 — the journey is built from the catalogue, never named
@@ -28,6 +36,8 @@ const category = (id: string, levels: PublicProgramLevel[], over: Partial<Public
   description: null,
   min_age: null,
   max_age: null,
+  subjects: [],
+  holds_own_login: false,
   levels,
   ...over,
 });
@@ -115,11 +125,37 @@ describe('categoryAudience', () => {
   });
 });
 
-/** R181 §6 — «مقرر الحفظ» in Hizb, with Arabic's plural forms; Surahs otherwise. */
+/** R182 §5 — «للنساء» for an adult Category, «للفتيات» for a younger one; the marker, never a name. */
+describe('audienceKey', () => {
+  it('pairs the steps\' restriction with the Category\'s adulthood', () => {
+    const girls = [level('a', { gender_restriction: 'girls_only' })];
+    const women = buildJourney([category('w', girls, { holds_own_login: true })]).categories[0]!;
+    const teens = buildJourney([category('t', girls)]).categories[0]!;
+    expect(audienceKey(women)).toBe('adult.girls');
+    expect(audienceKey(teens)).toBe('young.girls');
+    expect(t(`programs.journey.audience.${audienceKey(women)}`)).toBe('للنساء فقط');
+    expect(t(`programs.journey.audience.${audienceKey(teens)}`)).toBe('للفتيات فقط');
+    expect(audienceKey(buildJourney([category('n', [level('a')], { holds_own_login: null })]).categories[0]!)).toBe('young.any');
+  });
+});
+
+/** R181 §6 / R182 §3 — «حفظ وتفسير: 10 أحزاب»: the by-Surah Subjects' names, the count in Hizb. */
 describe('memorisationWords', () => {
+  const bySurah = [
+    { id: 's1', name: 'حفظ القرآن', works_by_surah: true },
+    { id: 's2', name: 'تفسير القرآن', works_by_surah: true },
+    { id: 's3', name: 'التربية الإسلامية', works_by_surah: false },
+  ];
+  it('names the by-Surah Subjects without «القرآن», joined by «و»', () => {
+    expect(surahSubjectsLabel(level('x', { subjects: bySurah }), t)).toBe('حفظ وتفسير');
+    expect(surahSubjectsLabel(level('x', { subjects: bySurah.slice(0, 1) }), t)).toBe('حفظ');
+    expect(surahSubjectsLabel(level('x', { subjects: [{ id: 's4', name: 'التجويد', works_by_surah: true }] }), t)).toBe('التجويد');
+    // No Subject by Surah on the Level → the generic words.
+    expect(surahSubjectsLabel(level('x', { subjects: bySurah.slice(2) }), t)).toBe('مقرر الحفظ');
+  });
   it('says the Hizb count as stated, in the right form', () => {
-    expect(memorisationWords(level('x', { memorisation_hizb: 5 }), t)).toBe('مقرر الحفظ: 5 أحزاب');
-    expect(memorisationWords(level('x', { memorisation_hizb: 10 }), t)).toBe('مقرر الحفظ: 10 أحزاب');
+    expect(memorisationWords(level('x', { subjects: bySurah, memorisation_hizb: 5 }), t)).toBe('حفظ وتفسير: 5 أحزاب');
+    expect(memorisationWords(level('x', { subjects: bySurah, memorisation_hizb: 10 }), t)).toBe('حفظ وتفسير: 10 أحزاب');
     expect(memorisationWords(level('x', { memorisation_hizb: 12 }), t)).toBe('مقرر الحفظ: 12 حزبًا');
     expect(memorisationWords(level('x', { memorisation_hizb: 1 }), t)).toBe('مقرر الحفظ: حزب واحد');
     expect(memorisationWords(level('x', { memorisation_hizb: 2 }), t)).toBe('مقرر الحفظ: حزبان');

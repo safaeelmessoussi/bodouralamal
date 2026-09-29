@@ -17,6 +17,9 @@ import { derivedCategoryAgeRange } from '../policies/age-range.js';
 export interface PublicSubjectRef {
   id: string;
   name: string;
+  /** R182 §3 — the Subject works by Surah (R165 §2's marker), so the page can
+   *  name «حفظ وتفسير» above a Level's Surahs. */
+  worksBySurah: boolean;
 }
 
 export interface PublicSurahRef {
@@ -51,6 +54,12 @@ export interface PublicProgramCategory {
    *  a Category whose last Level states no end has none. */
   minAge: number | null;
   maxAge: number | null;
+  /** R182 §1 — the Subjects taught to EVERY step of the Category (R172 §1),
+   *  named once under the Category, never repeated on each Level. */
+  subjects: PublicSubjectRef[];
+  /** R170 §6 — who holds the login; here only so the page can say «للنساء»
+   *  rather than «للفتيات» for an adult Category (R182 §5). */
+  holdsOwnLogin: boolean | null;
   levels: PublicProgramLevel[];
 }
 
@@ -60,10 +69,21 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
   // pairing must not keep advertising a programme nobody may join.
   const categories = await prisma.category.findMany({
     where: { deletedAt: null },
-    select: { id: true, name: true, description: true },
+    select: { id: true, name: true, description: true, holdsOwnLogin: true },
     orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
   });
   if (categories.length === 0) return [];
+  const subjectRef = (subject: { id: string; name: string; requiresSurahs: boolean }): PublicSubjectRef => ({
+    id: subject.id,
+    name: subject.name,
+    worksBySurah: subject.requiresSurahs,
+  });
+  const bySubjectOrder = (
+    a: { displayOrder: number | null; name: string },
+    b: { displayOrder: number | null; name: string },
+  ): number =>
+    (a.displayOrder ?? Number.MAX_SAFE_INTEGER) - (b.displayOrder ?? Number.MAX_SAFE_INTEGER) ||
+    a.name.localeCompare(b.name);
 
   const levels = await prisma.level.findMany({
     where: { deletedAt: null, categoryId: { in: categories.map((c) => c.id) } },
@@ -82,24 +102,44 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
     // admin taxonomy read.
     orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
   });
-  if (levels.length === 0) return categories.map((c) => ({ ...c, minAge: null, maxAge: null, levels: [] }));
+  // R172 §1 / R182 §1 — the Subjects taught to the WHOLE Category, named
+  // once under the Category (the curriculum policy still answers them for
+  // every step; the page says so once rather than on each Level).
+  const categorySubjects = await prisma.categorySubject.findMany({
+    where: { deletedAt: null, categoryId: { in: categories.map((c) => c.id) }, subject: { deletedAt: null } },
+    select: {
+      categoryId: true,
+      subject: { select: { id: true, name: true, displayOrder: true, requiresSurahs: true } },
+    },
+  });
+  const subjectsByCategory = new Map<string, PublicSubjectRef[]>();
+  for (const category of categories) {
+    subjectsByCategory.set(
+      category.id,
+      categorySubjects
+        .filter((row) => row.categoryId === category.id)
+        .map((row) => row.subject)
+        .sort(bySubjectOrder)
+        .map(subjectRef),
+    );
+  }
+  if (levels.length === 0) {
+    return categories.map((c) => ({
+      ...c,
+      minAge: null,
+      maxAge: null,
+      subjects: subjectsByCategory.get(c.id) ?? [],
+      levels: [],
+    }));
+  }
   const levelIds = levels.map((l) => l.id);
 
-  const [levelSubjects, categorySubjects, levelSurahs] = await Promise.all([
+  const [levelSubjects, levelSurahs] = await Promise.all([
     prisma.levelSubject.findMany({
       where: { deletedAt: null, levelId: { in: levelIds }, subject: { deletedAt: null } },
       select: {
         levelId: true,
-        subject: { select: { id: true, name: true, displayOrder: true } },
-      },
-    }),
-    // R172 §1 — a Subject taught to the WHOLE Category shows under every one
-    // of its Levels, exactly as the curriculum policy answers.
-    prisma.categorySubject.findMany({
-      where: { deletedAt: null, categoryId: { in: categories.map((c) => c.id) }, subject: { deletedAt: null } },
-      select: {
-        categoryId: true,
-        subject: { select: { id: true, name: true, displayOrder: true } },
+        subject: { select: { id: true, name: true, displayOrder: true, requiresSurahs: true } },
       },
     }),
     prisma.levelSurah.findMany({
@@ -109,33 +149,19 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
   ]);
 
   // §2.2's own Subject order, not insertion order — the same list an admin
-  // reads on «مواد المستوى».
+  // reads on «مواد المستوى». A Level's OWN Subjects only (R182 §1): the
+  // Category's shared ones are said once, under the Category.
   const subjectRowsByLevel = new Map<string, typeof levelSubjects>();
   for (const row of levelSubjects) {
     subjectRowsByLevel.set(row.levelId, [...(subjectRowsByLevel.get(row.levelId) ?? []), row]);
-  }
-  for (const level of levels) {
-    // R181 §8 — a preparatory programme teaches its own Subjects only.
-    if (level.journeyRole === 'preparatory') continue;
-    for (const row of categorySubjects) {
-      if (row.categoryId !== level.categoryId) continue;
-      const rows = subjectRowsByLevel.get(level.id) ?? [];
-      if (rows.some((existing) => existing.subject.id === row.subject.id)) continue;
-      subjectRowsByLevel.set(level.id, [...rows, { levelId: level.id, subject: row.subject }]);
-    }
   }
   const subjectsByLevel = new Map<string, PublicSubjectRef[]>(
     [...subjectRowsByLevel].map(([levelId, rows]) => [
       levelId,
       rows
-        .slice()
-        .sort(
-          (a, b) =>
-            (a.subject.displayOrder ?? Number.MAX_SAFE_INTEGER) -
-              (b.subject.displayOrder ?? Number.MAX_SAFE_INTEGER) ||
-            a.subject.name.localeCompare(b.subject.name),
-        )
-        .map((row) => ({ id: row.subject.id, name: row.subject.name })),
+        .map((row) => row.subject)
+        .sort(bySubjectOrder)
+        .map(subjectRef),
     ]),
   );
 
@@ -178,6 +204,7 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
       ...category,
       // R180 §4 — the Category's range is its Levels', never a column of its own.
       ...derivedCategoryAgeRange(own),
+      subjects: subjectsByCategory.get(category.id) ?? [],
       levels: own,
     };
   });

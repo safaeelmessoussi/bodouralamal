@@ -11,6 +11,8 @@ import { api } from '../lib/api.js';
 export interface PublicSubject {
   id: string;
   name: string;
+  /** R182 §3 — works by Surah (R165 §2), so «حفظ وتفسير» can be named above a Level's Surahs. */
+  works_by_surah: boolean;
 }
 
 export interface PublicSurah {
@@ -44,6 +46,10 @@ export interface PublicProgramCategory {
    *  Level with no end leaves the Category open-ended (`max_age: null`). */
   min_age: number | null;
   max_age: number | null;
+  /** R182 §1 — the Subjects shared by every step of the Category, named once. */
+  subjects: PublicSubject[];
+  /** R170 §6 / R182 §5 — an adult Category holds its own login: «للنساء», not «للفتيات». */
+  holds_own_login: boolean | null;
   levels: PublicProgramLevel[];
 }
 

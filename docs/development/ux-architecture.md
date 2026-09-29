@@ -437,7 +437,7 @@ Behavioural or registry-level, never CSS-class assertions.
 | `lib/guardian-portal.test.ts` | AW — gate matches `role-home` · no child refused · no role widened · every beneficiary module declares `childContext` |
 | `components/quran/quran-entry.test.ts` | AU, AV — one workspace · curriculum drives the Surah list, never 114 · never `level_ids[0]` · failed read ≠ empty roster · full ARIA meter, no second meter |
 | `scripts/ci/check-progress-css.sh` | AV — logical sizing, clipped track, `prefers-reduced-motion` |
-| `scripts/ci/check-journey-css.sh` | R180 §9 — the journey's prints are revealed on scroll behind `journey--animate`, opacity only, and still under `prefers-reduced-motion` |
+| `scripts/ci/check-journey-css.sh` | R180 §9 / R182 §6 — the journey's arrows are drawn on scroll behind `journey--animate` (dash offset and opacity only), still under `prefers-reduced-motion`; nothing may bring the shoe prints back |
 | `components/calendar/shared-details.test.ts` | AT — four calendars render the dialog, none discards the click · two sections, two empty states · nothing claimed before a 200 · the focused read carries the caller's token |
 | `scripts/dev/browser/verify-occurrence-details.mjs` | AT — the dialog from all four calendars on a real Session, every focused read a 200 |
 | `components/scheduling/staffing-periods.test.ts` | AS — blank date open-ended, converted once · one person on several rows · default assistant · each refusal its own sentence · BB — marking derived (no `useState`/`useEffect`) on both date fields |

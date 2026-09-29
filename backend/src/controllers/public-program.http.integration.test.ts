@@ -26,6 +26,8 @@ interface Row {
   description: string | null;
   min_age: number | null;
   max_age: number | null;
+  subjects: { id: string; name: string; works_by_surah: boolean }[];
+  holds_own_login: boolean | null;
   levels: {
     id: string;
     name: string;
@@ -35,7 +37,7 @@ interface Row {
     journey_role: string;
     memorisation_hizb: number | null;
     gender_restriction: string;
-    subjects: { id: string; name: string }[];
+    subjects: { id: string; name: string; works_by_surah: boolean }[];
     surahs: { id: number; name: string }[];
   }[];
 }
@@ -104,7 +106,7 @@ describe("GET /programs — public access", () => {
     expect(rows[0]!.description).toBe("وصف الفئة");
     expect(rows[0]!.levels).toHaveLength(1);
     expect(rows[0]!.levels[0]!.description).toBe("وصف المستوى");
-    expect(rows[0]!.levels[0]!.subjects).toEqual([{ id: subject.id, name: subject.name }]);
+    expect(rows[0]!.levels[0]!.subjects).toEqual([{ id: subject.id, name: subject.name, works_by_surah: false }]);
     expect(rows[0]!.levels[0]!.surahs).toEqual([{ id: 1, name: "الفاتحة" }]);
   });
 
@@ -121,7 +123,10 @@ describe("GET /programs — public access", () => {
     const rows = mine((await call("/programs")).body);
     // R180 §4/§6 — the Level's age range and journey role travel; the
     // Category's range is derived from its Levels.
-    expect(Object.keys(rows[0]!).sort()).toEqual(["description", "id", "levels", "max_age", "min_age", "name"].sort());
+    // R182 §1/§5 — the Category's shared Subjects, once, and who holds the login.
+    expect(Object.keys(rows[0]!).sort()).toEqual(
+      ["description", "holds_own_login", "id", "levels", "max_age", "min_age", "name", "subjects"].sort(),
+    );
     expect(Object.keys(rows[0]!.levels[0]!).sort()).toEqual(
       // R181 §6/§7 — the Hizb count and who the Level admits (its audience, not
       // operational data) join the projection.
@@ -205,20 +210,25 @@ describe("GET /programs — public access", () => {
     ]);
   });
 
-  it("R181 §8 — a Subject taught to the whole Category reaches its steps, never a preparatory programme", async () => {
-    const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
-    const subject = await prisma.subject.create({ data: { name: `${TAG} مادة للفئة كلها` } });
-    await prisma.categorySubject.create({ data: { categoryId: category.id, subjectId: subject.id } });
+  it("R182 §1 — a Subject taught to the whole Category is named ONCE under the Category; a Level lists its own, marked by Surah or not", async () => {
+    const category = await prisma.category.create({ data: { name: `${TAG} فئة`, holdsOwnLogin: true } });
+    const shared = await prisma.subject.create({ data: { name: `${TAG} مادة للفئة كلها` } });
+    // `works_by_surah` is §4.4c's `requires_surahs` (the one progress-tracking Subject is the seed's, R117).
+    const own = await prisma.subject.create({ data: { name: `${TAG} حفظ`, requiresSurahs: true } });
+    await prisma.categorySubject.create({ data: { categoryId: category.id, subjectId: shared.id } });
     await prisma.level.create({
       data: { name: `${TAG} تمهيدي`, categoryId: category.id, displayOrder: 1, journeyRole: "preparatory", memorisationHizb: 5, genderRestriction: "girls_only" },
     });
-    await prisma.level.create({ data: { name: `${TAG} أول`, categoryId: category.id, displayOrder: 2 } });
+    const first = await prisma.level.create({ data: { name: `${TAG} أول`, categoryId: category.id, displayOrder: 2 } });
+    await prisma.levelSubject.create({ data: { levelId: first.id, subjectId: own.id } });
     const row = mine((await call("/programs")).body)[0]!;
-    const [prep, first] = row.levels;
-    expect(prep!.subjects.map((s) => s.name)).toEqual([]);
-    expect(first!.subjects.map((s) => s.name)).toEqual([`${TAG} مادة للفئة كلها`]);
+    expect(row.subjects.map((s) => [s.name, s.works_by_surah])).toEqual([[`${TAG} مادة للفئة كلها`, false]]);
+    expect(row.holds_own_login).toBe(true);
+    const [prep, step] = row.levels;
+    expect(prep!.subjects).toEqual([]);
+    expect(step!.subjects.map((s) => [s.name, s.works_by_surah])).toEqual([[`${TAG} حفظ`, true]]);
     expect(prep).toMatchObject({ memorisation_hizb: 5, gender_restriction: "girls_only" });
-    expect(first).toMatchObject({ memorisation_hizb: null, gender_restriction: "any" });
+    expect(step).toMatchObject({ memorisation_hizb: null, gender_restriction: "any" });
   });
 
   it("renders a Level with no Subjects or Surahs honestly — an empty list, never invented", async () => {

@@ -5,38 +5,41 @@ import { t } from '../../i18n/index.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
 import { Icon } from '../ui/icon.js';
+import { ArrowheadDefs, DirectionArrow } from './direction-arrow.js';
 import {
   ageWords,
+  audienceKey,
   levelAgeWords,
   memorisationWords,
   type Journey,
   type JourneyCategory,
   type JourneyStep,
 } from './journey-model.js';
-import { PrintPath, ShoePrintSymbol } from './shoe-prints.js';
 
 /**
  * **The walked journey** (SRS Revision 180 §1–§2, §5–§9, §11; reshaped by
- * Revision 181 §3–§5).
+ * Revision 181 §3–§5 and Revision 182).
  *
  * One road inside a panel that scrolls sideways, right to left as the page
  * reads. Each Category is a STAGE — a card bearing the Category's name above
  * its Levels — and inside it the Levels climb like stairs: every step stands
- * `--journey-rise` higher than the one before, shoe prints walk up the riser
- * between them, and the trophy of the Category stands above its last step.
- * Every stage stands one terrace higher than the one before, so the road
- * climbs from the first Category's first step to the summit, where the
- * graduation attire waits. The page itself stays short: the journey is as
- * wide as the catalogue, never as tall as it.
+ * `--journey-rise` higher than the one before, one rising ARROW leads from
+ * each step to the next (R182 §6), and the trophy of the Category stands
+ * above its last step. Every stage stands one terrace higher than the one
+ * before, so the road climbs from the first Category's first step to the
+ * summit, where the graduation attire waits. The page itself stays short:
+ * the journey is as wide as the catalogue, never as tall as it.
  *
- * The prints appear print by print as a walk comes into view (an
- * `IntersectionObserver` on the panel) and simply stand there under
- * `prefers-reduced-motion` or without JavaScript.
+ * Each arrow is drawn on as its walk comes into view (an
+ * `IntersectionObserver` on the panel) and simply stands there under
+ * `prefers-reduced-motion` or without JavaScript. The panel opens on the
+ * adult Category (R182 §7) — most visitors are women — and the road before
+ * it is a swipe away.
  *
  * The ways in that come from outside the road — the direct entry into a
  * Category after the first (§5, into its FIRST step only) and a preparatory
- * programme (§6) — stand together in one «مداخل أخرى» block at the start of
- * the stage, in the road's flow, so nothing about them is scattered or cut.
+ * programme (§6) — stand together in one small «مداخل أخرى» note at the
+ * start of the stage (R182 §2), in the road's flow.
  */
 export function ProgramsJourney({
   journey,
@@ -72,6 +75,20 @@ export function ProgramsJourney({
     return () => observer.disconnect();
   }, [journey]);
 
+  // R182 §7 — most visitors are women: the panel opens on the adult Category
+  // (the one whose beneficiaries hold their own login, R170 §6 — a marker,
+  // never a name) when there is one; the road before it is a swipe away.
+  useEffect(() => {
+    const root = scroller.current;
+    const adult = journey.categories.find((category) => category.adult);
+    if (!root || !adult) return;
+    const target = root.querySelector<HTMLElement>(`[data-journey-category="${adult.id}"]`);
+    if (!target) return;
+    // Bring its start (right) edge to the panel's, without moving the page.
+    root.scrollLeft +=
+      target.getBoundingClientRect().right - root.getBoundingClientRect().right + 24;
+  }, [journey]);
+
   function scrollBy(direction: 1 | -1): void {
     const root = scroller.current;
     if (!root) return;
@@ -93,7 +110,7 @@ export function ProgramsJourney({
 
   return (
     <div className={`journey${animated ? ' journey--animate' : ''}`}>
-      <ShoePrintSymbol />
+      <ArrowheadDefs />
       {/* §11 — a way to each Category without swiping through the ones before. */}
       <nav className="journey__nav" aria-label={t('programs.journey.navLabel')}>
         <ul className="journey__chips">
@@ -190,10 +207,17 @@ function Stage({
         <p className="stage__meta">
           {ages ? <span className="stage__age">{ages}</span> : null}
           <span className="stage__audience">
-            {t(`programs.journey.audience.${category.audience}`)}
+            {t(`programs.journey.audience.${audienceKey(category)}`)}
           </span>
         </p>
         {category.description ? <p className="stage__text">{category.description}</p> : null}
+        {/* R182 §1 — the Subjects every step shares, said once here. */}
+        {category.sharedSubjects.length > 0 ? (
+          <p className="stage__shared">
+            <span className="stage__sharedLabel">{t('programs.journey.sharedSubjects')}</span>{' '}
+            {category.sharedSubjects.map((subject) => subject.name).join('، ')}
+          </p>
+        ) : null}
       </header>
 
       <ol className="stage__body">
@@ -201,14 +225,13 @@ function Stage({
           <li className="stage__cell stage__cell--start" style={{ ['--step' as string]: 0 }}>
             <div className="journey__walk stage__start">
               <p className="stage__startFlag">{t('programs.journey.start')}</p>
-              <PrintPath
-                className="journey__prints"
+              <DirectionArrow
+                className="journey__arrow"
                 width={84}
                 height={rise + 40}
-                from={{ x: 78, y: rise + 34 }}
-                to={{ x: 8, y: 14 }}
-                stride={30}
-                size={24}
+                from={{ x: 78, y: rise + 30 }}
+                to={{ x: 10, y: 10 }}
+                chevrons={1}
               />
             </div>
           </li>
@@ -265,34 +288,20 @@ function StepCell({
   );
 }
 
-/** Prints up the riser from one step's foot to the next one's (R181 §3: a
- *  real climb — steeper, larger, on a drawn riser). */
+/** The way up from one step's foot to the next one's (R182 §6): one rising
+ *  arrow, drawn on as its stretch of road comes into view. */
 function Walk({ rise }: { rise: number }): ReactNode {
   const width = 84;
   const height = rise + 40;
   return (
     <div className="journey__walk">
-      <svg
-        className="journey__riser"
-        viewBox={`0 0 ${width} ${height}`}
+      <DirectionArrow
+        className="journey__arrow"
         width={width}
         height={height}
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d={`M${width} ${height - 4} L0 ${height - 4 - rise}`}
-          className="journey__riserLine"
-        />
-      </svg>
-      <PrintPath
-        className="journey__prints"
-        width={width}
-        height={height}
-        from={{ x: width - 8, y: height - 12 }}
-        to={{ x: 10, y: 14 }}
-        stride={30}
-        size={24}
+        from={{ x: width - 6, y: height - 10 }}
+        to={{ x: 8, y: 12 }}
+        chevrons={2}
       />
     </div>
   );
@@ -302,7 +311,7 @@ function Walk({ rise }: { rise: number }): ReactNode {
  * R181 §5 — the ways in that come from OUTSIDE the road, together and in the
  * road's flow, right before the first step: the direct entry (§5 — into the
  * first step only, with who may take it and from what age) and any
- * preparatory programme (§6), each with its prints toward the first step.
+ * preparatory programme (§6), then one arrow toward the first step.
  */
 function Entrances({
   category,
@@ -317,47 +326,77 @@ function Entrances({
 }): ReactNode {
   const firstStep = category.steps[0]?.level.name ?? category.name;
   return (
-    <div className="entrances" role="group" aria-label={t('programs.journey.entrancesLabel')}>
-      <p className="entrances__title">{t('programs.journey.entrancesLabel')}</p>
-      {!first ? (
-        <div className="entrances__item journey__walk">
-          <div className="entrances__words">
-            <p className="entrances__lead">
+    <div
+      className="entrances journey__walk"
+      role="group"
+      aria-label={t('programs.journey.entrancesLabel')}
+    >
+      {/* R182 §2 — a note, not a panel: each way in is one or two lines,
+          and one arrow from the note to the first step. */}
+      <div className="entrances__words">
+        <p className="entrances__title">{t('programs.journey.entrancesLabel')}</p>
+        {!first ? (
+          <p className="entrances__item">
+            <span className="entrances__lead">
               {t('programs.journey.directEntryShort').replace('{step}', firstStep)}
-            </p>
-            <p className="entrances__note">
-              {t(`programs.journey.audienceEntry.${category.audience}`)}
+            </span>
+            <span className="entrances__note">
+              {t(`programs.journey.audienceEntry.${audienceKey(category)}`)}
               {category.minAge !== null
                 ? ` — ${t('admin.taxonomy.ageFrom').replace('{min}', String(category.minAge))}`
                 : ''}
-            </p>
-          </div>
-          <PrintPath
-            className="journey__prints journey__prints--entry"
-            width={64}
-            height={rise + 30}
-            from={{ x: 56, y: rise + 24 }}
-            to={{ x: 8, y: 10 }}
-            stride={26}
-            size={20}
-          />
-        </div>
-      ) : null}
-      {category.preparatory.map((level) => (
-        <div key={level.id} className="entrances__item journey__walk">
-          <PreparatoryCard level={level} category={category} onDetails={onDetails} />
-          <PrintPath
-            className="journey__prints journey__prints--entry"
-            width={64}
-            height={rise + 30}
-            from={{ x: 56, y: rise + 24 }}
-            to={{ x: 8, y: 10 }}
-            stride={26}
-            size={20}
-          />
-        </div>
-      ))}
+            </span>
+          </p>
+        ) : null}
+        {category.preparatory.map((level) => (
+          <PreparatoryNote key={level.id} level={level} category={category} onDetails={onDetails} />
+        ))}
+      </div>
+      <DirectionArrow
+        className="journey__arrow journey__arrow--entry"
+        accent
+        width={64}
+        height={rise + 24}
+        from={{ x: 58, y: rise + 18 }}
+        to={{ x: 8, y: 8 }}
+        chevrons={1}
+      />
     </div>
+  );
+}
+
+/** R182 §2 — the preparatory programme as a note: its name, its ages, what
+ *  it is, and «التفاصيل» for the rest (the text view carries it whole). */
+function PreparatoryNote({
+  level,
+  category,
+  onDetails,
+}: {
+  level: PublicProgramLevel;
+  category: JourneyCategory;
+  onDetails: (levelId: string | null) => void;
+}): ReactNode {
+  const ages = levelAgeWords(level, t);
+  return (
+    <p className="entrances__item" id={`journey-level-${level.id}`}>
+      <span className="entrances__lead">
+        <span className="journey__cardOrdinal journey__cardOrdinal--prep">
+          {t('programs.journey.preparatory')}
+        </span>{' '}
+        {level.name}
+        {ages ? <span className="entrances__age"> — {ages}</span> : null}
+      </span>
+      <span className="entrances__note">
+        {level.description ? `${level.description}. ` : ''}
+        {t('programs.journey.preparatoryLeadsTo').replace(
+          '{step}',
+          category.steps[0]?.level.name ?? category.name,
+        )}{' '}
+        <button type="button" className="entrances__more" onClick={() => onDetails(level.id)}>
+          {t('programs.journey.details')}
+        </button>
+      </span>
+    </p>
   );
 }
 
@@ -389,14 +428,14 @@ function StepCard({
       {level.description ? <p className="journey__cardText">{level.description}</p> : null}
       {level.subjects.length > 0 ? (
         <p className="journey__cardRow">
+          <span className="journey__cardRowLabel">{t('programs.subjectsLabel')}</span>
           {level.subjects.map((subject) => (
             <Badge key={subject.id}>{subject.name}</Badge>
           ))}
         </p>
       ) : null}
-      {memorisation ? (
-        <p className="journey__cardRow journey__cardRow--muted">{memorisation}</p>
-      ) : null}
+      {memorisation ? <p className="journey__cardMemo">{memorisation}</p> : null}
+      <SurahList level={level} />
       <Button variant="ghost" className="journey__more" onClick={() => onDetails(level.id)}>
         {t('programs.journey.details')}
       </Button>
@@ -404,47 +443,27 @@ function StepCard({
   );
 }
 
-function PreparatoryCard({
-  level,
-  category,
-  onDetails,
-}: {
-  level: PublicProgramLevel;
-  category: JourneyCategory;
-  onDetails: (levelId: string | null) => void;
-}): ReactNode {
-  const ages = levelAgeWords(level, t);
-  const memorisation = memorisationWords(level, t);
+/**
+ * R182 §3 — the Level's Surahs under «حفظ وتفسير: N أحزاب», whole on a
+ * laptop; on a phone the first lines, then «…» which opens the rest.
+ */
+function SurahList({ level }: { level: PublicProgramLevel }): ReactNode {
+  const [expanded, setExpanded] = useState(false);
+  if (level.surahs.length === 0) return null;
   return (
-    <article className="journey__card journey__card--prep" id={`journey-level-${level.id}`}>
-      <p className="journey__cardKicker">
-        <span className="journey__cardOrdinal journey__cardOrdinal--prep">
-          {t('programs.journey.preparatory')}
-        </span>
-        {ages ? <span className="journey__cardAge">{ages}</span> : null}
-      </p>
-      <h4 className="journey__cardTitle">{level.name}</h4>
-      {level.description ? <p className="journey__cardText">{level.description}</p> : null}
-      {level.subjects.length > 0 ? (
-        <p className="journey__cardRow">
-          {level.subjects.map((subject) => (
-            <Badge key={subject.id}>{subject.name}</Badge>
-          ))}
-        </p>
+    <p className={`journey__surahs${expanded ? ' is-expanded' : ''}`}>
+      <span className="journey__surahsText">{level.surahs.map((s) => s.name).join('، ')}</span>
+      {!expanded && level.surahs.length > 6 ? (
+        <button
+          type="button"
+          className="journey__surahsMore"
+          aria-label={t('programs.journey.surahsMore')}
+          onClick={() => setExpanded(true)}
+        >
+          …
+        </button>
       ) : null}
-      {memorisation ? (
-        <p className="journey__cardRow journey__cardRow--muted">{memorisation}</p>
-      ) : null}
-      <p className="journey__cardRow journey__cardRow--muted">
-        {t('programs.journey.preparatoryLeadsTo').replace(
-          '{step}',
-          category.steps[0]?.level.name ?? category.name,
-        )}
-      </p>
-      <Button variant="ghost" className="journey__more" onClick={() => onDetails(level.id)}>
-        {t('programs.journey.details')}
-      </Button>
-    </article>
+    </p>
   );
 }
 
@@ -536,7 +555,6 @@ function Summit(): ReactNode {
           {t('programs.journey.summitQuestion')}
         </figcaption>
       </figure>
-      <p className="journey__milestoneTitle">{t('programs.journey.summit')}</p>
       <p className="journey__milestoneText">{t('programs.journey.summitText')}</p>
     </div>
   );

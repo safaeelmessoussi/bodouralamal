@@ -11,9 +11,9 @@ import { Container } from './ui/container.js';
 /**
  * «برامجنا التعليمية» — the §5.1 programme overview (Revision 144), redesigned
  * as a JOURNEY by SRS Revision 180: the Levels climb from the youngest
- * Category's first step to the summit, shoe prints walk from each to the
- * next, a graduation ends every Category, and «عرض جميع البرامج» opens the
- * same catalogue as text to scan.
+ * Category's first step to the summit, an arrow leads from each to the
+ * next (R182 §6), a graduation ends every Category, and «عرض جميع البرامج»
+ * opens the same catalogue as text to scan.
  *
  * Placed before `BranchesSection` on the landing page. Entirely data-driven
  * from `GET /programs` (TD-3.16): every Category the admin taxonomy screens

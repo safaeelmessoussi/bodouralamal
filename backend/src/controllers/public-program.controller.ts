@@ -21,6 +21,9 @@ export function list(prisma: PrismaClient) {
         // R180 §4 — derived from the first and last Level; `null` = no bound.
         min_age: category.minAge,
         max_age: category.maxAge,
+        // R182 §1 — the Subjects shared by every step, once; R182 §5 — who holds the login.
+        subjects: category.subjects.map((s) => ({ id: s.id, name: s.name, works_by_surah: s.worksBySurah })),
+        holds_own_login: category.holdsOwnLogin,
         levels: category.levels.map((level) => ({
           id: level.id,
           name: level.name,
@@ -32,7 +35,7 @@ export function list(prisma: PrismaClient) {
           // R181 §6/§7 — «مقرر الحفظ» in Hizb, and who the Level admits.
           memorisation_hizb: level.memorisationHizb,
           gender_restriction: level.genderRestriction,
-          subjects: level.subjects.map((s) => ({ id: s.id, name: s.name })),
+          subjects: level.subjects.map((s) => ({ id: s.id, name: s.name, works_by_surah: s.worksBySurah })),
           surahs: level.surahs.map((s) => ({ id: s.id, name: s.name })),
         })),
       })),
