@@ -360,6 +360,7 @@ export function useScopeOptions({
         min_age: null,
         max_age: null,
         journey_role: 'step',
+        memorisation_hizb: null,
         display_order: null,
         group_count: 0,
         subject_count: l.subject_ids.length,

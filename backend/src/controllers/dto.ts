@@ -1372,14 +1372,17 @@ export interface LevelCoreDto {
   max_age: number | null;
   /** R180 §6 — `step | preparatory`: what the Level is on the journey. */
   journey_role: string;
+  /** R181 §6 — «مقرر الحفظ» in Hizb; `null` is «not stated». */
+  memorisation_hizb: number | null;
   version: number;
 }
 
-/** The Level columns every Level DTO carries (R180 §4/§6). */
+/** The Level columns every Level DTO carries (R180 §4/§6, R181 §6). */
 export interface LevelJourneyColumns {
   minAge: number | null;
   maxAge: number | null;
   journeyRole: string;
+  memorisationHizb: number | null;
 }
 
 export function levelCoreDto(row: {
@@ -1401,6 +1404,7 @@ export function levelCoreDto(row: {
     min_age: row.minAge,
     max_age: row.maxAge,
     journey_role: row.journeyRole,
+    memorisation_hizb: row.memorisationHizb,
     version: row.version,
   };
 }
@@ -1457,6 +1461,7 @@ export function levelDto(row: {
     min_age: row.minAge,
     max_age: row.maxAge,
     journey_role: row.journeyRole,
+    memorisation_hizb: row.memorisationHizb,
     group_count: row.groupCount,
     subject_count: row.subjectCount,
     subject_ids: row.subjectIds,
@@ -1495,6 +1500,7 @@ export function createdLevelDto(level: {
     min_age: level.minAge,
     max_age: level.maxAge,
     journey_role: level.journeyRole,
+    memorisation_hizb: level.memorisationHizb,
     version: level.version,
   };
 }

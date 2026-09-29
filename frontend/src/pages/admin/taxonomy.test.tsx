@@ -46,6 +46,7 @@ const LEVEL: Level = {
   min_age: 6,
   max_age: 8,
   journey_role: 'step',
+  memorisation_hizb: null,
   group_count: 1,
   subject_count: 2,
       subject_ids: [],
@@ -96,6 +97,8 @@ describe('the adapter types match the wire contract', () => {
       // R180 §4/§6 — the Level's own age range and its role on the journey.
       'journey_role',
       'max_age',
+      // R181 §6 — «مقرر الحفظ» in Hizb.
+      'memorisation_hizb',
       'min_age',
       'name',
       'subject_count',

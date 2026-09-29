@@ -192,6 +192,8 @@ export interface Level {
   /** R180 §6 — `step` (the next rung) or `preparatory` (a programme that leads
    *  into the Category's first step, not required of those who enter there). */
   journey_role: JourneyRole;
+  /** R181 §6 — «مقرر الحفظ» in Hizb; `null` is «not stated». */
+  memorisation_hizb: number | null;
   group_count: number;
   subject_count: number;
   /** The Subjects the Level teaches on its own — one read for «مواد المستوى». */
@@ -225,19 +227,21 @@ export interface CreateLevelInput {
   min_age?: number | null;
   max_age?: number | null;
   journey_role?: JourneyRole;
+  memorisation_hizb?: number | null;
 }
 
-/** `category_id` is absent deliberately: a Level does not move between
- *  Categories, and the server refuses the field outright rather than ignoring
- *  it — so a client cannot believe a move succeeded. */
+/** R181 §1 — `category_id` moves the Level (it lists last in the new
+ *  Category until dragged); R66's refusal is superseded. */
 export interface UpdateLevelInput {
   name?: string;
   description?: string | null;
+  category_id?: string;
   gender_restriction?: GenderRestriction;
   display_order?: number | null;
   min_age?: number | null;
   max_age?: number | null;
   journey_role?: JourneyRole;
+  memorisation_hizb?: number | null;
 }
 
 export async function listLevels(

@@ -62,10 +62,14 @@ export async function subjectsTaughtAt(
     }),
     db.level.findMany({
       where: { id: { in: ids }, deletedAt: null },
-      select: { id: true, categoryId: true },
+      select: { id: true, categoryId: true, journeyRole: true },
     }),
   ]);
-  const categoryIds = [...new Set(levels.map((level) => level.categoryId))];
+  // R181 §8 — a PREPARATORY Level (R180 §6) teaches its own programme: the
+  // Subjects taught to the whole Category are the steps', not its.
+  const categoryIds = [
+    ...new Set(levels.filter((level) => level.journeyRole !== 'preparatory').map((level) => level.categoryId)),
+  ];
   const whole =
     categoryIds.length === 0
       ? []
@@ -81,7 +85,10 @@ export async function subjectsTaughtAt(
   const byCategory = new Map<string, string[]>();
   for (const row of whole) byCategory.set(row.categoryId, [...(byCategory.get(row.categoryId) ?? []), row.subjectId]);
   for (const level of levels) {
-    out.set(level.id, new Set(byCategory.get(level.categoryId) ?? []));
+    out.set(
+      level.id,
+      new Set(level.journeyRole === 'preparatory' ? [] : (byCategory.get(level.categoryId) ?? [])),
+    );
   }
   for (const row of own) {
     const set = out.get(row.levelId) ?? new Set<string>();
@@ -122,8 +129,14 @@ export async function levelsTeaching(
   ]);
   const ids = new Set(own.map((row) => row.levelId));
   if (whole.length > 0) {
+    // R181 §8 — the whole Category's Subject reaches its steps, never a
+    // preparatory programme (which teaches its own).
     const levels = await db.level.findMany({
-      where: { deletedAt: null, categoryId: { in: whole.map((row) => row.categoryId) } },
+      where: {
+        deletedAt: null,
+        categoryId: { in: whole.map((row) => row.categoryId) },
+        journeyRole: { not: 'preparatory' },
+      },
       select: { id: true },
     });
     for (const level of levels) ids.add(level.id);

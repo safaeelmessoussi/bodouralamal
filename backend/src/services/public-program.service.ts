@@ -34,6 +34,11 @@ export interface PublicProgramLevel {
   /** R180 §6 — `step` (the next rung) or `preparatory` (leads into the
    *  Category's first step; not required of those who enter there). */
   journeyRole: 'step' | 'preparatory';
+  /** R181 §6 — «مقرر الحفظ» in Hizb, the Owner's measure; `null` is «not stated». */
+  memorisationHizb: number | null;
+  /** R181 §7 — who the Level admits (§4.4b / R27), so the page can say «للفتيات
+   *  فقط» where a Category is: the programme's audience, not operational data. */
+  genderRestriction: 'any' | 'girls_only' | 'boys_only';
   subjects: PublicSubjectRef[];
   surahs: PublicSurahRef[];
 }
@@ -62,7 +67,17 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
 
   const levels = await prisma.level.findMany({
     where: { deletedAt: null, categoryId: { in: categories.map((c) => c.id) } },
-    select: { id: true, name: true, description: true, categoryId: true, minAge: true, maxAge: true, journeyRole: true },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      categoryId: true,
+      minAge: true,
+      maxAge: true,
+      journeyRole: true,
+      memorisationHizb: true,
+      genderRestriction: true,
+    },
     // Ordering is scoped within the parent Category (§2.2), same as the
     // admin taxonomy read.
     orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
@@ -100,6 +115,8 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
     subjectRowsByLevel.set(row.levelId, [...(subjectRowsByLevel.get(row.levelId) ?? []), row]);
   }
   for (const level of levels) {
+    // R181 §8 — a preparatory programme teaches its own Subjects only.
+    if (level.journeyRole === 'preparatory') continue;
     for (const row of categorySubjects) {
       if (row.categoryId !== level.categoryId) continue;
       const rows = subjectRowsByLevel.get(level.id) ?? [];
@@ -147,6 +164,8 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
       minAge: level.minAge,
       maxAge: level.maxAge,
       journeyRole: level.journeyRole,
+      memorisationHizb: level.memorisationHizb,
+      genderRestriction: level.genderRestriction,
       subjects: subjectsByLevel.get(level.id) ?? [],
       surahs: surahsByLevel.get(level.id) ?? [],
     });

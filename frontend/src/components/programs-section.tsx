@@ -63,11 +63,11 @@ export function ProgramsSection(): ReactNode {
   return (
     <section id="programs" className="section" aria-labelledby="programs-title">
       <Container>
-        <div className="section__head">
+        <div className="section__head programs__head">
           <h2 id="programs-title" className="section__title">
             {t('programs.title')}
           </h2>
-          <p className="lede">{t('programs.lede')}</p>
+          <p className="lede programs__lede">{t('programs.lede')}</p>
           {/* §10 — the practical way to everything, before any scrolling. */}
           {state.kind === 'ready' && state.categories.length > 0 ? (
             <div className="programs__actions">

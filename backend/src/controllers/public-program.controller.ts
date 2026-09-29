@@ -29,6 +29,9 @@ export function list(prisma: PrismaClient) {
           max_age: level.maxAge,
           // R180 §6 — what the Level is on the journey.
           journey_role: level.journeyRole,
+          // R181 §6/§7 — «مقرر الحفظ» in Hizb, and who the Level admits.
+          memorisation_hizb: level.memorisationHizb,
+          gender_restriction: level.genderRestriction,
           subjects: level.subjects.map((s) => ({ id: s.id, name: s.name })),
           surahs: level.surahs.map((s) => ({ id: s.id, name: s.name })),
         })),

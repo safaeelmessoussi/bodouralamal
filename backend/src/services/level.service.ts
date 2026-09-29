@@ -53,6 +53,7 @@ export interface CreateLevelInput {
   minAge?: number | null;
   maxAge?: number | null;
   journeyRole?: 'step' | 'preparatory';
+  memorisationHizb?: number | null;
   /**
    * ~~**Required (Revision 43.1).** Where المجموعة 1 sits.~~ **Removed by
    * Revision 66.** A Level belongs to a Category and to no Branch, and it no
@@ -100,6 +101,8 @@ export interface LevelSummary {
   minAge: number | null;
   maxAge: number | null;
   journeyRole: 'step' | 'preparatory';
+  /** R181 §6 — «مقرر الحفظ» in Hizb; `null` is «not stated». */
+  memorisationHizb: number | null;
   groupCount: number;
   subjectCount: number;
   /**
@@ -238,10 +241,11 @@ export async function listLevels(
       categoryId: true,
       genderRestriction: true,
       displayOrder: true,
-      // R180 §4/§6
+      // R180 §4/§6, R181 §6
       minAge: true,
       maxAge: true,
       journeyRole: true,
+      memorisationHizb: true,
       version: true,
       category: { select: { name: true } },
       subjects: { where: { deletedAt: null, subject: { deletedAt: null } }, select: { subjectId: true } },
@@ -277,6 +281,7 @@ export async function listLevels(
     minAge: row.minAge,
     maxAge: row.maxAge,
     journeyRole: row.journeyRole,
+    memorisationHizb: row.memorisationHizb,
     groupCount: row._count.administrativeGroups,
     subjectCount: row._count.subjects,
     subjectIds: row.subjects.map((link) => link.subjectId),
@@ -333,9 +338,28 @@ export async function updateLevel(
     minAge?: number | null;
     maxAge?: number | null;
     journeyRole?: 'step' | 'preparatory';
+    memorisationHizb?: number | null;
+    /**
+     * **R181 §1 — a Level may move to another Category** (the Owner,
+     * 2026-09-30; supersedes R66's refusal). What a move means: the Level's
+     * enrolments, groups, schedules and content go with it (they belong to
+     * the Level, and the Level now belongs elsewhere); its `display_order`,
+     * scoped to a Category (§2.2), is cleared so it lists last in the new one
+     * until dragged; the Subjects taught to the OLD Category whole stop
+     * reaching it and the new Category's start (R172 §1). Audited as such.
+     */
+    categoryId?: string;
   },
 ): Promise<Level> {
   assertCanManageReferenceData(actor);
+  const moving = data.categoryId !== undefined;
+  if (data.categoryId !== undefined) {
+    const category = await prisma.category.findFirst({
+      where: { id: data.categoryId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!category) throw new AppError('NOT_FOUND', 'no such category');
+  }
   // R180 §4 — an edit may send one end only: checked against the stored other.
   if (data.minAge !== undefined || data.maxAge !== undefined) {
     const stored = await prisma.level.findFirst({
@@ -348,13 +372,28 @@ export async function updateLevel(
     );
   }
 
-  return updateWithVersion<Level>({
+  const before = moving
+    ? await prisma.level.findFirst({ where: { id, deletedAt: null }, select: { categoryId: true } })
+    : null;
+  const updated = await updateWithVersion<Level>({
     delegate: prisma.level,
     id,
     expectedVersion,
     requireNotDeleted: true,
-    data: { ...data },
+    // A moved Level takes its place at the END of the new Category's order.
+    data: { ...data, ...(moving && before?.categoryId !== data.categoryId ? { displayOrder: null } : {}) },
   });
+  if (moving && before && before.categoryId !== updated.categoryId) {
+    await audit.write(prisma, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'level.move',
+      targetEntity: 'Level',
+      targetId: id,
+      detail: { from_category_id: before.categoryId, to_category_id: updated.categoryId },
+    });
+  }
+  return updated;
 }
 
 /**
@@ -555,6 +594,7 @@ export async function createLevel(
         minAge: input.minAge ?? null,
         maxAge: input.maxAge ?? null,
         journeyRole: input.journeyRole ?? 'step',
+        memorisationHizb: input.memorisationHizb ?? null,
         createdById: actor.userId,
       },
     });

@@ -28,6 +28,10 @@ export interface PublicProgramLevel {
   /** R180 §6 — `step` (the next rung) or `preparatory` (leads into the
    *  Category's first step; not required of those who enter there). */
   journey_role: 'step' | 'preparatory';
+  /** R181 §6 — «مقرر الحفظ» in Hizb, the Owner's measure; `null` is «not stated». */
+  memorisation_hizb: number | null;
+  /** R181 §7 — who the Level admits (§4.4b), so a Category can say «للفتيات فقط». */
+  gender_restriction: 'any' | 'girls_only' | 'boys_only';
   subjects: PublicSubject[];
   surahs: PublicSurah[];
 }

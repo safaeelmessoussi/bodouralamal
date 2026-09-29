@@ -1215,6 +1215,10 @@ model Level {
   /// literacy programme) that leads INTO the Category's first step and is not
   /// required of a learner who enters there.
   journeyRole LevelJourneyRole @default(step) @map("journey_role")
+  /// **R181 §6 — «مقرر الحفظ» in Hizb**, the Owner's measure of a Level's
+  /// memorisation curriculum (0–60; `level_memorisation_hizb_check`).
+  /// Informational: the Surah list stays what the platform reads.
+  memorisationHizb Int? @map("memorisation_hizb") @db.SmallInt
 
   // NOTE: the per-level passing grade is NOT a column here — §7 defines Level
   // as carrying only `name`, `gender_restriction`, and `display_order`, and

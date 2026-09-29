@@ -5,6 +5,28 @@
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
 
+**Revision 181 (Document Owner's review of the journey, 2026-09-30 — eleven points):** **BUILT.**
+
+**§1 — A LEVEL MAY MOVE TO ANOTHER CATEGORY** («تعديل المستوى» offers the Category; supersedes R66's refusal). Its enrolments, groups, schedules and content go with it; its `display_order` is cleared so it lists last in the new Category until dragged; the whole-Category Subjects follow the new Category; a Category that is not live is `404`; audited `level.move`.
+
+**§2 — NEUTRAL WORDS ON THE ROAD.** «ابدئي هنا» → «نقطة الانطلاق»: the first Category is for girls and boys alike.
+
+**§3 — EACH CATEGORY IS A STAGE, AND THE STAIRS ARE STEEP.** The Owner found the prints flat and the Category's name misplaced (beside a lower Level, reading as if the NEXT Levels belonged to it). Each Category is now one card — its name, ordinal, age range, audience and description ABOVE its Levels, kept in view while the stage scrolls — and inside it the Levels climb like stairs (26 px a step on a laptop, 20 on a phone) with a dashed riser and larger prints up each one; every stage stands a terrace above the last, so the whole road still climbs to the summit.
+
+**§4 — A TROPHY, AND THE ATTIRE.** The hut is replaced by a trophy with confetti and sparkles after each Category's last step; the summit shows the graduation attire (the Owner's image, «متى يحين دورُك؟») over layered ridges — what the road climbs toward.
+
+**§5 — THE WAYS IN, TOGETHER.** The direct entry and any preparatory programme stand in one «مداخل أخرى إلى هذه الفئة» block at the start of the stage, in the road's flow — each with its prints toward the first step — so nothing about them is scattered, and nothing is cut on a phone.
+
+**§6 — «مقرر الحفظ» IN HIZB.** `level.memorisation_hizb` (0–60, informational), on «المستويات»; a card says «مقرر الحفظ: 5 أحزاب» / «10 أحزاب» (Arabic's forms: حزب واحد، حزبان، N أحزاب، N حزبًا), the Surahs themselves in «التفاصيل»; a Level stating none says how many Surahs its list holds. The Owner's numbers (5 for the first two years of المرأة, 10 after) are hers to enter — never a catalogue in code.
+
+**§7 — WHO MAY ENTER.** `/programs` carries each Level's `gender_restriction` (the programme's audience, not operational data); a Category's audience is read off its steps — «للفتيات فقط» when every step is girls-only, «للبنات والبنين» otherwise — on its stage and on the direct entry, where a girls-only Category adds «لا يوجد حاليًا برنامج للفتيان بعد المرحلة الابتدائية».
+
+**§8 — A PREPARATORY PROGRAMME TEACHES ITS OWN SUBJECTS.** «فرصة أمل» must not show the whole-Category Subjects of المرأة: a `preparatory` Level no longer inherits them, in the public overview and in the curriculum policy alike (`subjectsTaughtAt`, `levelsTeaching`).
+
+**§10 — THE HEAD.** The lede reads as one line where it fits (the section head is no longer bound to the prose measure) and «عرض جميع البرامج» sits at the start, under the words, aligned with them.
+
+**§11 — A PHONE LISTS THE SUBJECTS** on every card, as a laptop does; the summary counts are gone.
+
 **Revision 180 (Document Owner decision of 2026-09-30 — «برامجنا التعليمية» redesigned as an educational journey):** **BUILT.**
 
 **§1 — ONE ROAD THAT CLIMBS.** The landing section is a journey: from the first Level of the youngest Category, step by step through that Category, to its graduation, on to the next Category's first Level, and so to the summit. Drawn as a panel that scrolls sideways (right to left, as the page reads) in which every stop stands higher than the one before — so the ascent is real on a laptop and on a phone, the page stays short, and there is no switchback. Categories are ordered by their derived start age when every Category with Levels states one, and by the Super Admin's own order on «الفئات» otherwise; a Category with no Levels is not on the road and is listed only in the text view.

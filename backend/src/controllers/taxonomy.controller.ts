@@ -211,6 +211,7 @@ export function createLevelHandler(prisma: PrismaClient) {
       ...(body.min_age !== undefined ? { minAge: body.min_age } : {}),
       ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
       ...(body.journey_role !== undefined ? { journeyRole: body.journey_role } : {}),
+      ...(body.memorisation_hizb !== undefined ? { memorisationHizb: body.memorisation_hizb } : {}),
     });
     res.status(201).json({ data: createdLevelDto(created.level) });
   };
@@ -229,6 +230,9 @@ export function updateLevelHandler(prisma: PrismaClient) {
       ...(body.min_age !== undefined ? { minAge: body.min_age } : {}),
       ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
       ...(body.journey_role !== undefined ? { journeyRole: body.journey_role } : {}),
+      ...(body.memorisation_hizb !== undefined ? { memorisationHizb: body.memorisation_hizb } : {}),
+      // R181 §1 — a move between Categories.
+      ...(body.category_id !== undefined ? { categoryId: body.category_id } : {}),
     });
     res.json({ data: levelCoreDto(updated) });
   };

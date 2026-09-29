@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/programs.js';
 import { t } from '../../i18n/index.js';
-import { ageWords, buildJourney, journeyOrder } from './journey-model.js';
-import { riseFor } from './programs-journey.js';
+import { ageWords, buildJourney, categoryAudience, journeyOrder, memorisationWords } from './journey-model.js';
 
 /**
  * **SRS Revision 180 — the journey is built from the catalogue, never named
@@ -17,6 +16,8 @@ const level = (id: string, over: Partial<PublicProgramLevel> = {}): PublicProgra
   min_age: null,
   max_age: null,
   journey_role: 'step',
+  memorisation_hizb: null,
+  gender_restriction: 'any',
   subjects: [],
   surahs: [],
   ...over,
@@ -102,12 +103,29 @@ describe('buildJourney — steps, graduations and the ways in', () => {
   });
 });
 
-describe('riseFor — the climb fits the panel', () => {
-  it('is a full step for a short catalogue and shrinks, never below 6 px, for a long one', () => {
-    expect(riseFor(5, false)).toBe(16);
-    expect(riseFor(29, false)).toBe(11);
-    expect(riseFor(200, false)).toBe(6);
-    expect(riseFor(5, true)).toBe(12);
-    expect(riseFor(29, true)).toBe(7);
+/** R181 §7 — the audience is read off the steps' own restriction, never a name. */
+describe('categoryAudience', () => {
+  it('girls only when every step is girls-only; everyone otherwise', () => {
+    expect(categoryAudience([level('a', { gender_restriction: 'girls_only' }), level('b', { gender_restriction: 'girls_only' })])).toBe('girls');
+    expect(categoryAudience([level('a', { gender_restriction: 'girls_only' }), level('b')])).toBe('any');
+    expect(categoryAudience([level('a', { gender_restriction: 'boys_only' })])).toBe('boys');
+    expect(categoryAudience([])).toBe('any');
+    const journey = buildJourney([category('teens', [level('t1', { gender_restriction: 'girls_only' })])]);
+    expect(journey.categories[0]!.audience).toBe('girls');
+  });
+});
+
+/** R181 §6 — «مقرر الحفظ» in Hizb, with Arabic's plural forms; Surahs otherwise. */
+describe('memorisationWords', () => {
+  it('says the Hizb count as stated, in the right form', () => {
+    expect(memorisationWords(level('x', { memorisation_hizb: 5 }), t)).toBe('مقرر الحفظ: 5 أحزاب');
+    expect(memorisationWords(level('x', { memorisation_hizb: 10 }), t)).toBe('مقرر الحفظ: 10 أحزاب');
+    expect(memorisationWords(level('x', { memorisation_hizb: 12 }), t)).toBe('مقرر الحفظ: 12 حزبًا');
+    expect(memorisationWords(level('x', { memorisation_hizb: 1 }), t)).toBe('مقرر الحفظ: حزب واحد');
+    expect(memorisationWords(level('x', { memorisation_hizb: 2 }), t)).toBe('مقرر الحفظ: حزبان');
+  });
+  it('falls back to how many Surahs the list holds, and says nothing when there are none', () => {
+    expect(memorisationWords(level('x', { surahs: [{ id: 1, name: 'الفاتحة' }, { id: 2, name: 'البقرة' }] }), t)).toBe('مقرر الحفظ: 2 سور');
+    expect(memorisationWords(level('x'), t)).toBeNull();
   });
 });

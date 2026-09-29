@@ -266,6 +266,13 @@ describe("Categories (§5.6 الفئات والمواد)", () => {
     });
     expect(marked.status).toBe(200);
     expect(marked.body.data).toMatchObject({ journey_role: "preparatory", min_age: 9, max_age: 12 });
+    // R181 §6 — «مقرر الحفظ» in Hizb, 0–60, `null` clears.
+    const markedVersion = (marked.body.data as unknown as Record<string, unknown>)["version"];
+    const hizb = await call("PATCH", `/admin/levels/${lastId}`, superAdmin, { version: markedVersion, memorisation_hizb: 10 });
+    expect(hizb.status).toBe(200);
+    expect(hizb.body.data).toMatchObject({ memorisation_hizb: 10 });
+    const hizbVersion = (hizb.body.data as unknown as Record<string, unknown>)["version"];
+    expect((await call("PATCH", `/admin/levels/${lastId}`, superAdmin, { version: hizbVersion, memorisation_hizb: 61 })).status).toBe(400);
     } finally {
       // Whatever the assertions said, the Category must be empty for the
       // deletion test that follows.
@@ -593,27 +600,33 @@ describe("Levels (§5.6 مستويات, TD-4.6b)", () => {
     expect(bad.status).toBe(400);
   });
 
-  it("will not move a Level between Categories", async () => {
-    // Absent from the schema on purpose: a move would re-file every enrolled
-    // student into a different educational stage, and §2.2 scopes display_order
-    // within the Category, so the ordering would stop meaning anything.
-    const row = await prisma.level.findUniqueOrThrow({
-      where: { id: levelId },
-    });
-    const other = await prisma.category.create({
-      data: { name: `${TAG} فئة أخرى` },
-    });
-    const res = await call("PATCH", `/admin/levels/${levelId}`, superAdmin, {
+  it("R181 §1 — moves a Level to another Category, at the end of its order, and back", async () => {
+    // R66 refused the key; the Owner wants the move (2026-09-30). A moved
+    // Level lists LAST in the new Category (its order was scoped to the old
+    // one), and a Category that is not live is `404`.
+    // A direct write bumps no version (`updateWithVersion` does); read it after.
+    await prisma.level.update({ where: { id: levelId }, data: { displayOrder: 1 } });
+    const row = await prisma.level.findUniqueOrThrow({ where: { id: levelId } });
+    const other = await prisma.category.create({ data: { name: `${TAG} فئة أخرى` } });
+    const moved = await call("PATCH", `/admin/levels/${levelId}`, superAdmin, {
       version: row.version,
       category_id: other.id,
     });
-    // The unknown key is rejected outright rather than quietly dropped, so a
-    // client believing it moved the Level finds out immediately.
-    expect(res.status).toBe(400);
-    expect(
-      (await prisma.level.findUniqueOrThrow({ where: { id: levelId } }))
-        .categoryId,
-    ).toBe(categoryId);
+    expect(moved.status).toBe(200);
+    expect(moved.body.data).toMatchObject({ category_id: other.id, display_order: null });
+    const movedVersion = (moved.body.data as unknown as Record<string, unknown>)["version"];
+    const nowhere = await call("PATCH", `/admin/levels/${levelId}`, superAdmin, {
+      version: movedVersion,
+      category_id: "00000000-0000-4000-8000-00000000dead",
+    });
+    expect(nowhere.status).toBe(404);
+    const back = await call("PATCH", `/admin/levels/${levelId}`, superAdmin, {
+      version: movedVersion,
+      category_id: categoryId,
+    });
+    expect(back.status).toBe(200);
+    expect((await prisma.level.findUniqueOrThrow({ where: { id: levelId } })).categoryId).toBe(categoryId);
+    expect(await prisma.auditLog.count({ where: { actionType: "level.move", targetId: levelId } })).toBe(2);
   });
 
   it("refuses deletion while a student is enrolled", async () => {

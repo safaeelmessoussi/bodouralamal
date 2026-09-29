@@ -33,6 +33,8 @@ interface Row {
     min_age: number | null;
     max_age: number | null;
     journey_role: string;
+    memorisation_hizb: number | null;
+    gender_restriction: string;
     subjects: { id: string; name: string }[];
     surahs: { id: number; name: string }[];
   }[];
@@ -58,6 +60,7 @@ async function clear(): Promise<void> {
   const levelIds = levels.map((l) => l.id);
   await prisma.levelSurah.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levelIds } } });
+  await prisma.categorySubject.deleteMany({ where: { categoryId: { in: categoryIds } } });
   await prisma.level.deleteMany({ where: { categoryId: { in: categoryIds } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -120,12 +123,15 @@ describe("GET /programs — public access", () => {
     // Category's range is derived from its Levels.
     expect(Object.keys(rows[0]!).sort()).toEqual(["description", "id", "levels", "max_age", "min_age", "name"].sort());
     expect(Object.keys(rows[0]!.levels[0]!).sort()).toEqual(
-      ["description", "id", "journey_role", "max_age", "min_age", "name", "subjects", "surahs"].sort(),
+      // R181 §6/§7 — the Hizb count and who the Level admits (its audience, not
+      // operational data) join the projection.
+      ["description", "gender_restriction", "id", "journey_role", "max_age", "memorisation_hizb", "min_age", "name", "subjects", "surahs"].sort(),
     );
+    // R181 §7 — `gender_restriction` is the programme's audience and travels;
+    // `genderRestriction` (the internal spelling) still must not.
     for (const leaked of [
       "enrollment_count",
       "enrollmentCount",
-      "gender_restriction",
       "genderRestriction",
       "display_order",
       "displayOrder",
@@ -197,6 +203,22 @@ describe("GET /programs — public access", () => {
       [9, 12, "preparatory"],
       [13, null, "step"],
     ]);
+  });
+
+  it("R181 §8 — a Subject taught to the whole Category reaches its steps, never a preparatory programme", async () => {
+    const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
+    const subject = await prisma.subject.create({ data: { name: `${TAG} مادة للفئة كلها` } });
+    await prisma.categorySubject.create({ data: { categoryId: category.id, subjectId: subject.id } });
+    await prisma.level.create({
+      data: { name: `${TAG} تمهيدي`, categoryId: category.id, displayOrder: 1, journeyRole: "preparatory", memorisationHizb: 5, genderRestriction: "girls_only" },
+    });
+    await prisma.level.create({ data: { name: `${TAG} أول`, categoryId: category.id, displayOrder: 2 } });
+    const row = mine((await call("/programs")).body)[0]!;
+    const [prep, first] = row.levels;
+    expect(prep!.subjects.map((s) => s.name)).toEqual([]);
+    expect(first!.subjects.map((s) => s.name)).toEqual([`${TAG} مادة للفئة كلها`]);
+    expect(prep).toMatchObject({ memorisation_hizb: 5, gender_restriction: "girls_only" });
+    expect(first).toMatchObject({ memorisation_hizb: null, gender_restriction: "any" });
   });
 
   it("renders a Level with no Subjects or Surahs honestly — an empty list, never invented", async () => {

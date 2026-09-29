@@ -43,6 +43,12 @@ export interface JourneyCategory {
   position: number;
   /** §5 — a learner may join here without the previous Category. */
   directEntry: boolean;
+  /**
+   * R181 §7 — who the Category's steps admit, from each Level's own
+   * `gender_restriction` (§4.4b, never a name): `girls` when every step is
+   * girls-only, `boys` when every step is boys-only, `any` otherwise.
+   */
+  audience: 'any' | 'girls' | 'boys';
 }
 
 export interface Journey {
@@ -83,8 +89,10 @@ export function buildJourney(categories: readonly PublicProgramCategory[]): Jour
       preparatory: source.levels.filter((level) => level.journey_role === 'preparatory'),
       position: index + 1,
       directEntry: index > 0,
+      audience: 'any',
     };
     const ordinary = source.levels.filter((level) => level.journey_role !== 'preparatory');
+    category.audience = categoryAudience(ordinary);
     category.steps = ordinary.map((level, at) => ({
       kind: 'step',
       level,
@@ -96,6 +104,40 @@ export function buildJourney(categories: readonly PublicProgramCategory[]): Jour
     steps.push(...category.steps);
   });
   return { categories: out, steps };
+}
+
+/** R181 §7 — see `JourneyCategory.audience`. Empty → `any`. */
+export function categoryAudience(levels: readonly PublicProgramLevel[]): 'any' | 'girls' | 'boys' {
+  if (levels.length > 0 && levels.every((level) => level.gender_restriction === 'girls_only')) return 'girls';
+  if (levels.length > 0 && levels.every((level) => level.gender_restriction === 'boys_only')) return 'boys';
+  return 'any';
+}
+
+/**
+ * R181 §6 — «مقرر الحفظ» as the Owner counts it: in Hizb where the Level
+ * states a count («5 أحزاب», «10 أحزاب», with Arabic's own plural forms), else
+ * as how many Surahs the list holds, else nothing.
+ */
+export function memorisationWords(level: PublicProgramLevel, t: (key: string) => string): string | null {
+  const hizb = level.memorisation_hizb;
+  if (hizb !== null) {
+    const words =
+      hizb === 1
+        ? t('programs.journey.hizbOne')
+        : hizb === 2
+          ? t('programs.journey.hizbTwo')
+          : hizb >= 3 && hizb <= 10
+            ? t('programs.journey.hizbFew').replace('{n}', String(hizb))
+            : t('programs.journey.hizbMany').replace('{n}', String(hizb));
+    return t('programs.journey.memorisation').replace('{amount}', words);
+  }
+  if (level.surahs.length > 0) {
+    return t('programs.journey.memorisation').replace(
+      '{amount}',
+      t('programs.journey.surahAmount').replace('{n}', String(level.surahs.length)),
+    );
+  }
+  return null;
 }
 
 /**

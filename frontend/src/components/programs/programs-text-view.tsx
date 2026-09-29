@@ -4,7 +4,7 @@ import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/p
 import { t } from '../../i18n/index.js';
 import { Badge } from '../ui/badge.js';
 import { Dialog } from '../ui/dialog.js';
-import { ageWords, levelAgeWords, type Journey } from './journey-model.js';
+import { ageWords, levelAgeWords, memorisationWords, type Journey } from './journey-model.js';
 
 /**
  * **«عرض جميع البرامج» — the same journey, to scan** (SRS Revision 180 §10).
@@ -56,10 +56,18 @@ export function ProgramsTextView({
               <h3 id={`programs-text-category-${category.id}`}>
                 {t('programs.textView.categoryOrdinal').replace('{n}', String(category.position))} {category.name}
               </h3>
-              {ageWords(category, t) ? <p className="programs-text__age">{ageWords(category, t)}</p> : null}
+              <p className="programs-text__age">
+                {[ageWords(category, t), t(`programs.journey.audience.${category.audience}`)]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
               {category.description ? <p className="muted">{category.description}</p> : null}
               {category.directEntry ? (
-                <p className="muted">{t('programs.journey.directEntry').replace('{category}', category.name)}</p>
+                // R181 §7 — and who may take that entrance (the steps' own restriction).
+                <p className="muted">
+                  {t('programs.journey.directEntry').replace('{category}', category.name)}{' '}
+                  {t(`programs.journey.audienceEntry.${category.audience}`)}.
+                </p>
               ) : null}
             </header>
             <ol className="programs-text__levels">
@@ -138,6 +146,8 @@ function LevelRow({
           ))}
         </p>
       ) : null}
+      {/* R181 §6 — the Owner's measure first, then the Surahs themselves. */}
+      {level.memorisation_hizb !== null ? <p className="muted">{memorisationWords(level, t)}</p> : null}
       {level.surahs.length > 0 ? (
         <p className="programs__row programs__row--text">
           <span className="programs__rowLabel">{t('programs.surahsLabel')}</span>

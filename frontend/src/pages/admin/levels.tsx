@@ -249,6 +249,9 @@ export function LevelsPage(): ReactNode {
             min_age: input.min_age ?? null,
             max_age: input.max_age ?? null,
             ...(input.journey_role !== undefined ? { journey_role: input.journey_role } : {}),
+            memorisation_hizb: input.memorisation_hizb ?? null,
+            // R181 §1 — sent only when she changed it: a move is an act.
+            ...(input.category_id !== existing.category_id ? { category_id: input.category_id } : {}),
           },
           accessToken,
         );
@@ -403,6 +406,13 @@ export function LevelsPage(): ReactNode {
  * Level could be moved. **Category likewise appears only when creating**, for
  * the stronger reason recorded on the page.
  */
+/** R181 §6 — a whole number of Hizb between 0 and 60, or nothing. Exported for the test. */
+export function hizbError(raw: string): string | null {
+  if (raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 60 ? null : t('admin.levels.hizbInvalid');
+}
+
 function LevelFormDialog({
   level,
   categories,
@@ -430,6 +440,7 @@ function LevelFormDialog({
     minAge: level?.min_age == null ? '' : String(level.min_age),
     maxAge: level?.max_age == null ? '' : String(level.max_age),
     journeyRole: (level?.journey_role ?? 'step') as JourneyRole,
+    hizb: level?.memorisation_hizb == null ? '' : String(level.memorisation_hizb),
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
@@ -437,8 +448,9 @@ function LevelFormDialog({
 
   const errors = {
     name: form.name.trim() === '' ? t('common.required') : null,
-    category: !level && form.categoryId === '' ? t('common.required') : null,
+    category: form.categoryId === '' ? t('common.required') : null,
     age: ageRangeError(form.minAge, form.maxAge),
+    hizb: hizbError(form.hizb),
   };
   const valid = Object.values(errors).every((e) => e === null);
 
@@ -455,6 +467,7 @@ function LevelFormDialog({
       min_age: form.minAge.trim() === '' ? null : Number(form.minAge),
       max_age: form.maxAge.trim() === '' ? null : Number(form.maxAge),
       journey_role: form.journeyRole,
+      memorisation_hizb: form.hizb.trim() === '' ? null : Number(form.hizb),
     });
   }
 
@@ -484,17 +497,18 @@ function LevelFormDialog({
           hint={t('admin.levels.descriptionHint')}
         />
 
-        {level ? null : (
-          <SelectField
-            label={t('admin.levels.colCategory')}
-            value={form.categoryId}
-            onChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
-            required
-            error={touched ? errors.category : null}
-            options={categories.map((c) => ({ value: c.id, label: c.name }))}
-            hint={t('admin.levels.categoryFixedHint')}
-          />
-        )}
+        {/* R181 §1 — offered on edit too: a Level may move to another Category
+            (it lists last there until dragged). R66's «fixed after creation»
+            is superseded at the Owner's word. */}
+        <SelectField
+          label={t('admin.levels.colCategory')}
+          value={form.categoryId}
+          onChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
+          required
+          error={touched ? errors.category : null}
+          options={categories.map((c) => ({ value: c.id, label: c.name }))}
+          hint={t(level ? 'admin.levels.categoryMoveHint' : 'admin.levels.categoryHint')}
+        />
 
         <SelectField
           label={t('admin.levels.colGender')}
@@ -523,6 +537,19 @@ function LevelFormDialog({
           max={120}
           step={1}
           error={touched ? errors.age : null}
+        />
+
+        {/* R181 §6 — «مقرر الحفظ» in Hizb, the Owner's measure; the Surahs
+            stay on «مقرر الحفظ». */}
+        <NumberField
+          label={t('admin.levels.hizbLabel')}
+          value={form.hizb}
+          onChange={(v) => setForm((f) => ({ ...f, hizb: v }))}
+          min={0}
+          max={60}
+          step={1}
+          hint={t('admin.levels.hizbHint')}
+          error={touched ? errors.hizb : null}
         />
 
         {/* R180 §6 — what the Level is on the journey, as data (§4.4b), never

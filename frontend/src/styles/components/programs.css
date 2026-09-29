@@ -11,10 +11,19 @@
   display: grid;
   gap: var(--space-4);
 }
+/* R181 §10 — the lede reads as one line where it fits, and the action sits at
+   the start, under the words, where the heading and the lede already align. */
+.programs__head {
+  max-width: none;
+}
+.programs__lede {
+  max-inline-size: none;
+  text-wrap: pretty;
+}
 .programs__actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   gap: var(--space-3);
   margin-block-start: var(--space-3);
 }
@@ -82,24 +91,16 @@
 
 /* ── The panel and the road ──────────────────────────────────────────────── */
 .journey__panel {
-  --journey-card-w: 15.5rem;
-  --journey-walk-w: 96px;
-  --journey-junction-w: 150px;
-  /* Room below the road for the ways in (§5, §6): they arrive from outside,
-     beneath the road, and the first Categories stand low. */
-  --journey-below: 7rem;
+  --journey-card-w: 16rem;
+  --journey-walk-w: 84px;
+  --journey-terrace: 30px;
   position: relative;
   overflow-x: auto;
   overflow-y: hidden;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
   /* Sky above, ground below: the road climbs from one into the other. */
-  background: linear-gradient(
-    180deg,
-    var(--color-surface-raised) 0%,
-    var(--color-primary-faint) 55%,
-    var(--color-primary-soft) 100%
-  );
+  background: linear-gradient(180deg, var(--color-surface-raised) 0%, var(--color-primary-faint) 100%);
   scroll-snap-type: x proximity;
   scroll-padding-inline: var(--space-6);
   scrollbar-width: thin;
@@ -109,44 +110,154 @@
   outline: none;
   box-shadow: var(--shadow-focus);
 }
-/* A far hillside, higher toward the summit (the left, where the road ends). */
-.journey__panel::before {
-  content: '';
+/* R181 §4 — the far country: three ridges rising toward the summit, and a sun. */
+.journey__backdropCell {
   position: absolute;
-  inset: auto 0 0 0;
-  height: 62%;
-  background: var(--color-primary-soft);
-  opacity: 0.9;
-  clip-path: polygon(0 12%, 12% 22%, 24% 10%, 40% 30%, 55% 26%, 72% 48%, 86% 44%, 100% 60%, 100% 100%, 0 100%);
+  inset: 0;
   pointer-events: none;
+}
+.journey__backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* The sun stands near the summit — the far end of the road (inline-end). */
+.journey__sun {
+  position: absolute;
+  inset-inline-end: 26rem;
+  inset-block-start: 2rem;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-accent-fill);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.journey__ridge {
+  fill: var(--color-primary);
+}
+.journey__ridge--far {
+  opacity: 0.07;
+}
+.journey__ridge--mid {
+  opacity: 0.11;
+}
+.journey__ridge--near {
+  opacity: 0.15;
 }
 .journey__road {
   position: relative;
   display: flex;
   align-items: flex-end;
+  gap: var(--space-5);
   width: max-content;
   margin: 0;
-  padding: var(--space-4) var(--space-6) var(--journey-below, 7rem);
+  padding: var(--space-5) var(--space-6);
   list-style: none;
 }
-.journey__cell {
+/* R181 §3 — each Category is a stage, one terrace above the last. */
+.journey__stage {
   flex: none;
-  padding-block-end: calc(var(--step, 0) * var(--journey-rise-px, 12px));
+  padding-block-end: calc(var(--terrace, 0) * var(--journey-terrace, 44px));
   scroll-snap-align: start;
 }
-.journey__cell--stop {
-  width: var(--journey-card-w, 15.5rem);
+.stage {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-surface-raised) 88%, transparent);
+  box-shadow: var(--shadow-sm);
 }
-.journey__cell--walk {
-  width: var(--journey-walk-w, 96px);
+/* The Category's name above its Levels, kept in view while the stage scrolls. */
+.stage__head {
+  position: sticky;
+  inset-inline-start: var(--space-6);
+  display: grid;
+  gap: 0.15rem;
+  justify-self: start;
+  max-width: 32rem;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-strong);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-sm);
 }
-.journey__cell--junction {
+.stage__ordinal {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+.stage__title {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-tight);
+  color: inherit;
+}
+.stage__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--font-size-xs);
+}
+.stage__age {
+  font-weight: 700;
+}
+.stage__audience {
+  opacity: 0.9;
+}
+.stage__text {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  opacity: 0.85;
+}
+.stage__body {
+  display: flex;
+  align-items: flex-end;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Inside a stage every step stands `--step × rise` higher than the last. */
+.stage__cell {
+  flex: none;
+  padding-block-end: calc(var(--step, 0) * var(--journey-rise-px, 30px));
+}
+.stage__cell--stop {
+  width: var(--journey-card-w, 16rem);
+}
+.stage__cell--walk,
+.stage__cell--start {
+  width: var(--journey-walk-w, 84px);
+}
+.stage__cell--prize {
+  width: 10rem;
+}
+.stage__cell--entrances {
+  margin-inline-end: var(--space-3);
+}
+.stage__start {
   position: relative;
-  width: var(--journey-junction-w, 150px);
 }
-.journey__cell--graduation,
-.journey__cell--summit {
-  width: 9rem;
+.stage__startFlag {
+  position: absolute;
+  inset-inline-end: 0;
+  top: -1.75rem;
+  margin: 0;
+  padding: 0.15rem var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-on-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* ── Stops ───────────────────────────────────────────────────────────────── */
@@ -158,7 +269,7 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-sm);
-  /* Its foot: the road passes under the card. */
+  /* Its foot: the step the card stands on. */
   border-block-end: 4px solid var(--color-primary);
 }
 .journey__cardKicker {
@@ -190,8 +301,7 @@
   color: var(--color-primary-strong);
 }
 .journey__cardAge {
-  margin: 0;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-accent);
 }
 .journey__cardText {
@@ -215,18 +325,32 @@
   min-block-size: var(--tap-min);
 }
 
-/* ── Walks: the shoe prints between stops ────────────────────────────────── */
+/* ── Walks: the shoe prints up each riser ────────────────────────────────── */
 .journey__walk {
+  position: relative;
   display: block;
 }
+.journey__riser {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.journey__riserLine {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 6 8;
+  opacity: 0.35;
+}
 .journey__prints {
+  position: relative;
   display: block;
   color: var(--color-primary-strong);
   fill: currentcolor;
-  opacity: 0.85;
+  opacity: 0.95;
 }
-.journey__prints--entry,
-.journey__prints--prep {
+.journey__prints--entry {
   color: var(--color-accent);
 }
 /* §9 — revealed print by print as a walk comes into view. Only once the
@@ -256,139 +380,102 @@
   }
 }
 
-/* ── Junctions: where a Category begins ──────────────────────────────────── */
-.journey__junction {
-  display: grid;
-  gap: var(--space-2);
+/* ── Entrances: the ways in from outside the road (R181 §5) ──────────────── */
+.entrances {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  padding-block-start: var(--space-6);
+  border: 1.5px dashed var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-accent-soft) 55%, var(--color-surface-raised));
+  position: relative;
 }
-.journey__sign {
+.entrances__title {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-start: var(--space-3);
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-accent);
+  white-space: nowrap;
+}
+/* Each way in: its words or its card, then its prints toward the first step
+   (which stands to the left, where the road continues). */
+.entrances__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2);
+  max-width: 17rem;
+}
+.entrances__words {
   display: grid;
   gap: 0.15rem;
-  padding: var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--color-primary-strong);
-  color: var(--color-on-primary);
-  box-shadow: var(--shadow-sm);
 }
-.journey__signCategory {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.entrances__lead {
   margin: 0;
-  font-family: var(--font-family-display);
-  font-size: var(--font-size-sm);
   font-weight: 700;
-}
-.journey__signOrdinal {
-  display: inline-grid;
-  place-items: center;
-  inline-size: 1.6rem;
-  block-size: 1.6rem;
-  border-radius: var(--radius-full);
-  background: var(--color-on-primary);
   color: var(--color-primary-strong);
-  font-size: var(--font-size-xs);
 }
-.journey__signAge {
+.entrances__note {
   margin: 0;
   font-size: var(--font-size-xs);
-  opacity: 0.9;
-}
-.journey__signText {
-  margin: 0;
-  font-size: var(--font-size-xs);
-  opacity: 0.85;
-}
-.journey__start {
-  justify-self: start;
-  margin: 0;
-  padding: 0.15rem var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--color-accent);
-  color: var(--color-on-primary);
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-}
-/* The ways in that come from OUTSIDE the road (§5 direct entry, §6 the
-   preparatory programme) hang below the road line — the cell's own foot —
-   and the road climbs past them. */
-.journey__entry,
-.journey__prep {
-  position: absolute;
-  inset-inline-end: 0;
-  top: calc(100% - var(--step, 0) * var(--journey-rise-px, 12px));
-  width: var(--journey-junction-w, 150px);
-}
-/* The words, then the prints toward the first step (which stands to the left). */
-.journey__entry {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: start;
-  gap: var(--space-1);
-}
-.journey__entryText {
-  margin: 0;
-  padding-block-start: var(--space-2);
-  font-size: var(--font-size-xs);
-  color: var(--color-accent);
-  font-weight: 600;
-  text-wrap: balance;
-}
-.journey__entryAge {
-  display: block;
-  font-weight: 400;
   color: var(--color-text-secondary);
-}
-/* A preparatory programme stands beside the direct entry, one column over. */
-.journey__prep {
-  inset-inline-end: calc(var(--journey-junction-w, 150px) + var(--space-3));
-  width: var(--journey-card-w, 15.5rem);
 }
 .journey__card--prep {
   border-block-end-color: var(--color-accent);
 }
 
-/* ── Milestones: the graduation hut, and the summit ──────────────────────── */
+/* ── Milestones: the trophy, and the summit ──────────────────────────────── */
 .journey__milestone {
   display: grid;
   justify-items: center;
   gap: var(--space-1);
   text-align: center;
 }
-.journey__hut,
-.journey__peak {
+.journey__trophy {
   display: block;
 }
-.journey__hutRoof {
-  fill: var(--color-accent);
-}
-.journey__hutWall {
-  fill: var(--color-surface-raised);
-  stroke: var(--color-primary-strong);
-  stroke-width: 2;
-}
-.journey__hutDoor {
-  fill: var(--color-primary-strong);
-}
-.journey__cap {
-  fill: var(--color-primary-strong);
-}
-.journey__capBrim {
-  fill: none;
-  stroke: var(--color-primary-strong);
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-.journey__peakRock {
-  fill: var(--color-primary);
-}
-.journey__peakSnow {
-  fill: var(--color-surface-raised);
-}
-.journey__flag {
-  fill: var(--color-accent);
+.journey__trophyCup {
+  fill: var(--color-accent-fill);
   stroke: var(--color-accent);
   stroke-width: 2;
+}
+.journey__trophyShine {
+  fill: var(--color-accent-fill-hover);
+  opacity: 0.9;
+}
+.journey__trophyHandle {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.journey__trophyStar {
+  fill: var(--color-surface-raised);
+  stroke: var(--color-accent);
+  stroke-width: 1;
+}
+.journey__trophyStem,
+.journey__trophyBase,
+.journey__trophyFoot {
+  fill: var(--color-primary-strong);
+}
+.journey__trophyBase {
+  fill: var(--color-primary);
+}
+.journey__confetti--a {
+  fill: var(--color-accent);
+}
+.journey__confetti--b {
+  fill: var(--color-primary);
+}
+.journey__sparkle {
+  fill: var(--color-accent-fill);
 }
 .journey__milestoneTitle {
   margin: 0;
@@ -402,8 +489,39 @@
   color: var(--color-text-secondary);
   text-wrap: balance;
 }
-.journey__milestone--summit .journey__milestoneTitle {
+/* The summit: the attire (R181 §4, the Owner's image) the road climbs toward. */
+.journey__stage--summit {
+  align-self: flex-end;
+}
+.journey__summit {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  width: 19rem;
+  text-align: center;
+}
+.journey__attire {
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
+}
+.journey__attire img {
+  display: block;
+  width: 17rem;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+.journey__attireCaption {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-family-display);
+  font-weight: 700;
   color: var(--color-accent);
+}
+.journey__summit .journey__milestoneTitle {
+  color: var(--color-accent);
+  font-size: var(--font-size-md);
 }
 
 /* ── The text view (§10): the same data, to scan ─────────────────────────── */
@@ -490,31 +608,28 @@
 /* ── Narrow screens (§11) ────────────────────────────────────────────────── */
 @media (max-width: 44rem) {
   .journey__panel {
-    --journey-card-w: 13rem;
-    --journey-walk-w: 72px;
-    --journey-junction-w: 128px;
-    --journey-below: 7rem;
+    --journey-card-w: 14rem;
+    --journey-walk-w: 64px;
+    --journey-terrace: 22px;
   }
   .journey__road {
+    gap: var(--space-4);
     padding-inline: var(--space-4);
   }
-  /* A phone's card says the essentials — the Subjects and the Surahs are one
-     line each; the text view has the lists. */
-  .journey__cardRow--wide {
-    display: none;
+  .stage {
+    padding: var(--space-3);
   }
-  .journey__cardText {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 4;
-    overflow: hidden;
+  .stage__head {
+    inset-inline-start: var(--space-4);
+    max-width: 16rem;
   }
-  .journey__prep {
-    width: var(--journey-card-w, 15.5rem);
+  .entrances__item {
+    max-width: 14rem;
   }
-}
-@media (min-width: 44.01rem) {
-  .journey__cardSummary {
-    display: none;
+  .journey__summit {
+    width: 15rem;
+  }
+  .journey__attire img {
+    width: 14rem;
   }
 }

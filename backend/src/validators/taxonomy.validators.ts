@@ -94,6 +94,8 @@ export const createLevelSchema = z
     min_age: levelAge.optional(),
     max_age: levelAge.optional(),
     journey_role: journeyRole.optional(),
+    // R181 §6 — «مقرر الحفظ» in Hizb (0–60); `null` is «not stated».
+    memorisation_hizb: z.number().int().min(0).max(60).nullable().optional(),
   })
   // **`.strict()`, and for the reason the update schema already is:** stripping
   // `branch_id` would let a client send one, receive `201`, and believe a group
@@ -102,25 +104,26 @@ export const createLevelSchema = z
   .strict();
 
 /**
- * `category_id` is absent deliberately — a Level does not move between
- * Categories. The service docstring records why.
+ * **`category_id` — a Level MAY move between Categories since R181 §1** (the
+ * Owner, 2026-09-30: «I want to be able to edit it»). R66 had refused the key
+ * outright; the service records what a move means (`updateLevel`).
  *
- * **`.strict()`, and only here.** Stripping the unknown key would let a client
- * send `category_id`, receive `200`, and believe the Level moved. The field does
- * not exist on this operation at all, so refusing it loudly is the honest
- * answer; strictness is not applied to the other schemas, where an unknown key
- * is a client's own extra baggage rather than a request the server appears to
- * have honoured.
+ * **`.strict()`, and only here.** An unknown key is refused rather than
+ * dropped, so a client never believes a field it sent was honoured; strictness
+ * is not applied to the other schemas, where an unknown key is a client's own
+ * extra baggage rather than a request the server appears to have honoured.
  */
 export const updateLevelSchema = z
   .object({
     version,
     name: entityName.optional(),
     description: entityDescription.optional(),
+    category_id: uuid.optional(),
     gender_restriction: genderRestriction.optional(),
     display_order: displayOrder.optional(),
     min_age: levelAge.optional(),
     max_age: levelAge.optional(),
     journey_role: journeyRole.optional(),
+    memorisation_hizb: z.number().int().min(0).max(60).nullable().optional(),
   })
   .strict();
