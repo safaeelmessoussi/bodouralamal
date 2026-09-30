@@ -106,9 +106,7 @@ const catalogue: PublicProgramCategory[] = [
   },
 ];
 const journey = buildJourney(catalogue);
-const html = renderToStaticMarkup(
-  <ProgramsJourney journey={journey} onDetails={() => undefined} />,
-);
+const html = renderToStaticMarkup(<ProgramsJourney journey={journey} />);
 
 describe('ProgramsJourney', () => {
   it("is a stage per Category, each bearing the Category's name ABOVE its Levels, each a terrace higher", () => {
@@ -124,7 +122,8 @@ describe('ProgramsJourney', () => {
     expect(html).not.toContain('stage__ordinal');
     expect(html).toContain('--terrace:0');
     expect(html).toContain('--terrace:1');
-    expect(html).toContain('journey__stage journey__stage--summit');
+    // R185 §3 — no summit stage of its own: the road ends inside the last Category.
+    expect(html).not.toContain('journey__stage--summit');
   });
 
   it('walks every step in order, right to left, each standing one higher than the last', () => {
@@ -142,7 +141,7 @@ describe('ProgramsJourney', () => {
     expect(html.split('class="journey__arrowLine"').length - 1).toBe(5);
     expect(html.split('class="journey__chevron"').length - 1).toBeGreaterThanOrEqual(4);
     expect(html.split('stage__cell stage__cell--prize').length - 1).toBe(2);
-    expect(html.split('journey__trophy"').length - 1).toBe(2);
+    expect(html.split('journey__trophy"').length - 1).toBe(1); // R185 §3 — the last Category holds the attire instead
     expect(html).toContain('إتمام فئة الطفل');
     expect(html.indexOf('براعم الأمل')).toBeLessThan(html.indexOf('إتمام فئة الطفل'));
     expect(html.indexOf('إتمام فئة الطفل')).toBeLessThan(html.indexOf('وميض الأمل'));
@@ -164,7 +163,6 @@ describe('ProgramsJourney', () => {
     expect(block).toContain('فرصة أمل');
     expect(block).toContain('محاربة الأمية');
     expect(block).toContain('يقود إلى «وميض الأمل»');
-    expect(block).toContain('class="entrances__more"');
     expect(block).toContain('journey__arrow journey__arrow--entry');
     expect(block).toContain('bodour-arrowhead-accent');
     // The first Category has no entrances block, only the neutral start marker.
@@ -191,13 +189,17 @@ describe('ProgramsJourney', () => {
     expect(html).not.toContain('المستوى 2');
     // …the preparatory programme alone keeps its role kicker (a column, R180 §6).
     expect(html.split('journey__cardOrdinal journey__cardOrdinal--prep').length - 1).toBe(1);
-    // The Surahs under it — whole, with «…» offered only past six (the phone clamps).
+    // The Surahs under it — all in the markup; the stylesheet clamps the lines
+    // and «…» / «عرض أقل» are offered by measurement in a browser (R185 §2), so
+    // a static render carries neither.
     const w1 = html.slice(html.indexOf('id="journey-level-w1"'), html.indexOf('إتمام فئة المرأة'));
     expect(w1).toContain('سورة 1، سورة 2');
     expect(w1).toContain('سورة 8');
-    expect(w1).toContain('class="journey__surahsMore"');
+    expect(html).not.toContain('journey__surahsMore');
     expect(k1).toContain('الفاتحة');
-    expect(k1).not.toContain('journey__surahsMore');
+    // R185 §4 — no «التفاصيل»: everything a reader can know is on the card.
+    expect(html).not.toContain('التفاصيل');
+    expect(html).not.toContain('journey__more');
   });
 
   it('names each Category with its derived range and its own description — no audience words (R184 §2) — its shared Subjects in an annexe UNDER the card (R182 §1, R183 §2), and keeps an empty Category off the road', () => {
@@ -234,12 +236,33 @@ describe('ProgramsJourney', () => {
     expect(k1.indexOf('دورات موسمية:')).toBeLessThan(k1.indexOf('مادة قصيرة بالسور'));
   });
 
-  it('ends at the summit with the attire the Owner gave — its caption, no title above it (R182 §4) — and a layered backdrop', () => {
+  it('ends inside the last Category: «إتمام الفئة» without «وتواصل الرحلة», then the attire (R185 §1/§3) — and a layered backdrop', () => {
     expect(html).toContain('src="/journey/graduation-attire.jpg"');
+    expect(html.split('src="/journey/graduation-attire.jpg"').length - 1).toBe(1);
     expect(html).toContain('متى يحين دورُك؟');
     expect(html).not.toContain('>قمة الرحلة<');
+    // The first Category's graduation continues the road; the last one's ends it.
+    expect(html).toContain('تُتمّ المتعلّمة برنامج الطفل وتواصل الرحلة.');
+    expect(html).toContain('تُتمّ المتعلّمة برنامج المرأة.');
+    expect(html).not.toContain('برنامج المرأة وتواصل');
+    // The attire stands UNDER the words, in the trophy's cell, on the last stage only.
+    const women = html.slice(html.indexOf('data-journey-category="women"'));
+    const summitCell = women.slice(women.indexOf('stage__cell--prize stage__cell--summit'));
+    expect(summitCell).toContain('journey__milestone journey__milestone--summit');
+    expect(summitCell.indexOf('تُتمّ المتعلّمة برنامج المرأة.')).toBeLessThan(
+      summitCell.indexOf('journey__attire'),
+    );
+    expect(summitCell).not.toContain('journey__trophy"');
+    expect(html.split('stage__cell--summit').length - 1).toBe(1);
+    expect(html.split('journey__trophy"').length - 1).toBe(1); // the first Category keeps its trophy
     expect(html).toContain('journey__backdrop');
     expect(html.split('journey__ridge ').length - 1).toBe(3);
+  });
+
+  it('offers the full-screen show beside the arrows (R185 §5), closed until asked', () => {
+    expect(html).toContain('journey__show');
+    expect(html).toContain('عرض بملء الشاشة');
+    expect(html).not.toContain('class="show ');
   });
 
   it('opens on the adult Category (R182 §7) — the effect reads the marker, never a name', () => {

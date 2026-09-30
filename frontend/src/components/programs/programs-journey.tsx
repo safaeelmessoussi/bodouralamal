@@ -2,20 +2,19 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import type { PublicProgramLevel } from '../../adapters/programs.js';
 import { t } from '../../i18n/index.js';
-import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
 import { Icon } from '../ui/icon.js';
 import { ArrowheadDefs, DirectionArrow } from './direction-arrow.js';
 import {
   ageWords,
   levelAgeWords,
-  memorisationWords,
-  programmeSubjects,
-  seasonalSubjects,
   type Journey,
   type JourneyCategory,
   type JourneyStep,
 } from './journey-model.js';
+import { LevelCard } from './level-card.js';
+import { ProgramsShow } from './programs-show.js';
+import { SummitFigure } from './summit-figure.js';
 
 /**
  * **The walked journey** (SRS Revision 180 §1–§2, §5–§9, §11; reshaped by
@@ -42,16 +41,11 @@ import {
  * programme (§6) — stand together in one small «مداخل أخرى» note at the
  * start of the stage (R182 §2), in the road's flow.
  */
-export function ProgramsJourney({
-  journey,
-  onDetails,
-}: {
-  journey: Journey;
-  /** Open the text view at this Level (R180 §10). */
-  onDetails: (levelId: string | null) => void;
-}): ReactNode {
+export function ProgramsJourney({ journey }: { journey: Journey }): ReactNode {
   const scroller = useRef<HTMLDivElement | null>(null);
   const rise = useRise();
+  // R185 §5 — the full-screen show, opened from the road's own controls.
+  const [showOpen, setShowOpen] = useState(false);
   const [animated, setAnimated] = useState(false);
 
   // §9 — the walk is revealed as the reader scrolls the panel; none of it is
@@ -173,8 +167,23 @@ export function ProgramsJourney({
           >
             <Icon name="chevron" size={16} />
           </Button>
+          {/* R185 §5 — the journey as a full-screen show. The browser's full
+              screen is asked for HERE, inside the tap (it is refused
+              otherwise); the overlay covers the page either way. */}
+          <Button
+            variant="secondary"
+            className="journey__show"
+            icon="expand"
+            onClick={() => {
+              setShowOpen(true);
+              void document.documentElement.requestFullscreen?.().catch(() => undefined);
+            }}
+          >
+            {t('programs.show.open')}
+          </Button>
         </div>
       </nav>
+      <ProgramsShow journey={journey} open={showOpen} onClose={() => setShowOpen(false)} />
 
       <div
         ref={scroller}
@@ -192,17 +201,9 @@ export function ProgramsJourney({
               style={{ ['--terrace' as string]: index }}
               data-journey-category={category.id}
             >
-              <Stage category={category} first={index === 0} rise={rise} onDetails={onDetails} />
+              <Stage category={category} first={index === 0} rise={rise} />
             </li>
           ))}
-          {journey.categories.length > 0 ? (
-            <li
-              className="journey__stage journey__stage--summit"
-              style={{ ['--terrace' as string]: journey.categories.length }}
-            >
-              <Summit />
-            </li>
-          ) : null}
         </ol>
       </div>
     </div>
@@ -215,12 +216,10 @@ function Stage({
   category,
   first,
   rise,
-  onDetails,
 }: {
   category: JourneyCategory;
   first: boolean;
   rise: number;
-  onDetails: (levelId: string | null) => void;
 }): ReactNode {
   const ages = ageWords(category, t);
   const entrances = !first || category.preparatory.length > 0;
@@ -279,11 +278,11 @@ function Stage({
         ) : null}
         {entrances ? (
           <li className="stage__cell stage__cell--entrances" style={{ ['--step' as string]: 0 }}>
-            <Entrances category={category} first={first} rise={rise} onDetails={onDetails} />
+            <Entrances category={category} first={first} rise={rise} />
           </li>
         ) : null}
         {category.steps.map((step, at) => (
-          <StepCell key={step.level.id} step={step} at={at} rise={rise} onDetails={onDetails} />
+          <StepCell key={step.level.id} step={step} at={at} rise={rise} />
         ))}
         <li
           className="stage__cell stage__cell--walk"
@@ -293,8 +292,10 @@ function Stage({
         >
           <Walk rise={rise} />
         </li>
+        {/* R185 §3 — on the last Category the road ends: «إتمام الفئة» and
+            the attire itself, in place of the trophy. */}
         <li
-          className="stage__cell stage__cell--prize"
+          className={`stage__cell stage__cell--prize${category.last ? ' stage__cell--summit' : ''}`}
           style={{ ['--step' as string]: category.steps.length }}
         >
           <Prize category={category} />
@@ -304,17 +305,7 @@ function Stage({
   );
 }
 
-function StepCell({
-  step,
-  at,
-  rise,
-  onDetails,
-}: {
-  step: JourneyStep;
-  at: number;
-  rise: number;
-  onDetails: (levelId: string | null) => void;
-}): ReactNode {
+function StepCell({ step, at, rise }: { step: JourneyStep; at: number; rise: number }): ReactNode {
   return (
     <>
       {at > 0 ? (
@@ -323,7 +314,7 @@ function StepCell({
         </li>
       ) : null}
       <li className="stage__cell stage__cell--stop" style={{ ['--step' as string]: at }}>
-        <StepCard step={step} onDetails={onDetails} />
+        <LevelCard level={step.level} />
       </li>
     </>
   );
@@ -358,12 +349,10 @@ function Entrances({
   category,
   first,
   rise,
-  onDetails,
 }: {
   category: JourneyCategory;
   first: boolean;
   rise: number;
-  onDetails: (levelId: string | null) => void;
 }): ReactNode {
   const firstStep = category.steps[0]?.level.name ?? category.name;
   return (
@@ -389,7 +378,7 @@ function Entrances({
           </p>
         ) : null}
         {category.preparatory.map((level) => (
-          <PreparatoryNote key={level.id} level={level} category={category} onDetails={onDetails} />
+          <PreparatoryNote key={level.id} level={level} category={category} />
         ))}
       </div>
       <DirectionArrow
@@ -406,15 +395,13 @@ function Entrances({
 }
 
 /** R182 §2 — the preparatory programme as a note: its name, its ages, what
- *  it is, and «التفاصيل» for the rest (the text view carries it whole). */
+ *  it is and what it leads to (the text view carries it whole). */
 function PreparatoryNote({
   level,
   category,
-  onDetails,
 }: {
   level: PublicProgramLevel;
   category: JourneyCategory;
-  onDetails: (levelId: string | null) => void;
 }): ReactNode {
   const ages = levelAgeWords(level, t);
   return (
@@ -431,95 +418,31 @@ function PreparatoryNote({
         {t('programs.journey.preparatoryLeadsTo').replace(
           '{step}',
           category.steps[0]?.level.name ?? category.name,
-        )}{' '}
-        <button type="button" className="entrances__more" onClick={() => onDetails(level.id)}>
-          {t('programs.journey.details')}
-        </button>
+        )}
       </span>
     </p>
   );
 }
 
-function StepCard({
-  step,
-  onDetails,
-}: {
-  step: JourneyStep;
-  onDetails: (levelId: string | null) => void;
-}): ReactNode {
-  const { level } = step;
-  const ages = levelAgeWords(level, t);
-  const memorisation = memorisationWords(level, t);
-  return (
-    <article
-      className="journey__card"
-      id={`journey-level-${level.id}`}
-      aria-labelledby={`journey-level-${level.id}-title`}
-    >
-      {/* R184 §1 — the Level's NAME is the card's title, in the pill that
-          «المستوى N» wore: nothing numbered by the page; «المستوى 1» or
-          «السنة 1» is the Super Admin's to put in the description. */}
-      {ages ? (
-        <p className="journey__cardKicker">
-          <span className="journey__cardAge">{ages}</span>
-        </p>
-      ) : null}
-      <h4 className="journey__cardTitle" id={`journey-level-${level.id}-title`}>
-        {level.name}
-      </h4>
-      {level.description ? <p className="journey__cardText">{level.description}</p> : null}
-      {programmeSubjects(level.subjects).length > 0 ? (
-        <p className="journey__cardRow">
-          <span className="journey__cardRowLabel">{t('programs.subjectsLabel')}</span>
-          {programmeSubjects(level.subjects).map((subject) => (
-            <Badge key={subject.id}>{subject.name}</Badge>
-          ))}
-        </p>
-      ) : null}
-      {/* R183 §1 — a seasonal course the Level carries, apart from its programme. */}
-      {seasonalSubjects(level.subjects).length > 0 ? (
-        <p className="journey__cardRow journey__cardRow--seasonal">
-          <span className="journey__cardRowLabel">{t('programs.seasonalLabel')}</span>
-          {seasonalSubjects(level.subjects).map((subject) => (
-            <Badge key={subject.id}>{subject.name}</Badge>
-          ))}
-        </p>
-      ) : null}
-      {memorisation ? <p className="journey__cardMemo">{memorisation}</p> : null}
-      <SurahList level={level} />
-      <Button variant="ghost" className="journey__more" onClick={() => onDetails(level.id)}>
-        {t('programs.journey.details')}
-      </Button>
-    </article>
-  );
-}
-
-/**
- * R182 §3 — the Level's Surahs under «حفظ وتفسير: N أحزاب», whole on a
- * laptop; on a phone the first lines, then «…» which opens the rest.
- */
-function SurahList({ level }: { level: PublicProgramLevel }): ReactNode {
-  const [expanded, setExpanded] = useState(false);
-  if (level.surahs.length === 0) return null;
-  return (
-    <p className={`journey__surahs${expanded ? ' is-expanded' : ''}`}>
-      <span className="journey__surahsText">{level.surahs.map((s) => s.name).join('، ')}</span>
-      {!expanded && level.surahs.length > 6 ? (
-        <button
-          type="button"
-          className="journey__surahsMore"
-          aria-label={t('programs.journey.surahsMore')}
-          onClick={() => setExpanded(true)}
-        >
-          …
-        </button>
-      ) : null}
-    </p>
-  );
-}
-
-/** §8 / R181 §4 — the trophy after a Category's last step. */
+/** §8 / R181 §4 — the trophy after a Category's last step; on the LAST
+ *  Category (R185 §1/§3) the words end the road («…برنامج المرأة.», no
+ *  «وتواصل الرحلة») and the attire stands under them in the trophy's place. */
 function Prize({ category }: { category: JourneyCategory }): ReactNode {
+  if (category.last) {
+    return (
+      <div
+        className="journey__milestone journey__milestone--summit"
+        role="group"
+        aria-label={t('programs.journey.graduationLabel').replace('{category}', category.name)}
+      >
+        <p className="journey__milestoneTitle">{t('programs.journey.graduation')}</p>
+        <p className="journey__milestoneText">
+          {t('programs.journey.graduationTextLast').replace('{category}', category.name)}
+        </p>
+        <SummitFigure />
+      </div>
+    );
+  }
   return (
     <div
       className="journey__milestone"
@@ -585,28 +508,6 @@ function Prize({ category }: { category: JourneyCategory }): ReactNode {
       <p className="journey__milestoneText">
         {t('programs.journey.graduationText').replace('{category}', category.name)}
       </p>
-    </div>
-  );
-}
-
-/** The highest point: the graduation attire the whole road climbs toward. */
-function Summit(): ReactNode {
-  return (
-    <div className="journey__summit" role="group" aria-label={t('programs.journey.summit')}>
-      <figure className="journey__attire">
-        <img
-          src="/journey/graduation-attire.jpg"
-          srcSet="/journey/graduation-attire.jpg 720w, /journey/graduation-attire-2x.jpg 1200w"
-          sizes="(max-width: 44rem) 14rem, 17rem"
-          alt={t('programs.journey.attireAlt')}
-          loading="lazy"
-          decoding="async"
-        />
-        <figcaption className="journey__attireCaption">
-          {t('programs.journey.summitQuestion')}
-        </figcaption>
-      </figure>
-      <p className="journey__milestoneText">{t('programs.journey.summitText')}</p>
     </div>
   );
 }

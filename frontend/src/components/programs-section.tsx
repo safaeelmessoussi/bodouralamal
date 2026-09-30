@@ -85,7 +85,7 @@ export function ProgramsSection(): ReactNode {
             <p className="muted">{t('programs.empty')}</p>
           ) : null}
           {state.kind === 'ready' && journey.categories.length > 0 ? (
-            <ProgramsJourney journey={journey} onDetails={openText} />
+            <ProgramsJourney journey={journey} />
           ) : null}
         </div>
 

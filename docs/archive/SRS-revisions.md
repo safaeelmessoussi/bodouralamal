@@ -1,9 +1,21 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–184 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–185 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 185 (Document Owner's fifth review of the journey, 2026-09-30 — six points):** **BUILT.**
+
+**§1 — THE LAST CATEGORY ENDS THE ROAD.** Its graduation reads «بعد آخر مستوى، تُتمّ المتعلّمة برنامج {category}.» — no «وتواصل الرحلة» (the earlier Categories keep it).
+
+**§2 — A SURAH LIST IN A FEW LINES.** A card's Surahs show their first four lines (two on a phone, six on the full-screen show), then «…», which opens the whole list, and «عرض أقل», which folds it again. «…» is offered only when the clamp hides something (measured), never on a short list.
+
+**§3 — THE SUMMIT INSIDE THE LAST STAGE.** The separate summit stage is gone: on the last Category, «إتمام الفئة» and its words stand where the trophy stood, and the attire («متى يحين دورُك؟», «في نهاية الرحلة…») under them, in the same cell; the road ends there.
+
+**§4 — NO «التفاصيل».** Everything a reader can know about a Level is on its card; the buttons on the cards and on the preparatory note are gone. «عرض جميع البرامج» (the text view) stays, from the section's head.
+
+**§5 — THE JOURNEY AS A FULL-SCREEN SHOW.** «عرض بملء الشاشة», beside the road's arrows, asks the browser for full screen and covers the page: one screen with the Categories as cards (name, ages, description, shared and seasonal Subjects); choosing one zooms its card and shows its first Level's card; a tap anywhere shows the next, to the last (dots mark the way; «انقري للمتابعة» for a keyboard); then the graduation — confetti filling the screen over «إتمام الفئة», the words and the attire; then, by itself, «متى يحين دورُك؟» large over everything, the rest blurred; a tap returns to the Categories. Escape, «×» or leaving full screen close it; the page behind does not scroll. Under `prefers-reduced-motion` nothing zooms or falls and nothing advances by itself. The show reads the road's own model and card (`level-card.tsx`, `show-model.ts`), so the two never differ. Harness `verify-programs-show.sh` (12/12 at 1366 and 390 px).
 
 **Revision 184 (Document Owner's fourth review of the journey, 2026-09-30 — six points):** **BUILT.**
 

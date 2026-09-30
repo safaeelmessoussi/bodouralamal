@@ -50,6 +50,8 @@ export interface JourneyCategory {
   position: number;
   /** §5 — a learner may join here without the previous Category. */
   directEntry: boolean;
+  /** R185 §3 — the last on the road: the attire stands at its graduation. */
+  last: boolean;
 }
 
 export interface Journey {
@@ -95,6 +97,7 @@ export function buildJourney(categories: readonly PublicProgramCategory[]): Jour
       preparatory: source.levels.filter((level) => level.journey_role === 'preparatory'),
       position: index + 1,
       directEntry: index > 0,
+      last: index === ordered.length - 1,
     };
     const ordinary = source.levels.filter((level) => level.journey_role !== 'preparatory');
     category.steps = ordinary.map((level, at) => ({

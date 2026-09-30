@@ -74,7 +74,12 @@
 }
 .journey__arrows {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
+}
+/* R185 §5 — the full-screen show, beside the road's arrows. */
+.journey__show {
+  padding-inline: var(--space-3);
 }
 /* The chevron points down; a quarter turn each way says «back along the road»
    (to the right, where it began) and «forward» (to the left). */
@@ -264,6 +269,10 @@
 .stage__cell--prize {
   width: 10rem;
 }
+/* R185 §3 — the last Category's graduation holds the attire: wider. */
+.stage__cell--summit {
+  width: 17rem;
+}
 .stage__cell--entrances {
   margin-inline-end: var(--space-3);
 }
@@ -372,12 +381,17 @@
   color: var(--color-text-secondary);
   text-wrap: pretty;
 }
-/* «…» opens the rest — on a phone only; a laptop shows the whole list. */
-.journey__surahsMore {
-  display: none;
-  position: absolute;
-  inset-inline-end: 0;
-  inset-block-end: 0;
+/* R185 §2 — the first four lines (two on a phone), then «…» which opens the
+   whole list and «عرض أقل» which folds it again. The component offers «…»
+   only when the clamp hides something (measured). */
+.journey__surahs:not(.is-expanded) .journey__surahsText {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.journey__surahsMore,
+.journey__surahsLess {
   padding: 0 var(--space-2);
   border: 0;
   border-radius: var(--radius-pill);
@@ -388,10 +402,15 @@
   line-height: inherit;
   cursor: pointer;
 }
-.journey__more {
-  justify-self: start;
-  padding-inline: var(--space-2);
-  min-block-size: var(--tap-min);
+.journey__surahsMore {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+}
+.journey__surahsLess {
+  display: inline-block;
+  margin-inline-start: var(--space-2);
+  font-size: var(--font-size-xs);
 }
 
 /* ── Walks: one rising arrow from each step to the next (R182 §6) ────────── */
@@ -584,10 +603,8 @@
   color: var(--color-text-secondary);
   text-wrap: balance;
 }
-/* The summit: the attire (R181 §4, the Owner's image) the road climbs toward. */
-.journey__stage--summit {
-  align-self: flex-end;
-}
+/* The summit: the attire (R181 §4, the Owner's image) the road climbs toward —
+   inside the last Category's stage since R185 §3. */
 .journey__summit {
   /* R184 §4 — above the ridges: the backdrop's near ridge used to wash over
      the attire and its caption. */
@@ -608,9 +625,17 @@
 }
 .journey__attire img {
   display: block;
-  width: 17rem;
+  width: 12rem;
   height: auto;
   border-radius: var(--radius-md);
+}
+/* R185 §3 — «إتمام الفئة» and its words first, the attire under them. */
+.journey__milestone--summit {
+  gap: var(--space-2);
+}
+.journey__milestone--summit .journey__summit {
+  width: auto;
+  margin-block-start: var(--space-2);
 }
 .journey__attireCaption {
   margin: var(--space-2) 0 0;
@@ -727,20 +752,20 @@
   .entrances__words {
     max-width: 12rem;
   }
-  /* R182 §3 — a long Surah list shows its first lines and «…». */
+  /* R182 §3 — a phone shows two lines before «…». */
   .journey__surahs:not(.is-expanded) .journey__surahsText {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-    overflow: hidden;
   }
-  .journey__surahs:not(.is-expanded) .journey__surahsMore {
-    display: inline-block;
+  .stage__cell--summit {
+    width: 14rem;
   }
   .journey__summit {
-    width: 15rem;
+    width: 13rem;
   }
   .journey__attire img {
-    width: 14rem;
+    width: 10rem;
+  }
+  .journey__show {
+    flex: 1 1 100%;
   }
 }

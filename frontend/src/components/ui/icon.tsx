@@ -39,7 +39,9 @@ export type IconName =
   // specifically because it reads as neither the header's own hamburger
   // (`menu`) nor a close action (`close`): a reader must not mistake the
   // portal's own control for a second copy of the site-wide one.
-  | 'sidebar';
+  | 'sidebar'
+  // Arrows to the four corners — «عرض بملء الشاشة» (R185 §5).
+  | 'expand';
 
 const PATHS: Record<IconName, string> = {
   menu: 'M4 7h16M4 12h16M4 17h16',
@@ -65,6 +67,7 @@ const PATHS: Record<IconName, string> = {
   // A rectangle with a vertical divider — a panel beside a page, the
   // universal "sidebar" glyph, and structurally unlike every other icon here.
   sidebar: 'M4 4h16v16H4V4zM15 4v16',
+  expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
 };
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }): ReactNode {
