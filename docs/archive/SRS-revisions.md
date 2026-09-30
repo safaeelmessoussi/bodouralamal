@@ -1,9 +1,13 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–186 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–187 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 187 (Document Owner, 2026-09-30 — an exam edit refused, and the public pages' design):** **§1 BUILT.**
+
+**§1 — EDITING AN EXAM WAS REFUSED.** «تعديل العنصر» on an اختبار came back «تعذّر الحفظ» (`400 unrecognized_keys: attendance_marking`) whatever was changed — met while clearing «الأستاذ/المؤطر المسؤول», which is optional (R176 §1) and was not the cause. An exam has no `attendance_marking` column (R123 put it on a class and an activity); R136 dropped it from `PATCH /exams/{id}`'s strict schema and the form's adapter went on sending it, so every edit of a physical sitting since then was refused. The adapter no longer sends it for an exam, and the form no longer asks «من يسجّل الحضور» of an exam (nowhere to store the answer). Pinned by a request-capturing test and walked in a browser (create without a supervisor, edit clearing it: 8/8).
 
 **Revision 186 (Document Owner's review of the full-screen show, 2026-09-30 — three points):** **BUILT.**
 

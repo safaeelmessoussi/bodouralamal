@@ -961,11 +961,12 @@ export async function saveSchedulingItem(
           ...(input.schedulingTypeId !== undefined
             ? { scheduling_type_id: input.schedulingTypeId }
             : {}),
-          // R123 — sent on every save for the same reason: omitting it would
-          // make *«leave it alone»* and *«I did not look»* the same request.
-          ...(input.attendanceMarking !== undefined
-            ? { attendance_marking: input.attendanceMarking }
-            : {}),
+          // **No `attendance_marking` here** (Owner-reported, 2026-09-30 —
+          // R187 §1). An exam has no such column (R123 put it on a class
+          // and an activity), R136 dropped it from `PATCH /exams/{id}`'s
+          // strict schema, and this call went on sending it — so EVERY edit
+          // of a physical sitting from «تعديل العنصر» was refused with
+          // `unrecognized_keys`, read as «تعذّر الحفظ».
           // Editable after creation, unlike the identity fields: the server
           // refuses a maximum below a mark already recorded (R81).
           ...(input.examMaxGrade == null ? {} : { max_grade: input.examMaxGrade }),

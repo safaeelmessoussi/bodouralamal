@@ -400,7 +400,12 @@ function TypePicker({
                 : 'scheduling.attendanceOptional',
             )}
           </Feedback>
-          {onAttendanceMarkingChange ? (
+          {/* R187 §1 — never for an exam: a sitting has no marking column
+              (R123 put it on a class and an activity), so a choice here
+              would have nowhere to go — and sending it was what refused
+              every exam edit. Its register is the staff's, as the line
+              above already says. */}
+          {onAttendanceMarkingChange && selected.structural_kind !== 'exam' ? (
             <SelectField
               label={t('scheduling.attendanceMarking')}
               value={attendanceMarking}
