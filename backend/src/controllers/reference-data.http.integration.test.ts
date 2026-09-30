@@ -153,6 +153,8 @@ describe("GET /admin/subjects", () => {
     expect(Object.keys(row).sort()).toEqual([
       "display_order",
       "id",
+      // SRS Revision 183 §1 — a seasonal course, listed apart on the landing page.
+      "is_seasonal",
       "levels",
       "name",
       // SRS Revision 165 §2 — the Subject works by Surah; shown and set on المواد.

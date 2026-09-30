@@ -9,6 +9,8 @@ import {
   categoryAudience,
   journeyOrder,
   memorisationWords,
+  programmeSubjects,
+  seasonalSubjects,
   surahSubjectsLabel,
 } from './journey-model.js';
 
@@ -30,7 +32,11 @@ const level = (id: string, over: Partial<PublicProgramLevel> = {}): PublicProgra
   surahs: [],
   ...over,
 });
-const category = (id: string, levels: PublicProgramLevel[], over: Partial<PublicProgramCategory> = {}): PublicProgramCategory => ({
+const category = (
+  id: string,
+  levels: PublicProgramLevel[],
+  over: Partial<PublicProgramCategory> = {},
+): PublicProgramCategory => ({
   id,
   name: `فئة ${id}`,
   description: null,
@@ -61,12 +67,17 @@ describe('journeyOrder — youngest first', () => {
   });
 
   it('leaves a Category with no Levels off the road', () => {
-    expect(journeyOrder([category('empty', []), category('kids', [level('k1')])]).map((c) => c.id)).toEqual(['kids']);
+    expect(
+      journeyOrder([category('empty', []), category('kids', [level('k1')])]).map((c) => c.id),
+    ).toEqual(['kids']);
   });
 });
 
 describe('buildJourney — steps, graduations and the ways in', () => {
-  const kids = category('kids', [level('k1'), level('k2'), level('k3')], { min_age: 6, max_age: 12 });
+  const kids = category('kids', [level('k1'), level('k2'), level('k3')], {
+    min_age: 6,
+    max_age: 12,
+  });
   const women = category(
     'women',
     [level('lit', { journey_role: 'preparatory', name: 'فرصة أمل' }), level('w1'), level('w2')],
@@ -76,13 +87,9 @@ describe('buildJourney — steps, graduations and the ways in', () => {
 
   it('walks every ordinary step in Category order, numbered within its Category, the last one marked', () => {
     expect(journey.categories.map((c) => c.id)).toEqual(['kids', 'women']);
-    expect(journey.steps.map((s) => `${s.category.id}:${s.level.id}#${s.position}${s.last ? '!' : ''}`)).toEqual([
-      'kids:k1#1',
-      'kids:k2#2',
-      'kids:k3#3!',
-      'women:w1#1',
-      'women:w2#2!',
-    ]);
+    expect(
+      journey.steps.map((s) => `${s.category.id}:${s.level.id}#${s.position}${s.last ? '!' : ''}`),
+    ).toEqual(['kids:k1#1', 'kids:k2#2', 'kids:k3#3!', 'women:w1#1', 'women:w2#2!']);
   });
 
   it('a preparatory programme is not a step: it leads into the first step and is listed apart', () => {
@@ -103,7 +110,9 @@ describe('buildJourney — steps, graduations and the ways in', () => {
   });
 
   it('adapts when the catalogue changes: a Level added, one removed, a Category dropped', () => {
-    const grown = buildJourney([category('kids', [level('k1'), level('k2'), level('k3'), level('k4')], { min_age: 6 })]);
+    const grown = buildJourney([
+      category('kids', [level('k1'), level('k2'), level('k3'), level('k4')], { min_age: 6 }),
+    ]);
     expect(grown.steps.map((s) => s.position)).toEqual([1, 2, 3, 4]);
     expect(grown.steps[3]!.last).toBe(true);
     const shrunk = buildJourney([category('kids', [level('k2')], { min_age: 6 })]);
@@ -116,18 +125,27 @@ describe('buildJourney — steps, graduations and the ways in', () => {
 /** R181 §7 — the audience is read off the steps' own restriction, never a name. */
 describe('categoryAudience', () => {
   it('girls only when every step is girls-only; everyone otherwise', () => {
-    expect(categoryAudience([level('a', { gender_restriction: 'girls_only' }), level('b', { gender_restriction: 'girls_only' })])).toBe('girls');
-    expect(categoryAudience([level('a', { gender_restriction: 'girls_only' }), level('b')])).toBe('any');
+    expect(
+      categoryAudience([
+        level('a', { gender_restriction: 'girls_only' }),
+        level('b', { gender_restriction: 'girls_only' }),
+      ]),
+    ).toBe('girls');
+    expect(categoryAudience([level('a', { gender_restriction: 'girls_only' }), level('b')])).toBe(
+      'any',
+    );
     expect(categoryAudience([level('a', { gender_restriction: 'boys_only' })])).toBe('boys');
     expect(categoryAudience([])).toBe('any');
-    const journey = buildJourney([category('teens', [level('t1', { gender_restriction: 'girls_only' })])]);
+    const journey = buildJourney([
+      category('teens', [level('t1', { gender_restriction: 'girls_only' })]),
+    ]);
     expect(journey.categories[0]!.audience).toBe('girls');
   });
 });
 
 /** R182 §5 — «للنساء» for an adult Category, «للفتيات» for a younger one; the marker, never a name. */
 describe('audienceKey', () => {
-  it('pairs the steps\' restriction with the Category\'s adulthood', () => {
+  it("pairs the steps' restriction with the Category's adulthood", () => {
     const girls = [level('a', { gender_restriction: 'girls_only' })];
     const women = buildJourney([category('w', girls, { holds_own_login: true })]).categories[0]!;
     const teens = buildJourney([category('t', girls)]).categories[0]!;
@@ -135,33 +153,67 @@ describe('audienceKey', () => {
     expect(audienceKey(teens)).toBe('young.girls');
     expect(t(`programs.journey.audience.${audienceKey(women)}`)).toBe('للنساء فقط');
     expect(t(`programs.journey.audience.${audienceKey(teens)}`)).toBe('للفتيات فقط');
-    expect(audienceKey(buildJourney([category('n', [level('a')], { holds_own_login: null })]).categories[0]!)).toBe('young.any');
+    expect(
+      audienceKey(
+        buildJourney([category('n', [level('a')], { holds_own_login: null })]).categories[0]!,
+      ),
+    ).toBe('young.any');
   });
 });
 
 /** R181 §6 / R182 §3 — «حفظ وتفسير: 10 أحزاب»: the by-Surah Subjects' names, the count in Hizb. */
 describe('memorisationWords', () => {
   const bySurah = [
-    { id: 's1', name: 'حفظ القرآن', works_by_surah: true },
-    { id: 's2', name: 'تفسير القرآن', works_by_surah: true },
-    { id: 's3', name: 'التربية الإسلامية', works_by_surah: false },
+    { id: 's1', name: 'حفظ القرآن', works_by_surah: true, seasonal: false },
+    { id: 's2', name: 'تفسير القرآن', works_by_surah: true, seasonal: false },
+    { id: 's3', name: 'التربية الإسلامية', works_by_surah: false, seasonal: false },
   ];
+  it('leaves a seasonal course out of the label (R183 §1)', () => {
+    const withCourse = [...bySurah, { id: 's9', name: 'دورة قصيرة', works_by_surah: true, seasonal: true }];
+    expect(surahSubjectsLabel(level('x', { subjects: withCourse }), t)).toBe('حفظ وتفسير');
+    expect(programmeSubjects(withCourse).map((s) => s.id)).toEqual(['s1', 's2', 's3']);
+    expect(seasonalSubjects(withCourse).map((s) => s.id)).toEqual(['s9']);
+    const journey = buildJourney([category('c', [level('a')], { subjects: withCourse })]);
+    expect(journey.categories[0]!.sharedSubjects.map((s) => s.id)).toEqual(['s1', 's2', 's3']);
+    expect(journey.categories[0]!.seasonalSubjects.map((s) => s.id)).toEqual(['s9']);
+  });
   it('names the by-Surah Subjects without «القرآن», joined by «و»', () => {
     expect(surahSubjectsLabel(level('x', { subjects: bySurah }), t)).toBe('حفظ وتفسير');
     expect(surahSubjectsLabel(level('x', { subjects: bySurah.slice(0, 1) }), t)).toBe('حفظ');
-    expect(surahSubjectsLabel(level('x', { subjects: [{ id: 's4', name: 'التجويد', works_by_surah: true }] }), t)).toBe('التجويد');
+    expect(
+      surahSubjectsLabel(
+        level('x', { subjects: [{ id: 's4', name: 'التجويد', works_by_surah: true, seasonal: false }] }),
+        t,
+      ),
+    ).toBe('التجويد');
     // No Subject by Surah on the Level → the generic words.
     expect(surahSubjectsLabel(level('x', { subjects: bySurah.slice(2) }), t)).toBe('مقرر الحفظ');
   });
   it('says the Hizb count as stated, in the right form', () => {
-    expect(memorisationWords(level('x', { subjects: bySurah, memorisation_hizb: 5 }), t)).toBe('حفظ وتفسير: 5 أحزاب');
-    expect(memorisationWords(level('x', { subjects: bySurah, memorisation_hizb: 10 }), t)).toBe('حفظ وتفسير: 10 أحزاب');
-    expect(memorisationWords(level('x', { memorisation_hizb: 12 }), t)).toBe('مقرر الحفظ: 12 حزبًا');
+    expect(memorisationWords(level('x', { subjects: bySurah, memorisation_hizb: 5 }), t)).toBe(
+      'حفظ وتفسير: 5 أحزاب',
+    );
+    expect(memorisationWords(level('x', { subjects: bySurah, memorisation_hizb: 10 }), t)).toBe(
+      'حفظ وتفسير: 10 أحزاب',
+    );
+    expect(memorisationWords(level('x', { memorisation_hizb: 12 }), t)).toBe(
+      'مقرر الحفظ: 12 حزبًا',
+    );
     expect(memorisationWords(level('x', { memorisation_hizb: 1 }), t)).toBe('مقرر الحفظ: حزب واحد');
     expect(memorisationWords(level('x', { memorisation_hizb: 2 }), t)).toBe('مقرر الحفظ: حزبان');
   });
   it('falls back to how many Surahs the list holds, and says nothing when there are none', () => {
-    expect(memorisationWords(level('x', { surahs: [{ id: 1, name: 'الفاتحة' }, { id: 2, name: 'البقرة' }] }), t)).toBe('مقرر الحفظ: 2 سور');
+    expect(
+      memorisationWords(
+        level('x', {
+          surahs: [
+            { id: 1, name: 'الفاتحة' },
+            { id: 2, name: 'البقرة' },
+          ],
+        }),
+        t,
+      ),
+    ).toBe('مقرر الحفظ: 2 سور');
     expect(memorisationWords(level('x'), t)).toBeNull();
   });
 });

@@ -1,9 +1,23 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–182 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–183 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 183 (Document Owner's third review of the journey, 2026-09-30 — six points):** **BUILT.**
+
+**§1 — A SEASONAL COURSE IS NOT THE PROGRAMME.** Some Subjects are courses taught for a limited period (a week, a few days), organised any time of the year and any number of times — «دورة تثبيت حجية السنة», «دورة علوم القرآن» — and must not read as part of a Level's programme. `subject.is_seasonal` (a tick-box «دورة موسمية» on «المواد»; the migration ticks the rows whose names begin with «دورة» once, and no runtime rule reads a name — §4.4b) is carried on `/programs`; the page lists such Subjects apart as «دورات موسمية: …», under the Category or the Level they are attached to, never among the programme's Subjects nor in the «حفظ وتفسير» label. Scheduling, exams and the curriculum policy are untouched.
+
+**§2 — THE CATEGORY CARD STAYS SMALL.** The dark card keeps its ordinal, name, ages and audience («الفئة 3 · المرأة · للنساء فقط»); the shared-Subjects line and the seasonal line are an ANNEXE under the card, in the same stuck place.
+
+**§3 — THE LANDING PAGE OPENS ON THE JOURNEY.** A fresh arrival at «/» — no anchor, nothing scrolled, not a back/forward return — brings the page to the road, the chips right under the header and المرأة's first step in view (R182 §7); the sections above remain a scroll away. An arrival at another anchor is never moved.
+
+**§4 — THE ATTIRE, THE OWNER'S NEW IMAGE.** The summit shows the image the Owner gave on 2026-09-30 (the outfit filling the frame, the sashes legible), at the same two sizes.
+
+**§5 — A LONG SUBJECT NAME WRAPS.** «أحكام التجويد (برواية ورش عن نافع)» ran past its card; a Subject pill on a card and in the text view wraps inside it.
+
+**§6 — «مقرر الحفظ» READS ONCE.** The page read `/admin/levels/{id}/surahs` once per Level — thirty-odd reads on load, of which TD-13's burst admitted twenty and the rest were `429` (`RATE_LIMITED`), an error page on Production; the shell's next reads (`/me`) were refused too. `GET /admin/levels` carries `surah_ids` (Mushaf order), the names come from the seeded 114, and the page makes three reads of its own whatever the number of Levels — the fix «مواد المستوى» already had (2026-09-23).
 
 **Revision 182 (Document Owner's second review of the journey, 2026-09-30 — seven points):** **BUILT.**
 

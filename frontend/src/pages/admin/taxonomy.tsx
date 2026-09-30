@@ -149,7 +149,8 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
         // same. R180 §4 — DERIVED from the Category's first and last Level.
         key: 'age_range',
         header: 'admin.taxonomy.colAge',
-        cell: (r) => ageRangeLabel(r as Category) ?? <span className="muted">{t('common.notSet')}</span>,
+        cell: (r) =>
+          ageRangeLabel(r as Category) ?? <span className="muted">{t('common.notSet')}</span>,
       },
       {
         key: 'levels',
@@ -172,11 +173,13 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
         header: 'admin.taxonomy.colDefaultVisibility',
         cell: (r) => {
           const v = (r as Category).default_visibility;
-          return (v === undefined ? (
-            <span className="muted">—</span>
-          ) : (
-            t(`calendar.visibility${v.charAt(0).toUpperCase()}${v.slice(1)}`)
-          )) as ReactNode;
+          return (
+            v === undefined ? (
+              <span className="muted">—</span>
+            ) : (
+              t(`calendar.visibility${v.charAt(0).toUpperCase()}${v.slice(1)}`)
+            )
+          ) as ReactNode;
         },
       },
     ],
@@ -274,6 +277,18 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
             <span className="muted">—</span>
           ),
       },
+      {
+        /** SRS Revision 183 §1 — which Subjects are seasonal courses, shown so
+         *  a reader sees why «برامجنا التعليمية» lists them apart. */
+        key: 'is_seasonal',
+        header: 'admin.taxonomy.colSeasonal',
+        cell: (r) =>
+          (r as SubjectRef).is_seasonal ? (
+            <span className="badge">{t('admin.taxonomy.seasonalYes')}</span>
+          ) : (
+            <span className="muted">—</span>
+          ),
+      },
     ],
   },
 };
@@ -284,7 +299,7 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
   const { activeRoles } = useActiveRole();
   // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
   // a control the server will refuse: the affordance follows the authority.
-  const canWrite = (activeRoles).includes('super_admin');
+  const canWrite = activeRoles.includes('super_admin');
 
   const [rows, setRows] = useState<Row[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
@@ -415,11 +430,7 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
         ) : null
       }
     >
-      {notice ? (
-        <Feedback>
-          {notice}
-        </Feedback>
-      ) : null}
+      {notice ? <Feedback>{notice}</Feedback> : null}
 
       <DataTable
         caption={t(spec.navKey)}
@@ -452,7 +463,9 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
 
       <ConfirmDialog
         open={deleting !== null}
-        {...(blocked ? { blocked: <BlockedNotice error={blocked} item={t('admin.levels.thisItem')} /> } : {})}
+        {...(blocked
+          ? { blocked: <BlockedNotice error={blocked} item={t('admin.levels.thisItem')} /> }
+          : {})}
         title={t(spec.deleteTitleKey)}
         body={t(spec.deleteBodyKey).replace('{name}', deleting?.name ?? '')}
         confirmLabel={t('common.delete')}
@@ -516,6 +529,7 @@ function TaxonomyFormDialog({
     display_order: number | null;
     tracks_quran_progress?: boolean;
     requires_surahs?: boolean;
+    is_seasonal?: boolean;
     holds_own_login?: boolean | null;
   } | null;
   withDescription?: boolean;
@@ -530,6 +544,8 @@ function TaxonomyFormDialog({
     description: initial?.description ?? '',
     tracksQuranProgress: initial?.tracks_quran_progress ?? false,
     requiresSurahs: initial?.requires_surahs ?? false,
+    // R183 §1 — a seasonal course, a tick-box on the Subject.
+    isSeasonal: initial?.is_seasonal ?? false,
     // R170 §6 — a TICK-BOX, at the Owner's word: ticked is «حسابها الخاص»,
     // unticked is «يسجّلها وليّ الأمر». A row nobody has answered («غير محدَّد»)
     // opens unticked and is answered by the first save.
@@ -540,11 +556,12 @@ function TaxonomyFormDialog({
   const [description, setDescription] = useState(pristine.description);
   const [tracksQuranProgress, setTracksQuranProgress] = useState(pristine.tracksQuranProgress);
   const [requiresSurahs, setRequiresSurahs] = useState(pristine.requiresSurahs);
+  const [isSeasonal, setIsSeasonal] = useState(pristine.isSeasonal);
   const [touched, setTouched] = useState(false);
   const error = name.trim() === '' ? t('common.required') : null;
   // Only user-modified data is dirty; a validation error is not a change.
   const dirty = isDirty(
-    { name, description, tracksQuranProgress, requiresSurahs, holdsOwnLogin },
+    { name, description, tracksQuranProgress, requiresSurahs, isSeasonal, holdsOwnLogin },
     pristine,
   );
 
@@ -571,6 +588,8 @@ function TaxonomyFormDialog({
       // CHECK), so the pair is sent consistent rather than left for the server
       // to refuse: ticking the first ticks the second.
       ...(withQuranFlag ? { requires_surahs: requiresSurahs || tracksQuranProgress } : {}),
+      // R183 §1 — sent by the Subject form only, on create and on edit.
+      ...(withQuranFlag ? { is_seasonal: isSeasonal } : {}),
       // R170 §6 — sent only by the form that offers it. R180 §4 — the age
       // range is no longer asked here: it is the Levels', on «المستويات».
       ...(withAudience ? { holds_own_login: holdsOwnLogin } : {}),
@@ -578,14 +597,7 @@ function TaxonomyFormDialog({
   }
 
   return (
-    <FormDialog
-      open
-      onCancel={onCancel}
-      onSubmit={submit}
-      title={title}
-      busy={busy}
-      dirty={dirty}
-    >
+    <FormDialog open onCancel={onCancel} onSubmit={submit} title={title} busy={busy} dirty={dirty}>
       <TextField
         label={t('admin.taxonomy.colName')}
         value={name}
@@ -628,6 +640,14 @@ function TaxonomyFormDialog({
           onChange={setRequiresSurahs}
           disabled={tracksQuranProgress}
           hint={t('admin.taxonomy.requiresSurahsHint')}
+        />
+      ) : null}
+      {withQuranFlag ? (
+        <CheckboxField
+          label={t('admin.taxonomy.seasonalLabel')}
+          checked={isSeasonal}
+          onChange={setIsSeasonal}
+          hint={t('admin.taxonomy.seasonalHint')}
         />
       ) : null}
     </FormDialog>

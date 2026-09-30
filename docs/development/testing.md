@@ -165,6 +165,7 @@ All under `scripts/dev/browser/` (`.sh` wrapper + `.mjs`); fuller descriptions a
 | `verify-journey.sh` | Admission-to-achievement screens; fixture = journey suite (`JOURNEY_KEEP=1`, `journey-fixture-ids.ts`), cleaned from a `trap` | — |
 | `verify-legal-pages.sh` | NEW P `/privacy`, `/terms` signed-out, OWNER-INPUT markers | 8/8 |
 | `verify-level-subjects.sh` | «مواد المستوى» bounded reads, Subjects listed, edit saves without `DUPLICATE` | 7/7 |
+| `verify-level-surahs.sh` | «مقرر الحفظ» (R183 §6): three reads of its own, no read per Level, configured Levels list their Surahs | 6/6 |
 | `verify-library-recorder.sh` | Recorder's second entry in مكتبة المحتوى, measured sort indicator | 16/16 |
 | `verify-livekit-ingest.sh` | R99 C2 record → Egress → import → plays (`readyState >= 2 && duration > 0`); URL `/storage/` not `recordings-staging`; starter's tab closed; staging swept (R99.13) | 28/28 |
 | `verify-livekit-join.sh` | R98 real `livekit-server --dev`, fake devices, three-party room across tabs, `data-connection`, media bytes via `list-bucket.mjs` | 61/61 |

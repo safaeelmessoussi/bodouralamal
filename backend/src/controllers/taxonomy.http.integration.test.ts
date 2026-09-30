@@ -339,6 +339,33 @@ describe("Subjects (§5.6 الفئات والمواد)", () => {
     expect(listed["name"]).toBe(`${TAG} مادة معدلة`);
   });
 
+  it("R183 §1 — `is_seasonal` is set at creation, changed on edit, and listed", async () => {
+    const created = await call("POST", "/admin/subjects", superAdmin, {
+      name: `${TAG} دورة قصيرة`,
+      is_seasonal: true,
+    });
+    expect(created.status).toBe(201);
+    const row = created.body.data as unknown as Record<string, unknown>;
+    const id = String(row["id"]);
+    const listed = () =>
+      call("GET", "/admin/subjects", superAdmin).then(
+        (res) => (res.body.data as unknown as Record<string, unknown>[]).find((r) => r["id"] === id)!,
+      );
+    expect((await listed())["is_seasonal"]).toBe(true);
+    const edited = await call("PATCH", `/admin/subjects/${id}`, superAdmin, {
+      version: row["version"],
+      is_seasonal: false,
+    });
+    expect(edited.status).toBe(200);
+    expect((await listed())["is_seasonal"]).toBe(false);
+    // A value outside the type is refused, never coerced.
+    const refused = await call("PATCH", `/admin/subjects/${id}`, superAdmin, {
+      version: (edited.body.data as unknown as Record<string, unknown>)["version"],
+      is_seasonal: "yes",
+    });
+    expect(refused.status).toBe(400);
+  });
+
   it("RESTATED: a Level pairing is an OWNED LINK — it follows, it does not block", async () => {
     const level = await prisma.level.create({
       data: {

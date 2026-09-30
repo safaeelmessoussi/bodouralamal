@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { listCategories, type Category } from '../../adapters/taxonomy.js';
 import {
   assignSurah,
-  listLevelSurahs,
   listLevels,
   listQuranSurahs,
   unassignSurah,
@@ -11,7 +10,6 @@ import {
   type LevelSurahRef,
 } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
-import { mapWithConcurrency } from '../../lib/concurrency.js';
 import { levelLabel } from '../../components/scope/level-select.js';
 import {
   DataTable,
@@ -43,8 +41,9 @@ import { Feedback } from '../../components/ui/feedback.js';
  *
  * Every accessible Level is listed **with its configured Surahs already
  * visible**, so *"what is the syllabus"* is answered by reading the page rather
- * than by expanding Levels one at a time. The syllabus per Level is a cheap read
- * and is fetched for every Level on load.
+ * than by expanding Levels one at a time. The syllabus rides the Levels list
+ * (`surah_ids`, R183 §6) and the names come from the seeded 114 — THREE reads
+ * for the whole page, whatever the number of Levels.
  *
  * **Completion is still per-Level and still lazy**, and that is not an
  * inconsistency: it resolves coverage per student per Surah through §4.5's
@@ -85,18 +84,23 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const [levels, categoryList] = await Promise.all([
+      const [levels, all, categoryList] = await Promise.all([
         listLevels(accessToken),
+        listQuranSurahs(accessToken),
         listCategories(accessToken).catch(() => [] as Category[]),
       ]);
-      // One syllabus read per Level, **four at a time** (R177 §5): all at
-      // once exceeded the edge's burst past twenty Levels, and a read caught
-      // into `[]` rendered a Level as having NO Surahs — which the editor then
-      // "added" back one by one. A failed read is now a failed page (§14.4's
-      // error state, with retry), never a wrong syllabus shown as fact.
-      const withSurahs = await mapWithConcurrency(levels, 4, async (level) => ({
+      // R183 §6 — no read per Level any more: it used to read
+      // `/admin/levels/{id}/surahs` once per Level (four at a time since R177
+      // §5), and past twenty Levels TD-13's burst refused the rest with `429`
+      // — an error page on Production for nothing the administrator did. The
+      // list carries each Level's Surah ids; the names are the seeded 114.
+      const byId = new Map(all.map((surah) => [surah.surah_id, surah]));
+      const withSurahs = levels.map((level) => ({
         level,
-        surahs: await listLevelSurahs(level.id, accessToken),
+        surahs: level.surah_ids.flatMap((id) => {
+          const surah = byId.get(id);
+          return surah ? [surah] : [];
+        }),
       }));
       setRows(withSurahs);
       setCategories(categoryList);
@@ -197,41 +201,37 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
        */
       actions={null}
     >
-      {notice ? (
-        <Feedback>
-          {notice}
-        </Feedback>
-      ) : null}
+      {notice ? <Feedback>{notice}</Feedback> : null}
 
       <DataTable
-          caption={t('admin.levelSurahs.caption')}
-          columns={columns}
-          rows={visible}
-          rowKey={(r) => r.level.id}
-          status={status}
-          actions={actions}
-          onRetry={() => void load()}
-          filtered={query.trim() !== '' || categoryFilter !== ''}
-          onClearFilters={() => {
-            setQuery('');
-            setCategoryFilter('');
-          }}
-          toolbar={
-            <>
-              <SearchInput
-                value={query}
-                onChange={setQuery}
-                placeholder={t('admin.levelSurahs.searchPlaceholder')}
-              />
-              <SelectField
-                label={t('admin.levelSurahs.filterCategory')}
-                value={categoryFilter}
-                onChange={setCategoryFilter}
-                placeholder={t('admin.levelSurahs.allCategories')}
-                options={categories.map((c) => ({ value: c.id, label: c.name }))}
-              />
-            </>
-          }
+        caption={t('admin.levelSurahs.caption')}
+        columns={columns}
+        rows={visible}
+        rowKey={(r) => r.level.id}
+        status={status}
+        actions={actions}
+        onRetry={() => void load()}
+        filtered={query.trim() !== '' || categoryFilter !== ''}
+        onClearFilters={() => {
+          setQuery('');
+          setCategoryFilter('');
+        }}
+        toolbar={
+          <>
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder={t('admin.levelSurahs.searchPlaceholder')}
+            />
+            <SelectField
+              label={t('admin.levelSurahs.filterCategory')}
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              placeholder={t('admin.levelSurahs.allCategories')}
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
+            />
+          </>
+        }
       />
 
       {editing ? (
@@ -305,10 +305,7 @@ function SyllabusDialog({
 
   // Sorted on both sides: a Surah set is unordered, so a different ORDER of the
   // same ids is not a change — comparing the raw arrays would report one.
-  const dirty = isDirty(
-    [...selected].sort(),
-    current.map((s) => String(s.surah_id)).sort(),
-  );
+  const dirty = isDirty([...selected].sort(), current.map((s) => String(s.surah_id)).sort());
 
   return (
     <FormDialog
@@ -346,7 +343,10 @@ function SyllabusDialog({
       <p className="lede">{levelLabel(level)}</p>
       <MultiSelectField
         label={t('admin.levelSurahs.syllabus')}
-        options={all.map((s) => ({ value: String(s.surah_id), label: `${s.surah_id}. ${s.name_arabic}` }))}
+        options={all.map((s) => ({
+          value: String(s.surah_id),
+          label: `${s.surah_id}. ${s.name_arabic}`,
+        }))}
         selected={selected}
         onChange={setSelected}
         hint={t('admin.levelSurahs.configureHint')}

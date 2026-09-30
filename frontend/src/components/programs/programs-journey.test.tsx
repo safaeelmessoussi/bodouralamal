@@ -22,12 +22,42 @@ const catalogue: PublicProgramCategory[] = [
     description: 'برنامج الطفل',
     min_age: 6,
     max_age: 12,
-    // R182 §1 — Category-wide Subjects come once, on the Category.
-    subjects: [{ id: 's3', name: 'التربية الإسلامية', works_by_surah: false }],
+    // R182 §1 — Category-wide Subjects come once, on the Category; R183 §1 —
+    // a seasonal course among them is said apart.
+    subjects: [
+      { id: 's3', name: 'التربية الإسلامية', works_by_surah: false, seasonal: false },
+      { id: 's4', name: 'مادة قصيرة', works_by_surah: false, seasonal: true },
+    ],
     holds_own_login: false,
     levels: [
-      { id: 'k1', name: 'كتاكيت الأمل', description: 'المستوى 0', min_age: 6, max_age: 7, journey_role: 'step', memorisation_hizb: null, gender_restriction: 'any', subjects: [{ id: 's1', name: 'حفظ القرآن', works_by_surah: true }], surahs: [{ id: 1, name: 'الفاتحة' }] },
-      { id: 'k2', name: 'براعم الأمل', description: null, min_age: 8, max_age: 12, journey_role: 'step', memorisation_hizb: 5, gender_restriction: 'any', subjects: [], surahs: [] },
+      {
+        id: 'k1',
+        name: 'كتاكيت الأمل',
+        description: 'المستوى 0',
+        min_age: 6,
+        max_age: 7,
+        journey_role: 'step',
+        memorisation_hizb: null,
+        gender_restriction: 'any',
+        subjects: [
+          { id: 's1', name: 'حفظ القرآن', works_by_surah: true, seasonal: false },
+          // R183 §1 — a seasonal course by Surah counts for nothing in «حفظ: …».
+          { id: 's5', name: 'مادة قصيرة بالسور', works_by_surah: true, seasonal: true },
+        ],
+        surahs: [{ id: 1, name: 'الفاتحة' }],
+      },
+      {
+        id: 'k2',
+        name: 'براعم الأمل',
+        description: null,
+        min_age: 8,
+        max_age: 12,
+        journey_role: 'step',
+        memorisation_hizb: 5,
+        gender_restriction: 'any',
+        subjects: [],
+        surahs: [],
+      },
     ],
   },
   {
@@ -39,24 +69,60 @@ const catalogue: PublicProgramCategory[] = [
     subjects: [],
     holds_own_login: true,
     levels: [
-      { id: 'lit', name: 'فرصة أمل', description: 'محاربة الأمية', min_age: null, max_age: null, journey_role: 'preparatory', memorisation_hizb: null, gender_restriction: 'girls_only', subjects: [{ id: 's9', name: 'القراءة', works_by_surah: false }], surahs: [] },
       {
-        id: 'w1', name: 'وميض الأمل', description: null, min_age: 18, max_age: null, journey_role: 'step', memorisation_hizb: 10, gender_restriction: 'girls_only',
-        subjects: [{ id: 's1', name: 'حفظ القرآن', works_by_surah: true }, { id: 's2', name: 'تفسير القرآن', works_by_surah: true }],
+        id: 'lit',
+        name: 'فرصة أمل',
+        description: 'محاربة الأمية',
+        min_age: null,
+        max_age: null,
+        journey_role: 'preparatory',
+        memorisation_hizb: null,
+        gender_restriction: 'girls_only',
+        subjects: [{ id: 's9', name: 'القراءة', works_by_surah: false, seasonal: false }],
+        surahs: [],
+      },
+      {
+        id: 'w1',
+        name: 'وميض الأمل',
+        description: null,
+        min_age: 18,
+        max_age: null,
+        journey_role: 'step',
+        memorisation_hizb: 10,
+        gender_restriction: 'girls_only',
+        subjects: [
+          { id: 's1', name: 'حفظ القرآن', works_by_surah: true, seasonal: false },
+          { id: 's2', name: 'تفسير القرآن', works_by_surah: true, seasonal: false },
+        ],
         surahs: [1, 2, 3, 4, 5, 6, 7, 8].map((id) => ({ id, name: `سورة ${id}` })),
       },
     ],
   },
-  { id: 'empty', name: 'فئة بلا مستويات', description: null, min_age: null, max_age: null, subjects: [], holds_own_login: false, levels: [] },
+  {
+    id: 'empty',
+    name: 'فئة بلا مستويات',
+    description: null,
+    min_age: null,
+    max_age: null,
+    subjects: [],
+    holds_own_login: false,
+    levels: [],
+  },
 ];
 const journey = buildJourney(catalogue);
-const html = renderToStaticMarkup(<ProgramsJourney journey={journey} onDetails={() => undefined} />);
+const html = renderToStaticMarkup(
+  <ProgramsJourney journey={journey} onDetails={() => undefined} />,
+);
 
 describe('ProgramsJourney', () => {
-  it('is a stage per Category, each bearing the Category\'s name ABOVE its Levels, each a terrace higher', () => {
+  it("is a stage per Category, each bearing the Category's name ABOVE its Levels, each a terrace higher", () => {
     expect(html.split('class="journey__stage"').length - 1).toBe(2);
-    expect(html.indexOf('stage__title" id="stage-kids-title">الطفل')).toBeLessThan(html.indexOf('كتاكيت الأمل'));
-    expect(html.indexOf('stage__title" id="stage-women-title">المرأة')).toBeLessThan(html.indexOf('وميض الأمل'));
+    expect(html.indexOf('stage__title" id="stage-kids-title">الطفل')).toBeLessThan(
+      html.indexOf('كتاكيت الأمل'),
+    );
+    expect(html.indexOf('stage__title" id="stage-women-title">المرأة')).toBeLessThan(
+      html.indexOf('وميض الأمل'),
+    );
     expect(html).toContain('--terrace:0');
     expect(html).toContain('--terrace:1');
     expect(html).toContain('journey__stage journey__stage--summit');
@@ -69,7 +135,7 @@ describe('ProgramsJourney', () => {
     expect(html).toContain('class="stage__cell stage__cell--stop" style="--step:1"');
   });
 
-  it('puts one rising arrow between the steps (R182 §6), and the trophy after each Category\'s last step', () => {
+  it("puts one rising arrow between the steps (R182 §6), and the trophy after each Category's last step", () => {
     expect(html).toContain('id="bodour-arrowhead"');
     expect(html).not.toContain('bodour-shoe-print');
     // The start, the entry, and a walk after every step (to the next one or
@@ -120,21 +186,45 @@ describe('ProgramsJourney', () => {
     expect(w1).toContain('سورة 1، سورة 2');
     expect(w1).toContain('سورة 8');
     expect(w1).toContain('class="journey__surahsMore"');
-    const k1 = html.slice(html.indexOf('id="journey-level-k1"'), html.indexOf('id="journey-level-k2"'));
+    const k1 = html.slice(
+      html.indexOf('id="journey-level-k1"'),
+      html.indexOf('id="journey-level-k2"'),
+    );
     expect(k1).toContain('الفاتحة');
     expect(k1).not.toContain('journey__surahsMore');
   });
 
-  it('names each Category with its derived range, its audience and its shared Subjects (R182 §1), and keeps an empty Category off the road', () => {
+  it('names each Category with its derived range and its audience, its shared Subjects in an annexe UNDER the card (R182 §1, R183 §2), and keeps an empty Category off the road', () => {
     expect(html).toContain('من 6 إلى 12 سنة');
     expect(html).toContain('للبنات والبنين');
     expect(html).not.toContain('فئة بلا مستويات');
-    const head = html.slice(html.indexOf('id="stage-kids-title"'), html.indexOf('id="journey-level-k1"'));
-    expect(head).toContain('مواد مشتركة في كل المستويات:');
-    expect(head).toContain('التربية الإسلامية');
+    const card = html.slice(html.indexOf('id="stage-kids-title"'), html.indexOf('</header>'));
+    // The card keeps only the ordinal, the name, the ages and the audience.
+    expect(card).not.toContain('مواد مشتركة');
+    const annex = html.slice(
+      html.indexOf('class="stage__annex"'),
+      html.indexOf('id="journey-level-k1"'),
+    );
+    expect(annex).toContain('مواد مشتركة في كل المستويات:');
+    expect(annex).toContain('التربية الإسلامية');
+    // R183 §1 — the seasonal course on its own line, never among the programme's.
+    expect(annex).toContain('دورات موسمية:');
+    expect(annex.indexOf('التربية الإسلامية')).toBeLessThan(annex.indexOf('دورات موسمية:'));
+    expect(annex.indexOf('دورات موسمية:')).toBeLessThan(annex.indexOf('مادة قصيرة'));
     // …and not again on each of its Levels.
     expect(html.split('التربية الإسلامية').length - 1).toBe(1);
-    expect(html).not.toContain('stage__shared">'.repeat(2));
+    expect(html.split('class="stage__annex"').length - 1).toBe(1);
+  });
+
+  it("keeps a seasonal course out of a Level's programme and its «حفظ» label (R183 §1)", () => {
+    const k1 = html.slice(
+      html.indexOf('id="journey-level-k1"'),
+      html.indexOf('id="journey-level-k2"'),
+    );
+    expect(k1).toContain('حفظ: 1 سور'); // not «حفظ ومادة قصيرة بالسور»
+    expect(k1).toContain('journey__cardRow journey__cardRow--seasonal');
+    expect(k1.indexOf('حفظ القرآن')).toBeLessThan(k1.indexOf('دورات موسمية:'));
+    expect(k1.indexOf('دورات موسمية:')).toBeLessThan(k1.indexOf('مادة قصيرة بالسور'));
   });
 
   it('ends at the summit with the attire the Owner gave — its caption, no title above it (R182 §4) — and a layered backdrop', () => {
@@ -150,21 +240,47 @@ describe('ProgramsJourney', () => {
     expect(html).toContain('data-journey-category="women"');
   });
 
+  it('brings the landing page to the road on a fresh arrival only (R183 §3)', () => {
+    // No DOM here (the real-browser proof is `scripts/dev/browser/`); the
+    // guards are pinned: never with a hash, never once scrolled, never on a
+    // back/forward return, and once per mount.
+    expect(JOURNEY_SOURCE).toContain("window.location.hash !== '' || window.scrollY > 8");
+    expect(JOURNEY_SOURCE).toContain("navigation?.type === 'back_forward'");
+    expect(JOURNEY_SOURCE).toContain('opened.current = true');
+  });
+
   it('animates only once the browser has said it can, and never under reduced motion', () => {
     // The stylesheet's side is `scripts/ci/check-journey-css.sh` (`?raw` on
     // a .css file reads nothing here).
     expect(html).not.toContain('journey--animate');
-    expect(JOURNEY_SOURCE).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches");
+    expect(JOURNEY_SOURCE).toContain(
+      "window.matchMedia('(prefers-reduced-motion: reduce)').matches",
+    );
     expect(JOURNEY_SOURCE).toContain("entry.target.classList.add('is-walked')");
   });
 });
 
 describe('ProgramsTextView — the same journey, to scan', () => {
   const text = renderToStaticMarkup(
-    <ProgramsTextView open onClose={() => undefined} journey={journey} categories={catalogue} focusLevelId="w1" />,
+    <ProgramsTextView
+      open
+      onClose={() => undefined}
+      journey={journey}
+      categories={catalogue}
+      focusLevelId="w1"
+    />,
   );
   it('lists every Category in journey order with its range and audience, every Level in order, and the empty one honestly', () => {
-    for (const name of ['الطفل', 'من 6 إلى 12 سنة', 'كتاكيت الأمل', 'براعم الأمل', 'المرأة', 'من 18 سنة', 'فرصة أمل', 'وميض الأمل']) {
+    for (const name of [
+      'الطفل',
+      'من 6 إلى 12 سنة',
+      'كتاكيت الأمل',
+      'براعم الأمل',
+      'المرأة',
+      'من 18 سنة',
+      'فرصة أمل',
+      'وميض الأمل',
+    ]) {
       expect(text).toContain(name);
     }
     expect(text.indexOf('الطفل')).toBeLessThan(text.indexOf('المرأة'));
@@ -177,8 +293,11 @@ describe('ProgramsTextView — the same journey, to scan', () => {
     expect(text).toContain('الفاتحة');
     expect(text).toContain('حفظ وتفسير: 10 أحزاب');
     expect(text).toContain('سورة 8');
-    // R182 §1 — the shared Subject once, under the Category's name.
+    // R182 §1 — the shared Subject once, under the Category's name; R183 §1 —
+    // the seasonal course on its own line, and out of the «حفظ» label.
     expect(text.split('التربية الإسلامية').length - 1).toBe(1);
     expect(text).toContain('مواد مشتركة في كل المستويات:');
+    expect(text.split('دورات موسمية:').length - 1).toBe(2);
+    expect(text).toContain('حفظ: 1 سور');
   });
 });

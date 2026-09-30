@@ -363,6 +363,8 @@ export function useScopeOptions({
         memorisation_hizb: null,
         display_order: null,
         group_count: 0,
+        // R183 §6 — not carried by `/me/scope-options` either.
+        surah_ids: [],
         subject_count: l.subject_ids.length,
         subject_ids: l.subject_ids,
         enrollment_count: 0,

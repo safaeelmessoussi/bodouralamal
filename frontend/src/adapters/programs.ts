@@ -13,6 +13,9 @@ export interface PublicSubject {
   name: string;
   /** R182 §3 — works by Surah (R165 §2), so «حفظ وتفسير» can be named above a Level's Surahs. */
   works_by_surah: boolean;
+  /** R183 §1 — a seasonal course (a limited period, any time of the year):
+   *  listed apart as «دورات موسمية», never among the programme's Subjects. */
+  seasonal: boolean;
 }
 
 export interface PublicSurah {

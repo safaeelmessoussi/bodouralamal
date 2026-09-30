@@ -98,6 +98,8 @@ export interface SubjectWithLevels extends SubjectRef {
   tracksQuranProgress: boolean;
   /** R165 §2 — the Subject works by Surah. */
   requiresSurahs: boolean;
+  /** R183 §1 — a seasonal course, not the year's programme. */
+  isSeasonal: boolean;
 }
 
 /**
@@ -139,6 +141,7 @@ export async function listSubjects(
       version: true,
       tracksQuranProgress: true,
       requiresSurahs: true,
+      isSeasonal: true,
       // Live pairings only, and live Levels only: a soft-deleted Level does not
       // block anything, so listing it would name a dependency that is not there.
       levels: {
@@ -164,6 +167,7 @@ export async function listSubjects(
     version: subject.version,
     tracksQuranProgress: subject.tracksQuranProgress,
     requiresSurahs: subject.requiresSurahs,
+    isSeasonal: subject.isSeasonal,
     levels: subject.levels
       // Category then Level, the reading order of the hierarchy — and the
       // Category first because `Level.displayOrder` is scoped WITHIN its Category
@@ -183,7 +187,7 @@ export async function listSubjects(
 export async function createSubject(
   prisma: PrismaClient,
   actor: Actor,
-  data: { name: string; displayOrder?: number | null },
+  data: { name: string; displayOrder?: number | null; isSeasonal?: boolean },
 ): Promise<Subject> {
   assertCanWrite(actor);
 
@@ -192,6 +196,9 @@ export async function createSubject(
       data: {
         name: data.name,
         displayOrder: data.displayOrder ?? null,
+        // R183 §1 — said at creation so a course never lists as programme
+        // between its creation and its first edit.
+        isSeasonal: data.isSeasonal ?? false,
         createdById: actor.userId,
       },
     });
@@ -217,6 +224,8 @@ export async function updateSubject(
     displayOrder?: number | null;
     tracksQuranProgress?: boolean;
     requiresSurahs?: boolean;
+    /** R183 §1 */
+    isSeasonal?: boolean;
   },
 ): Promise<Subject> {
   assertCanWrite(actor);

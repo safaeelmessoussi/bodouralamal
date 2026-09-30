@@ -40,6 +40,9 @@ export const updateCategorySchema = z.object({
 export const createSubjectSchema = z.object({
   name: entityName,
   display_order: displayOrder.optional(),
+  /** R183 §1 — a seasonal course (limited period, any time of the year), kept
+   *  out of «برامجنا التعليمية»'s programme; a fact, never a name match. */
+  is_seasonal: z.boolean().optional(),
 });
 
 export const updateSubjectSchema = z.object({
@@ -58,6 +61,8 @@ export const updateSubjectSchema = z.object({
   /** R165 §2 — this Subject works by Surah (حفظ القرآن, تفسير القرآن): a class
    *  or an exam of it must name which Surah of the Level's «مقرر الحفظ». */
   requires_surahs: z.boolean().optional(),
+  /** R183 §1 — see `createSubjectSchema`. */
+  is_seasonal: z.boolean().optional(),
 });
 
 /**

@@ -70,6 +70,8 @@ export interface TaxonomyInput {
   /** SRS Revision 165 §2 — Subjects only: a class or an exam of this Subject
    *  must name which Surah. Omit to leave unchanged. */
   requires_surahs?: boolean;
+  /** SRS Revision 183 §1 — Subjects only: a seasonal course. Omit to leave unchanged. */
+  is_seasonal?: boolean;
 }
 
 export async function listCategories(
@@ -198,6 +200,8 @@ export interface Level {
   subject_count: number;
   /** The Subjects the Level teaches on its own — one read for «مواد المستوى». */
   subject_ids: string[];
+  /** R183 §6 — its «مقرر الحفظ», Mushaf order — one read for that page. */
+  surah_ids: number[];
   /** Live enrolments. Non-zero means deletion will be refused, and the screen
    *  can say so before the administrator tries. */
   enrollment_count: number;

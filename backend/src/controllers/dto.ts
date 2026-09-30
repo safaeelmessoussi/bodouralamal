@@ -1269,6 +1269,9 @@ export interface SubjectWithLevelsDto extends SubjectRefDto {
   /** R165 §2 — this Subject works by Surah: a class or an exam of it must name
    *  which. The tracker always carries it (a DB CHECK). */
   requires_surahs: boolean;
+  /** R183 §1 — a seasonal course (limited period, any time of the year), listed
+   *  apart from the programme on «برامجنا التعليمية». */
+  is_seasonal: boolean;
 }
 
 export function subjectWithLevelsDto(row: {
@@ -1278,6 +1281,7 @@ export function subjectWithLevelsDto(row: {
   version: number;
   tracksQuranProgress: boolean;
   requiresSurahs: boolean;
+  isSeasonal: boolean;
   levels: { id: string; name: string; categoryName: string }[];
 }): SubjectWithLevelsDto {
   return {
@@ -1287,6 +1291,7 @@ export function subjectWithLevelsDto(row: {
     version: row.version,
     tracks_quran_progress: row.tracksQuranProgress,
     requires_surahs: row.requiresSurahs,
+    is_seasonal: row.isSeasonal,
     levels: row.levels.map((level) => ({
       id: level.id,
       name: level.name,
@@ -1422,6 +1427,8 @@ export interface LevelDto extends LevelCoreDto {
   subject_count: number;
   /** The Subjects this Level teaches on its own (`LevelSubject`); one read for «مواد المستوى». */
   subject_ids: string[];
+  /** R183 §6 — its «مقرر الحفظ» (`LevelSurah`), Mushaf order; one read for that page. */
+  surah_ids: number[];
   enrollment_count: number;
   /** §4.9's default content visibility for this Level, through its Category
    *  (§15.1). §14.1's upload screen preselects it. */
@@ -1446,6 +1453,7 @@ export function levelDto(row: {
   groupCount: number;
   subjectCount: number;
   subjectIds: string[];
+  surahIds: number[];
   enrollmentCount: number;
   defaultVisibility: string;
   version: number;
@@ -1465,6 +1473,7 @@ export function levelDto(row: {
     group_count: row.groupCount,
     subject_count: row.subjectCount,
     subject_ids: row.subjectIds,
+    surah_ids: row.surahIds,
     enrollment_count: row.enrollmentCount,
     default_visibility: row.defaultVisibility,
     version: row.version,

@@ -11,6 +11,8 @@ import {
   audienceKey,
   levelAgeWords,
   memorisationWords,
+  programmeSubjects,
+  seasonalSubjects,
   type Journey,
   type JourneyCategory,
   type JourneyStep,
@@ -87,6 +89,31 @@ export function ProgramsJourney({
     // Bring its start (right) edge to the panel's, without moving the page.
     root.scrollLeft +=
       target.getBoundingClientRect().right - root.getBoundingClientRect().right + 24;
+  }, [journey]);
+
+  // R183 §3 — the landing page OPENS on the journey: on a fresh arrival at
+  // «/» (no hash, nothing scrolled yet, not a back/forward return) the page
+  // is brought to the road so the first thing seen is المرأة's first step
+  // under the chips. Once per mount; a visitor who has already scrolled, or
+  // who came for another anchor, is never moved.
+  const opened = useRef(false);
+  useEffect(() => {
+    const root = scroller.current;
+    if (!root || opened.current || journey.categories.length === 0) return;
+    if (window.location.hash !== '' || window.scrollY > 8) return;
+    const navigation = performance.getEntriesByType('navigation')[0] as
+      PerformanceNavigationTiming | undefined;
+    if (navigation?.type === 'back_forward') return;
+    opened.current = true;
+    const journeyRoot = root.closest<HTMLElement>('.journey');
+    if (!journeyRoot) return;
+    const header =
+      parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-height')) ||
+      0;
+    const headerPx =
+      header * parseFloat(getComputedStyle(document.documentElement).fontSize || '16');
+    const top = window.scrollY + journeyRoot.getBoundingClientRect().top - headerPx - 12;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
   }, [journey]);
 
   function scrollBy(direction: 1 | -1): void {
@@ -211,14 +238,26 @@ function Stage({
           </span>
         </p>
         {category.description ? <p className="stage__text">{category.description}</p> : null}
-        {/* R182 §1 — the Subjects every step shares, said once here. */}
-        {category.sharedSubjects.length > 0 ? (
-          <p className="stage__shared">
-            <span className="stage__sharedLabel">{t('programs.journey.sharedSubjects')}</span>{' '}
-            {category.sharedSubjects.map((subject) => subject.name).join('، ')}
-          </p>
-        ) : null}
       </header>
+      {/* R182 §1 / R183 §2 — the Subjects every step shares, said once, as an
+          annexe UNDER the card (the card itself stays small); R183 §1 — the
+          seasonal courses on their own line, apart from the programme. */}
+      {category.sharedSubjects.length > 0 || category.seasonalSubjects.length > 0 ? (
+        <div className="stage__annex">
+          {category.sharedSubjects.length > 0 ? (
+            <p className="stage__shared">
+              <span className="stage__sharedLabel">{t('programs.journey.sharedSubjects')}</span>{' '}
+              {category.sharedSubjects.map((subject) => subject.name).join('، ')}
+            </p>
+          ) : null}
+          {category.seasonalSubjects.length > 0 ? (
+            <p className="stage__shared stage__shared--seasonal">
+              <span className="stage__sharedLabel">{t('programs.seasonalLabel')}</span>{' '}
+              {category.seasonalSubjects.map((subject) => subject.name).join('، ')}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <ol className="stage__body">
         {first ? (
@@ -426,10 +465,19 @@ function StepCard({
         {level.name}
       </h4>
       {level.description ? <p className="journey__cardText">{level.description}</p> : null}
-      {level.subjects.length > 0 ? (
+      {programmeSubjects(level.subjects).length > 0 ? (
         <p className="journey__cardRow">
           <span className="journey__cardRowLabel">{t('programs.subjectsLabel')}</span>
-          {level.subjects.map((subject) => (
+          {programmeSubjects(level.subjects).map((subject) => (
+            <Badge key={subject.id}>{subject.name}</Badge>
+          ))}
+        </p>
+      ) : null}
+      {/* R183 §1 — a seasonal course the Level carries, apart from its programme. */}
+      {seasonalSubjects(level.subjects).length > 0 ? (
+        <p className="journey__cardRow journey__cardRow--seasonal">
+          <span className="journey__cardRowLabel">{t('programs.seasonalLabel')}</span>
+          {seasonalSubjects(level.subjects).map((subject) => (
             <Badge key={subject.id}>{subject.name}</Badge>
           ))}
         </p>

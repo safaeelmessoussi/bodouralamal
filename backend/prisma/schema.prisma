@@ -1292,6 +1292,14 @@ model Subject {
   /// `subject_tracker_requires_surahs_check`, in SQL.
   requiresSurahs Boolean @default(false) @map("requires_surahs")
 
+  /// R183 §1 — **a seasonal course**: taught for a limited period (a week, a
+  /// few days), organised any time of the year and any number of times — not
+  /// part of a Level's programme, so «برامجنا التعليمية» lists it apart
+  /// («دورات موسمية»), never among the programme's Subjects. A fact about
+  /// the Subject, never a match on its name (R27, §4.4b). Scheduling, exams
+  /// and the curriculum policy read nothing from it.
+  isSeasonal Boolean @default(false) @map("is_seasonal")
+
   version Int @default(0)
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

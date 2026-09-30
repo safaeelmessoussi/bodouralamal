@@ -121,6 +121,7 @@ export function createSubjectHandler(prisma: PrismaClient) {
     const created = await createSubject(prisma, requireActor(req), {
       name: body.name,
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
+      ...(body.is_seasonal !== undefined ? { isSeasonal: body.is_seasonal } : {}),
     });
     res.status(201).json({ data: subjectRefDto(created) });
   };
@@ -143,6 +144,7 @@ export function updateSubjectHandler(prisma: PrismaClient) {
         ...(body.requires_surahs !== undefined
           ? { requiresSurahs: body.requires_surahs }
           : {}),
+        ...(body.is_seasonal !== undefined ? { isSeasonal: body.is_seasonal } : {}),
       },
     );
     res.json({ data: subjectRefDto(updated) });

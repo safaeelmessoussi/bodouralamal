@@ -26,7 +26,7 @@ interface Row {
   description: string | null;
   min_age: number | null;
   max_age: number | null;
-  subjects: { id: string; name: string; works_by_surah: boolean }[];
+  subjects: { id: string; name: string; works_by_surah: boolean; seasonal: boolean }[];
   holds_own_login: boolean | null;
   levels: {
     id: string;
@@ -37,7 +37,7 @@ interface Row {
     journey_role: string;
     memorisation_hizb: number | null;
     gender_restriction: string;
-    subjects: { id: string; name: string; works_by_surah: boolean }[];
+    subjects: { id: string; name: string; works_by_surah: boolean; seasonal: boolean }[];
     surahs: { id: number; name: string }[];
   }[];
 }
@@ -106,7 +106,9 @@ describe("GET /programs — public access", () => {
     expect(rows[0]!.description).toBe("وصف الفئة");
     expect(rows[0]!.levels).toHaveLength(1);
     expect(rows[0]!.levels[0]!.description).toBe("وصف المستوى");
-    expect(rows[0]!.levels[0]!.subjects).toEqual([{ id: subject.id, name: subject.name, works_by_surah: false }]);
+    expect(rows[0]!.levels[0]!.subjects).toEqual([
+      { id: subject.id, name: subject.name, works_by_surah: false, seasonal: false },
+    ]);
     expect(rows[0]!.levels[0]!.surahs).toEqual([{ id: 1, name: "الفاتحة" }]);
   });
 
@@ -212,17 +214,23 @@ describe("GET /programs — public access", () => {
 
   it("R182 §1 — a Subject taught to the whole Category is named ONCE under the Category; a Level lists its own, marked by Surah or not", async () => {
     const category = await prisma.category.create({ data: { name: `${TAG} فئة`, holdsOwnLogin: true } });
-    const shared = await prisma.subject.create({ data: { name: `${TAG} مادة للفئة كلها` } });
+    const shared = await prisma.subject.create({ data: { name: `${TAG} مادة للفئة كلها`, displayOrder: 1 } });
     // `works_by_surah` is §4.4c's `requires_surahs` (the one progress-tracking Subject is the seed's, R117).
     const own = await prisma.subject.create({ data: { name: `${TAG} حفظ`, requiresSurahs: true } });
+    // R183 §1 — a seasonal course, marked by its column (its name is not read).
+    const course = await prisma.subject.create({ data: { name: `${TAG} مادة قصيرة`, isSeasonal: true, displayOrder: 9 } });
     await prisma.categorySubject.create({ data: { categoryId: category.id, subjectId: shared.id } });
+    await prisma.categorySubject.create({ data: { categoryId: category.id, subjectId: course.id } });
     await prisma.level.create({
       data: { name: `${TAG} تمهيدي`, categoryId: category.id, displayOrder: 1, journeyRole: "preparatory", memorisationHizb: 5, genderRestriction: "girls_only" },
     });
     const first = await prisma.level.create({ data: { name: `${TAG} أول`, categoryId: category.id, displayOrder: 2 } });
     await prisma.levelSubject.create({ data: { levelId: first.id, subjectId: own.id } });
     const row = mine((await call("/programs")).body)[0]!;
-    expect(row.subjects.map((s) => [s.name, s.works_by_surah])).toEqual([[`${TAG} مادة للفئة كلها`, false]]);
+    expect(row.subjects.map((s) => [s.name, s.works_by_surah, s.seasonal])).toEqual([
+      [`${TAG} مادة للفئة كلها`, false, false],
+      [`${TAG} مادة قصيرة`, false, true],
+    ]);
     expect(row.holds_own_login).toBe(true);
     const [prep, step] = row.levels;
     expect(prep!.subjects).toEqual([]);

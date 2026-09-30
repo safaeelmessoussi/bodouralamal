@@ -20,6 +20,9 @@ export interface PublicSubjectRef {
   /** R182 §3 — the Subject works by Surah (R165 §2's marker), so the page can
    *  name «حفظ وتفسير» above a Level's Surahs. */
   worksBySurah: boolean;
+  /** R183 §1 — a seasonal course (limited period), listed apart from the
+   *  programme («دورات موسمية»), never among its Subjects. */
+  seasonal: boolean;
 }
 
 export interface PublicSurahRef {
@@ -73,10 +76,16 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
     orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
   });
   if (categories.length === 0) return [];
-  const subjectRef = (subject: { id: string; name: string; requiresSurahs: boolean }): PublicSubjectRef => ({
+  const subjectRef = (subject: {
+    id: string;
+    name: string;
+    requiresSurahs: boolean;
+    isSeasonal: boolean;
+  }): PublicSubjectRef => ({
     id: subject.id,
     name: subject.name,
     worksBySurah: subject.requiresSurahs,
+    seasonal: subject.isSeasonal,
   });
   const bySubjectOrder = (
     a: { displayOrder: number | null; name: string },
@@ -109,7 +118,7 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
     where: { deletedAt: null, categoryId: { in: categories.map((c) => c.id) }, subject: { deletedAt: null } },
     select: {
       categoryId: true,
-      subject: { select: { id: true, name: true, displayOrder: true, requiresSurahs: true } },
+      subject: { select: { id: true, name: true, displayOrder: true, requiresSurahs: true, isSeasonal: true } },
     },
   });
   const subjectsByCategory = new Map<string, PublicSubjectRef[]>();
@@ -139,7 +148,7 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
       where: { deletedAt: null, levelId: { in: levelIds }, subject: { deletedAt: null } },
       select: {
         levelId: true,
-        subject: { select: { id: true, name: true, displayOrder: true, requiresSurahs: true } },
+        subject: { select: { id: true, name: true, displayOrder: true, requiresSurahs: true, isSeasonal: true } },
       },
     }),
     prisma.levelSurah.findMany({

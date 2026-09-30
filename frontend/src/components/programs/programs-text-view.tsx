@@ -9,6 +9,8 @@ import {
   audienceKey,
   levelAgeWords,
   memorisationWords,
+  programmeSubjects,
+  seasonalSubjects,
   type Journey,
 } from './journey-model.js';
 
@@ -74,6 +76,15 @@ export function ProgramsTextView({
                 <p className="programs__row">
                   <span className="programs__rowLabel">{t('programs.journey.sharedSubjects')}</span>
                   {category.sharedSubjects.map((subject) => (
+                    <Badge key={subject.id}>{subject.name}</Badge>
+                  ))}
+                </p>
+              ) : null}
+              {/* R183 §1 — the seasonal courses, apart from the programme. */}
+              {category.seasonalSubjects.length > 0 ? (
+                <p className="programs__row">
+                  <span className="programs__rowLabel">{t('programs.seasonalLabel')}</span>
+                  {category.seasonalSubjects.map((subject) => (
                     <Badge key={subject.id}>{subject.name}</Badge>
                   ))}
                 </p>
@@ -154,10 +165,18 @@ function LevelRow({
       </p>
       {level.description ? <p className="muted">{level.description}</p> : null}
       {note ? <p className="muted">{note}</p> : null}
-      {level.subjects.length > 0 ? (
+      {programmeSubjects(level.subjects).length > 0 ? (
         <p className="programs__row">
           <span className="programs__rowLabel">{t('programs.subjectsLabel')}</span>
-          {level.subjects.map((subject) => (
+          {programmeSubjects(level.subjects).map((subject) => (
+            <Badge key={subject.id}>{subject.name}</Badge>
+          ))}
+        </p>
+      ) : null}
+      {seasonalSubjects(level.subjects).length > 0 ? (
+        <p className="programs__row">
+          <span className="programs__rowLabel">{t('programs.seasonalLabel')}</span>
+          {seasonalSubjects(level.subjects).map((subject) => (
             <Badge key={subject.id}>{subject.name}</Badge>
           ))}
         </p>

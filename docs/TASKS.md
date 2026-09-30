@@ -34,7 +34,7 @@ Ends when the Moroccan VPS exists: restore there, OVH returns to Staging, the si
 | P7 | No Staging gate while this lasts: `develop` → CI → this host, pre-deploy dump is the rollback | standing |
 | P8 | Detach the previous website from the domain at the registrar — it still answers in caches that visited it; anyone stuck opens `/clear-cache` once ([runbook](operations/runbooks.md#a-visitor-still-sees-the-previous-website), R175 §5) | **Owner** |
 | P9 | Escrow the restic password off the VPS with a second custodian (`/root/bodour-recovery/restic-password`) — the repository is useless without it | **Owner** |
-| P10 | R180–R182 data entry on «المستويات»: each Level's «السن من/إلى» (the journey orders Categories by their derived start age — children first — and until every Category states one it follows «الفئات»'s own order); «فرصة أمل» → «برنامج تمهيدي»; «مقرر الحفظ بالأحزاب» (المرأة: 5 for the first two years, 10 after, per the Owner); the Subjects of «فرصة أمل» on «مواد المستوى»; the by-Surah Subjects (حفظ، تفسير) on each Level's «مواد المستوى» so the card reads «حفظ وتفسير: N أحزاب» | **Owner** |
+| P10 | R180–R182 data entry on «المستويات»: each Level's «السن من/إلى» (the journey orders Categories by their derived start age — children first — and until every Category states one it follows «الفئات»'s own order); «فرصة أمل» → «برنامج تمهيدي»; «مقرر الحفظ بالأحزاب» (المرأة: 5 for the first two years, 10 after, per the Owner); the Subjects of «فرصة أمل» on «مواد المستوى»; the by-Surah Subjects (حفظ، تفسير) on each Level's «مواد المستوى» so the card reads «حفظ وتفسير: N أحزاب»; tick «دورة موسمية» on any course the migration did not catch (only names beginning with «دورة» were ticked) | **Owner** |
 
 ## Owner tasks — data and legal (not code)
 

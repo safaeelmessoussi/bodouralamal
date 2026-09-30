@@ -114,6 +114,15 @@ export interface LevelSummary {
    * subjects», so the editor re-sent pairs that existed (DUPLICATE).
    */
   subjectIds: string[];
+  /**
+   * R183 §6 — the Level's «مقرر الحفظ» (`LevelSurah`, Mushaf order), carried
+   * for the same reason `subjectIds` is: «مقرر الحفظ» read
+   * `/admin/levels/{id}/surahs` once PER LEVEL — thirty-odd reads on load,
+   * of which the edge admitted twenty (TD-13: 120/min, burst 20) and refused
+   * the rest with `429`, so the page showed an error for nothing the
+   * administrator did (Owner-reported on Production, 2026-09-30).
+   */
+  surahIds: number[];
   enrollmentCount: number;
   /**
    * §4.9's default content visibility for this Level, resolved through its
@@ -249,6 +258,8 @@ export async function listLevels(
       version: true,
       category: { select: { name: true } },
       subjects: { where: { deletedAt: null, subject: { deletedAt: null } }, select: { subjectId: true } },
+      // R183 §6 — Mushaf order, the order «مقرر الحفظ» already showed.
+      surahs: { where: { deletedAt: null }, select: { surahId: true }, orderBy: { surahId: 'asc' } },
       _count: {
         select: {
           administrativeGroups: { where: { deletedAt: null } },
@@ -285,6 +296,7 @@ export async function listLevels(
     groupCount: row._count.administrativeGroups,
     subjectCount: row._count.subjects,
     subjectIds: row.subjects.map((link) => link.subjectId),
+    surahIds: row.surahs.map((link) => link.surahId),
     enrollmentCount: row._count.enrollments,
     defaultVisibility: readDefaultVisibility(byCategory.get(row.categoryId)),
     version: row.version,

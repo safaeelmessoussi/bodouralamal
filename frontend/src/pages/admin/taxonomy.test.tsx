@@ -49,7 +49,8 @@ const LEVEL: Level = {
   memorisation_hizb: null,
   group_count: 1,
   subject_count: 2,
-      subject_ids: [],
+  subject_ids: [],
+  surah_ids: [1, 2],
   enrollment_count: 12,
   version: 0,
 };
@@ -105,6 +106,8 @@ describe('the adapter types match the wire contract', () => {
       // 2026-09-23 — the Level's own Subjects, so «مواد المستوى» reads the
       // page in one request instead of one per Level (rate-limited on Staging).
       'subject_ids',
+      // R183 §6 — its «مقرر الحفظ», for the same reason (429 on Production).
+      'surah_ids',
       'version',
     ]);
   });

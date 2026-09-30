@@ -35,8 +35,10 @@ export interface JourneyCategory {
   /** R180 §4 — derived by the server from the first and last Level. */
   minAge: number | null;
   maxAge: number | null;
-  /** R182 §1 — the Subjects every step shares, said once under the name. */
+  /** R182 §1 — the Subjects every step shares, said once under the name;
+   *  R183 §1 — the programme's own, the seasonal courses apart. */
   sharedSubjects: PublicProgramCategory['subjects'];
+  seasonalSubjects: PublicProgramCategory['subjects'];
   /** R182 §5 — an adult Category (its beneficiaries hold the login). */
   adult: boolean;
   /** In the Category's own order (§2.2), ordinary steps only. */
@@ -91,7 +93,8 @@ export function buildJourney(categories: readonly PublicProgramCategory[]): Jour
       description: source.description,
       minAge: source.min_age,
       maxAge: source.max_age,
-      sharedSubjects: source.subjects,
+      sharedSubjects: programmeSubjects(source.subjects),
+      seasonalSubjects: seasonalSubjects(source.subjects),
       adult: source.holds_own_login === true,
       steps: [],
       preparatory: source.levels.filter((level) => level.journey_role === 'preparatory'),
@@ -133,12 +136,26 @@ export function audienceKey(category: Pick<JourneyCategory, 'audience' | 'adult'
 }
 
 /**
+ * R183 §1 — a seasonal course (`seasonal`, a column on the Subject) is not
+ * the programme: the page lists it apart, under «دورات موسمية», and never
+ * counts it among a Level's or a Category's Subjects nor in the «حفظ وتفسير»
+ * label. The split is the same for a Category's shared Subjects and a
+ * Level's own.
+ */
+export function programmeSubjects<S extends { seasonal: boolean }>(subjects: readonly S[]): S[] {
+  return subjects.filter((subject) => !subject.seasonal);
+}
+export function seasonalSubjects<S extends { seasonal: boolean }>(subjects: readonly S[]): S[] {
+  return subjects.filter((subject) => subject.seasonal);
+}
+
+/**
  * R182 §3 — the by-Surah Subjects of a Level, as one word each: «حفظ القرآن»
  * and «تفسير القرآن» read «حفظ وتفسير» — the word «القرآن» dropped, joined
  * with «و». Nothing by Surah → the generic «مقرر الحفظ».
  */
 export function surahSubjectsLabel(level: PublicProgramLevel, t: (key: string) => string): string {
-  const words = level.subjects
+  const words = programmeSubjects(level.subjects)
     .filter((subject) => subject.works_by_surah)
     .map((subject) => subject.name.replace(/\s*القرآن\s*/g, ' ').trim())
     .filter((word) => word !== '');

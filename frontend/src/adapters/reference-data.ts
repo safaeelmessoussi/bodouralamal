@@ -51,6 +51,9 @@ export interface SubjectRef {
   /** SRS Revision 165 §2 — this Subject works by Surah (shown and set on
    *  المواد; the scheduling forms read it from `/me/scope-options`). */
   requires_surahs?: boolean;
+  /** SRS Revision 183 §1 — a seasonal course (a limited period, any time of
+   *  the year), listed apart from the programme on «برامجنا التعليمية». */
+  is_seasonal?: boolean;
 }
 
 export interface AcademicYearRef {

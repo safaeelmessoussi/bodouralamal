@@ -13,6 +13,13 @@ export function list(prisma: PrismaClient) {
   return async (_req: Request, res: Response): Promise<void> => {
     const categories = await listPublicPrograms(prisma);
 
+    // R182 §3 / R183 §1 — by Surah, and seasonal (a course, not the programme).
+    const subjectRef = (s: { id: string; name: string; worksBySurah: boolean; seasonal: boolean }) => ({
+      id: s.id,
+      name: s.name,
+      works_by_surah: s.worksBySurah,
+      seasonal: s.seasonal,
+    });
     res.json({
       data: categories.map((category) => ({
         id: category.id,
@@ -22,7 +29,7 @@ export function list(prisma: PrismaClient) {
         min_age: category.minAge,
         max_age: category.maxAge,
         // R182 §1 — the Subjects shared by every step, once; R182 §5 — who holds the login.
-        subjects: category.subjects.map((s) => ({ id: s.id, name: s.name, works_by_surah: s.worksBySurah })),
+        subjects: category.subjects.map(subjectRef),
         holds_own_login: category.holdsOwnLogin,
         levels: category.levels.map((level) => ({
           id: level.id,
@@ -35,7 +42,7 @@ export function list(prisma: PrismaClient) {
           // R181 §6/§7 — «مقرر الحفظ» in Hizb, and who the Level admits.
           memorisation_hizb: level.memorisationHizb,
           gender_restriction: level.genderRestriction,
-          subjects: level.subjects.map((s) => ({ id: s.id, name: s.name, works_by_surah: s.worksBySurah })),
+          subjects: level.subjects.map(subjectRef),
           surahs: level.surahs.map((s) => ({ id: s.id, name: s.name })),
         })),
       })),
