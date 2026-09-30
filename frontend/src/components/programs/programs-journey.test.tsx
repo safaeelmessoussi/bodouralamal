@@ -249,10 +249,12 @@ describe('ProgramsJourney', () => {
     expect(html).toContain('تُتمّ المتعلّمة برنامج الطفل وتواصل الرحلة.');
     expect(html).toContain('تُتمّ المتعلّمة برنامج المرأة.');
     expect(html).not.toContain('برنامج المرأة وتواصل');
-    // The attire stands UNDER the words, in the trophy's cell, on the last stage only.
+    // R189 — a card like a Level's, in the trophy's cell, on the last stage only:
+    // «إتمام الفئة» in the title pill, its words, then the attire.
     const women = html.slice(html.indexOf('data-journey-category="women"'));
     const summitCell = women.slice(women.indexOf('stage__cell--prize stage__cell--summit'));
-    expect(summitCell).toContain('journey__milestone journey__milestone--summit');
+    expect(summitCell).toContain('class="journey__card journey__card--summit"');
+    expect(summitCell).toContain('journey__cardTitle">إتمام الفئة');
     expect(summitCell.indexOf('تُتمّ المتعلّمة برنامج المرأة.')).toBeLessThan(
       summitCell.indexOf('journey__attire'),
     );

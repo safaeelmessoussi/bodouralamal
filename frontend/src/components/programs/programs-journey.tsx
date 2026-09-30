@@ -455,20 +455,19 @@ function PreparatoryNote({
  *  «وتواصل الرحلة») and the attire stands under them in the trophy's place. */
 function Prize({ category }: { category: JourneyCategory }): ReactNode {
   if (category.last) {
+    // R189 — a card like a Level's: the last step of the last Category,
+    // inside its stage, the attire filling it.
     return (
-      <div
-        className="journey__milestone journey__milestone--summit"
-        role="group"
+      <article
+        className="journey__card journey__card--summit"
         aria-label={t('programs.journey.graduationLabel').replace('{category}', category.name)}
       >
-        <p className="journey__milestoneTitle">{t('programs.journey.graduation')}</p>
-        <p className="journey__milestoneText">
+        <h4 className="journey__cardTitle">{t('programs.journey.graduation')}</h4>
+        <p className="journey__cardText">
           {t('programs.journey.graduationTextLast').replace('{category}', category.name)}
         </p>
-        {/* R188 §3 — the attire alone, the size of a card: the last step of
-            the last Category, inside its stage. */}
-        <SummitFigure bare />
-      </div>
+        <SummitFigure bare sizes="(max-width: 44rem) 14rem, 16rem" />
+      </article>
     );
   }
   return (

@@ -163,6 +163,10 @@
 }
 .journey__road {
   position: relative;
+  /* R189 — never shrunk by the panel (a flex box since R187 §2): shrunk, its
+     last cells overflowed the road's own box and stood outside the backdrop
+     and, to the eye, outside their stage. */
+  flex: none;
   display: flex;
   align-items: flex-end;
   gap: var(--space-5);
@@ -278,9 +282,9 @@
 .stage__cell--prize {
   width: 10rem;
 }
-/* R185 §3 — the last Category's graduation holds the attire: wider. */
+/* R189 — the last Category's graduation is a card like a Level's. */
 .stage__cell--summit {
-  width: 17rem;
+  width: var(--journey-card-w, 16rem);
 }
 .stage__cell--entrances {
   margin-inline-end: var(--space-3);
@@ -638,19 +642,28 @@
   height: auto;
   border-radius: var(--radius-md);
 }
-/* R185 §3 / R188 §3 — «إتمام الفئة» and its words first, the attire under
-   them, the whole no taller than a card: the last step of the last
-   Category, inside its stage. */
-.journey__milestone--summit {
-  gap: var(--space-2);
+/* R189 — the attire as the last step's card: «إتمام الفئة» in the title
+   pill, its words, and the image filling the card's width — its upper part,
+   where the sashes read — so the card stands about as tall as a Level's. */
+.journey__card--summit {
+  border-block-end-color: var(--color-accent);
 }
-.journey__milestone--summit .journey__summit {
-  width: auto;
-  margin-block-start: var(--space-2);
+.journey__card--summit .journey__summit {
+  display: block;
+  width: 100%;
 }
-.journey__milestone--summit .journey__attire img {
-  width: auto;
+.journey__card--summit .journey__attire {
+  display: block;
+  width: 100%;
+  padding: 0;
+  box-shadow: none;
+  background: none;
+}
+.journey__card--summit .journey__attire img {
+  width: 100%;
   height: 13rem;
+  object-fit: cover;
+  object-position: center 8%;
 }
 .journey__attireCaption {
   margin: var(--space-2) 0 0;
@@ -771,9 +784,6 @@
   .journey__surahs:not(.is-expanded) .journey__surahsText {
     -webkit-line-clamp: 2;
   }
-  .stage__cell--summit {
-    width: 14rem;
-  }
   .journey__summit {
     width: 13rem;
   }
@@ -797,7 +807,7 @@
     flex: 0 0 auto;
     margin-inline-start: auto;
   }
-  .journey__milestone--summit .journey__attire img {
+  .journey__card--summit .journey__attire img {
     height: 11rem;
   }
 }

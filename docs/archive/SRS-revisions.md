@@ -1,9 +1,11 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–188 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–189 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 189 (Document Owner, 2026-09-30 — the road's end looked broken):** **BUILT.** The attire stood on bare white beside the last Level, outside the ridges and, to the eye, outside its Category: since R187 §2 the panel is a flex box and the road was allowed to shrink, so its last cells overflowed the road's own box — past the backdrop. The road no longer shrinks (`flex: none`), so the backdrop spans it whole; and the last Category's graduation is now a CARD like a Level's — «إتمام الفئة» in the title pill, its words, the attire filling the card's width (its upper part, where the sashes read) — the same width as a Level card and about its height, standing as the stage's last step, inside the stage.
 
 **Revision 188 (Document Owner, 2026-09-30 — «unreachable», and a review of the journey, the show and the cards):** **BUILT.**
 
