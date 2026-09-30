@@ -4,8 +4,10 @@
    One road that CLIMBS, right to left (the page reads right to left), inside
    a panel that scrolls sideways. Every stop stands `--journey-rise` higher
    than the one before (`--step` is set per cell by the component), so the
-   ascent is real on every width and the page itself stays short. The section
-   head carries «عرض جميع البرامج», the text view of the same data (§10). */
+   ascent is real on every width and the page itself stays short. The road's
+   controls carry «عرض جميع البرامج» (the text view of the same data, §10)
+   and «عرض بملء الشاشة» (the show, R185 §5). R187 §2 — on a laptop the panel
+   is sized to the viewport by the component and the road scaled to fit it. */
 
 .journey {
   display: grid;
@@ -19,13 +21,6 @@
 .programs__lede {
   max-inline-size: none;
   text-wrap: pretty;
-}
-.programs__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: var(--space-3);
-  margin-block-start: var(--space-3);
 }
 
 /* The way to any Category without walking the ones before (§11). */
@@ -77,8 +72,9 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-/* R185 §5 — the full-screen show, beside the road's arrows. */
-.journey__show {
+/* R185 §5 / R187 §3 — the show and the text view, beside the road's arrows. */
+.journey__show,
+.journey__text {
   padding-inline: var(--space-3);
 }
 /* The chevron points down; a quarter turn each way says «back along the road»
@@ -100,6 +96,8 @@
   --journey-walk-w: 84px;
   --journey-terrace: 30px;
   position: relative;
+  display: flex;
+  align-items: flex-end;
   overflow-x: auto;
   overflow-y: hidden;
   border: 1px solid var(--color-border-subtle);
@@ -765,7 +763,8 @@
   .journey__attire img {
     width: 10rem;
   }
-  .journey__show {
-    flex: 1 1 100%;
+  .journey__show,
+  .journey__text {
+    flex: 1 1 calc(50% - var(--space-2));
   }
 }

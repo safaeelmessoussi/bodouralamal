@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 
 import type { PublicProgramLevel } from '../../adapters/programs.js';
 import { t } from '../../i18n/index.js';
@@ -42,9 +49,19 @@ import { Trophy } from './trophy.js';
  * programme (§6) — stand together in one small «مداخل أخرى» note at the
  * start of the stage (R182 §2), in the road's flow.
  */
-export function ProgramsJourney({ journey }: { journey: Journey }): ReactNode {
+export function ProgramsJourney({
+  journey,
+  onTextView,
+}: {
+  journey: Journey;
+  /** «عرض جميع البرامج» — the text view of the same data (§10), opened
+   *  from the road's own controls since R187 §3. */
+  onTextView: () => void;
+}): ReactNode {
   const scroller = useRef<HTMLDivElement | null>(null);
+  const journeyRoot = useRef<HTMLDivElement | null>(null);
   const rise = useRise();
+  useFit(journeyRoot, scroller, journey);
   // R185 §5 — the full-screen show, opened from the road's own controls.
   const [showOpen, setShowOpen] = useState(false);
   const [animated, setAnimated] = useState(false);
@@ -135,7 +152,7 @@ export function ProgramsJourney({ journey }: { journey: Journey }): ReactNode {
   }
 
   return (
-    <div className={`journey${animated ? ' journey--animate' : ''}`}>
+    <div ref={journeyRoot} className={`journey${animated ? ' journey--animate' : ''}`}>
       <ArrowheadDefs />
       {/* §11 — a way to each Category without swiping through the ones before. */}
       <nav className="journey__nav" aria-label={t('programs.journey.navLabel')}>
@@ -171,6 +188,9 @@ export function ProgramsJourney({ journey }: { journey: Journey }): ReactNode {
           {/* R185 §5 — the journey as a full-screen show. The browser's full
               screen is asked for HERE, inside the tap (it is refused
               otherwise); the overlay covers the page either way. */}
+          <Button variant="secondary" className="journey__text" icon="book" onClick={onTextView}>
+            {t('programs.textView.open')}
+          </Button>
           <Button
             variant="secondary"
             className="journey__show"
@@ -493,6 +513,55 @@ function Backdrop(): ReactNode {
  * width since R181 §3: a stage holds one Category's Levels, so the climb
  * inside it is short enough to be steep.
  */
+/**
+ * R187 §2 — the road takes the height the viewport gives it and no more: on a
+ * laptop the panel is sized to what is left under the header and the chips,
+ * and the road is scaled (CSS `zoom`, so the scroll width follows) to stand
+ * inside it — everything is reached by scrolling sideways, never up and
+ * down. A phone keeps the road's natural height: scaled to a phone's height
+ * the cards would not be readable.
+ */
+function useFit(
+  root: RefObject<HTMLDivElement | null>,
+  panel: RefObject<HTMLDivElement | null>,
+  journey: Journey,
+): void {
+  useIsomorphicLayoutEffect(() => {
+    const journeyRoot = root.current;
+    const scroller = panel.current;
+    if (!journeyRoot || !scroller) return;
+    const road = scroller.querySelector<HTMLElement>('.journey__road');
+    const nav = journeyRoot.querySelector<HTMLElement>('.journey__nav');
+    if (!road || !nav) return;
+    const fit = (): void => {
+      if (window.matchMedia('(max-width: 44rem)').matches) {
+        scroller.style.height = '';
+        road.style.zoom = '';
+        return;
+      }
+      const rootStyle = getComputedStyle(document.documentElement);
+      const headerPx =
+        (parseFloat(rootStyle.getPropertyValue('--header-height')) || 0) *
+        parseFloat(rootStyle.fontSize || '16');
+      // What the landing scroll (R183 §3) leaves: the header, 12 px, the chips
+      // and their gap, then the panel to 16 px above the viewport's foot.
+      const chips = scroller.getBoundingClientRect().top - nav.getBoundingClientRect().top;
+      const available = Math.max(420, window.innerHeight - headerPx - 12 - chips - 16);
+      scroller.style.height = `${Math.round(available)}px`;
+      road.style.zoom = '1';
+      const natural = road.offsetHeight;
+      const zoom = Math.min(1, (available - 2) / natural);
+      road.style.zoom = zoom < 0.999 ? zoom.toFixed(3) : '';
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [root, panel, journey]);
+}
+
+// A static render (tests, the server) has no layout; the browser does.
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
 function useRise(): number {
   const [narrow, setNarrow] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 44rem)').matches,

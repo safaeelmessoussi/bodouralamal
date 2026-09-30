@@ -70,6 +70,11 @@ export function PartnersSection(): ReactNode {
         <ul className="partner-list">
           {state.partners.map((partner) => (
             <li key={partner.id}>
+              {/* R187 §4 — a monogram of the name, in the palette: a mark a
+                  card can carry without inventing a logo nobody uploaded. */}
+              <span className="partner-list__mark" aria-hidden="true">
+                {partner.name.trim().charAt(0)}
+              </span>
               <strong>{partner.name}</strong>
               {/* The description when there is one — an absent one renders
                   nothing rather than an empty line under the name. */}

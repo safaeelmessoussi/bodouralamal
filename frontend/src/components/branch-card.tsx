@@ -15,7 +15,20 @@ import { Button, ButtonLink } from './ui/button.js';
 export function BranchCard({ branch }: { branch: PublicBranch }): ReactNode {
   return (
     <article className="card branch-card">
-      <h3 className="card__title">{branch.name}</h3>
+      {/* R187 §4 — the name on a band of the road's green, a pin beside it:
+          a place, at a glance, before its lines. */}
+      <header className="branch-card__head">
+        <span className="branch-card__pin" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="26" height="26" focusable="false">
+            <path
+              className="branch-card__pinShape"
+              d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7z"
+            />
+            <circle className="branch-card__pinDot" cx="12" cy="9" r="2.6" />
+          </svg>
+        </span>
+        <h3 className="card__title">{branch.name}</h3>
+      </header>
 
       {/* R170 — each line says what it IS with an icon a phone-sized screen
           reads faster than a label; the words stay for the screen reader. */}

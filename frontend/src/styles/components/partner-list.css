@@ -58,3 +58,51 @@
   display: flex;
   gap: var(--space-4);
 }
+
+/* ── R187 §4 — a partner's card, with a mark ─────────────────────────────
+   A monogram of the name in the palette (no logo is invented), a band of the
+   road's colours along the top, the name in the display face, and a lift
+   under the pointer. */
+.partner-list > li {
+  position: relative;
+  gap: var(--space-2);
+  min-block-size: 9rem;
+  padding: var(--space-6) var(--space-5) var(--space-5);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
+}
+.partner-list > li::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  block-size: 0.4rem;
+  background: linear-gradient(90deg, var(--color-accent-fill), var(--color-primary));
+}
+.partner-list > li:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+.partner-list > li strong {
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  color: var(--color-primary-strong);
+}
+.partner-list__mark {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 3.25rem;
+  block-size: 3.25rem;
+  margin-block-end: var(--space-1);
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-primary-deep), var(--color-primary));
+  color: var(--color-accent-fill);
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  box-shadow: 0 0 0 0.35rem var(--color-primary-soft);
+}

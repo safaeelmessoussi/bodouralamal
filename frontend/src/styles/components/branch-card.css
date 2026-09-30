@@ -67,3 +67,69 @@
   border-block-start: none;
   padding-block-start: 0;
 }
+
+/* ── R187 §4 — a card worth a place ──────────────────────────────────────
+   The name on a band of the road's green with a pin, the lines under it with
+   their icons in soft circles, the hours in a quiet panel, and the map
+   action as a full-width pill; the card lifts under the pointer. */
+.branch-card {
+  --branch-pad: clamp(1.25rem, 3vw, 1.75rem);
+  position: relative;
+  gap: var(--space-3);
+  padding: var(--branch-pad, 1.5rem);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
+}
+.branch-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+.branch-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: calc(-1 * var(--branch-pad, 1.5rem)) calc(-1 * var(--branch-pad, 1.5rem)) var(--space-2);
+  padding: var(--space-4) var(--branch-pad, 1.5rem);
+  background: linear-gradient(135deg, var(--color-primary-deep), var(--color-primary));
+  color: var(--color-on-primary);
+}
+.branch-card__head .card__title {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font-size: var(--font-size-md);
+}
+.branch-card__pin {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2.6rem;
+  block-size: 2.6rem;
+  border-radius: var(--radius-full);
+  background: var(--color-on-primary-overlay);
+}
+.branch-card__pinShape {
+  fill: var(--color-accent-fill);
+}
+.branch-card__pinDot {
+  fill: var(--color-primary-deep);
+}
+.branch-card__icon {
+  border-radius: var(--radius-full);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+.branch-card__hours {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-faint);
+}
+.branch-card__action .btn {
+  inline-size: 100%;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+}

@@ -106,7 +106,9 @@ const catalogue: PublicProgramCategory[] = [
   },
 ];
 const journey = buildJourney(catalogue);
-const html = renderToStaticMarkup(<ProgramsJourney journey={journey} />);
+const html = renderToStaticMarkup(
+  <ProgramsJourney journey={journey} onTextView={() => undefined} />,
+);
 
 describe('ProgramsJourney', () => {
   it("is a stage per Category, each bearing the Category's name ABOVE its Levels, each a terrace higher", () => {
@@ -259,10 +261,18 @@ describe('ProgramsJourney', () => {
     expect(html.split('journey__ridge ').length - 1).toBe(3);
   });
 
-  it('offers the full-screen show beside the arrows (R185 §5), closed until asked', () => {
+  it('offers the full-screen show and the text view beside the arrows (R185 §5, R187 §3), the show closed until asked', () => {
     expect(html).toContain('journey__show');
     expect(html).toContain('عرض بملء الشاشة');
+    expect(html).toContain('journey__text');
+    expect(html.indexOf('journey__arrows')).toBeLessThan(html.indexOf('عرض جميع البرامج'));
     expect(html).not.toContain('class="show ');
+  });
+
+  it('fits the road to the viewport on a laptop, never on a phone (R187 §2)', () => {
+    expect(JOURNEY_SOURCE).toContain("road.style.zoom = zoom < 0.999 ? zoom.toFixed(3) : ''");
+    expect(JOURNEY_SOURCE).toContain("if (window.matchMedia('(max-width: 44rem)').matches) {");
+    expect(JOURNEY_SOURCE).toContain("window.addEventListener('resize', fit)");
   });
 
   it('opens on the adult Category (R182 §7) — the effect reads the marker, never a name', () => {

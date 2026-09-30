@@ -5,7 +5,6 @@ import { t } from '../i18n/index.js';
 import { buildJourney } from './programs/journey-model.js';
 import { ProgramsJourney } from './programs/programs-journey.js';
 import { ProgramsTextView } from './programs/programs-text-view.js';
-import { Button } from './ui/button.js';
 import { Container } from './ui/container.js';
 
 /**
@@ -30,9 +29,7 @@ import { Container } from './ui/container.js';
  * silently collapsed to nothing.
  */
 type State =
-  | { kind: 'loading' }
-  | { kind: 'ready'; categories: PublicProgramCategory[] }
-  | { kind: 'error' };
+  { kind: 'loading' } | { kind: 'ready'; categories: PublicProgramCategory[] } | { kind: 'error' };
 
 export function ProgramsSection(): ReactNode {
   const [state, setState] = useState<State>({ kind: 'loading' });
@@ -68,14 +65,8 @@ export function ProgramsSection(): ReactNode {
             {t('programs.title')}
           </h2>
           <p className="lede programs__lede">{t('programs.lede')}</p>
-          {/* §10 — the practical way to everything, before any scrolling. */}
-          {state.kind === 'ready' && state.categories.length > 0 ? (
-            <div className="programs__actions">
-              <Button variant="primary" icon="book" onClick={() => openText(null)}>
-                {t('programs.textView.open')}
-              </Button>
-            </div>
-          ) : null}
+          {/* R187 §3 — «عرض جميع البرامج» stands beside «عرض بملء الشاشة» in
+              the road's own controls, not here. */}
         </div>
 
         <div aria-live="polite" aria-busy={state.kind === 'loading'}>
@@ -85,7 +76,7 @@ export function ProgramsSection(): ReactNode {
             <p className="muted">{t('programs.empty')}</p>
           ) : null}
           {state.kind === 'ready' && journey.categories.length > 0 ? (
-            <ProgramsJourney journey={journey} />
+            <ProgramsJourney journey={journey} onTextView={() => openText(null)} />
           ) : null}
         </div>
 

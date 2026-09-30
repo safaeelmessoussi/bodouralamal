@@ -5,9 +5,17 @@
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
 
-**Revision 187 (Document Owner, 2026-09-30 — an exam edit refused, and the public pages' design):** **§1 BUILT.**
+**Revision 187 (Document Owner, 2026-09-30 — an exam edit refused, and the public pages' design):** **BUILT.**
 
 **§1 — EDITING AN EXAM WAS REFUSED.** «تعديل العنصر» on an اختبار came back «تعذّر الحفظ» (`400 unrecognized_keys: attendance_marking`) whatever was changed — met while clearing «الأستاذ/المؤطر المسؤول», which is optional (R176 §1) and was not the cause. An exam has no `attendance_marking` column (R123 put it on a class and an activity); R136 dropped it from `PATCH /exams/{id}`'s strict schema and the form's adapter went on sending it, so every edit of a physical sitting since then was refused. The adapter no longer sends it for an exam, and the form no longer asks «من يسجّل الحضور» of an exam (nowhere to store the answer). Pinned by a request-capturing test and walked in a browser (create without a supervisor, edit clearing it: 8/8).
+
+**§2 — THE ROAD TAKES THE VIEWPORT'S HEIGHT AND NO MORE.** On a laptop the panel is sized to what is left under the header and the chips (the landing scroll's own frame, R183 §3) and the road is scaled (CSS `zoom`, so the scroll width follows) to stand inside it: everything is reached by scrolling sideways, never up and down. A phone keeps the road's natural height — scaled to a phone's height the cards would not be readable.
+
+**§3 — «عرض جميع البرامج» BESIDE «عرض بملء الشاشة».** Both in the road's own controls, next to its arrows; the section head keeps only its title and lede.
+
+**§4 — THE BRANCH AND PARTNER CARDS.** A branch: its name on a band of the road's green with a pin, its lines with their icons in soft saffron circles, the hours in a quiet panel, the map action a full-width pill, a lift under the pointer. A partner: a monogram of its name in the palette (no logo is invented), a band of the road's colours along the top, the name in the display face.
+
+**§5 — «المحتوى التعليمي» ONE CAN SCAN.** The filters on one raised bar; each Category a heading with a saffron mark; each Level a boxed shelf with its count, the year as a pill, the branch and the Subject as quiet rows inside it; the items as a grid of cards — two or three to a row — with a large type tile, the kind as a pill, and a lift under the pointer. Every class stays what it was; only the look changed.
 
 **Revision 186 (Document Owner's review of the full-screen show, 2026-09-30 — three points):** **BUILT.**
 
