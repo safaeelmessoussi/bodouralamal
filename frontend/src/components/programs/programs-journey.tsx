@@ -156,6 +156,25 @@ export function ProgramsJourney({
       <ArrowheadDefs />
       {/* §11 — a way to each Category without swiping through the ones before. */}
       <nav className="journey__nav" aria-label={t('programs.journey.navLabel')}>
+        {/* R188 §4 — the two actions first (a phone puts them on their own
+            line), then the chips, then the arrows beside the chips when they
+            fit and under them when they do not. */}
+        <div className="journey__actions">
+          <Button variant="secondary" className="journey__text" icon="book" onClick={onTextView}>
+            {t('programs.textView.open')}
+          </Button>
+          <Button
+            variant="secondary"
+            className="journey__show"
+            icon="expand"
+            onClick={() => {
+              setShowOpen(true);
+              void document.documentElement.requestFullscreen?.().catch(() => undefined);
+            }}
+          >
+            {t('programs.show.open')}
+          </Button>
+        </div>
         <ul className="journey__chips">
           {journey.categories.map((category) => (
             <li key={category.id}>
@@ -188,20 +207,6 @@ export function ProgramsJourney({
           {/* R185 §5 — the journey as a full-screen show. The browser's full
               screen is asked for HERE, inside the tap (it is refused
               otherwise); the overlay covers the page either way. */}
-          <Button variant="secondary" className="journey__text" icon="book" onClick={onTextView}>
-            {t('programs.textView.open')}
-          </Button>
-          <Button
-            variant="secondary"
-            className="journey__show"
-            icon="expand"
-            onClick={() => {
-              setShowOpen(true);
-              void document.documentElement.requestFullscreen?.().catch(() => undefined);
-            }}
-          >
-            {t('programs.show.open')}
-          </Button>
         </div>
       </nav>
       <ProgramsShow journey={journey} open={showOpen} onClose={() => setShowOpen(false)} />
@@ -460,7 +465,9 @@ function Prize({ category }: { category: JourneyCategory }): ReactNode {
         <p className="journey__milestoneText">
           {t('programs.journey.graduationTextLast').replace('{category}', category.name)}
         </p>
-        <SummitFigure />
+        {/* R188 §3 — the attire alone, the size of a card: the last step of
+            the last Category, inside its stage. */}
+        <SummitFigure bare />
       </div>
     );
   }

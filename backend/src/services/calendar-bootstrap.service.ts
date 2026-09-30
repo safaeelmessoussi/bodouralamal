@@ -165,7 +165,17 @@ export async function calendarBootstrap(
     prisma.level.findMany({
       where: { deletedAt: null, ...(categoryId ? { categoryId } : {}) },
       select: { id: true, name: true, categoryId: true, displayOrder: true },
-      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+      // R188 §2 — the Super Admin's order: «الفئات»'s first, then each
+      // Category's own «المستويات» order (§2.2 scopes a Level's order
+      // WITHIN its Category). Ordered by the Level's own `display_order`
+      // alone, the calendar's «المستوى» list interleaved the Categories.
+      orderBy: [
+        { category: { displayOrder: { sort: 'asc', nulls: 'last' } } },
+        { category: { name: 'asc' } },
+        { displayOrder: { sort: 'asc', nulls: 'last' } },
+        { name: 'asc' },
+        { id: 'asc' },
+      ],
     }),
     prisma.branch.findMany({
       where: { deletedAt: null },

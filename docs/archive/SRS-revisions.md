@@ -1,9 +1,25 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–187 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–188 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 188 (Document Owner, 2026-09-30 — «unreachable», and a review of the journey, the show and the cards):** **BUILT.**
+
+**§1 — «THE SITE KEEPS BEING UNREACHABLE».** Not the server: it had been up four days with no container restart, no OOM, no 5xx and no silence beyond quiet minutes, and answered 200 every five seconds while the report was read. The Owner's phone showed «server not found» on cellular and her laptop `ERR_ADDRESS_UNREACHABLE` while tethered to that phone — the hotspot's DNS64 hands the laptop an IPv6 for the site while the laptop has no IPv6 route, so a blink of the phone's data reads as an unreachable address. Nothing on the server can prevent a client's network from blinking; what the platform now has is an external uptime probe (`uptime.yml`, every 15 minutes from GitHub) so a real outage is never again indistinguishable from one.
+
+**§2 — «المستوى» IN THE SUPER ADMIN'S ORDER.** The calendar's and the library's Level lists follow «الفئات» then each Category's own «المستويات» order: the bootstrap orders Levels by Category first (they interleaved before), and the library ranks its filters and shelves by the bootstrap's order instead of a name list kept in code (R121's, withdrawn).
+
+**§3 — THE ATTIRE AS THE LAST STEP.** On the road the last Category's graduation holds «إتمام الفئة», its words and the attire alone — no «متى يحين دورُك؟», no «في نهاية الرحلة…» — the size of a card, inside the stage; with R187 §2's fit it adds no height.
+
+**§4 — THE ROAD'S CONTROLS ON A PHONE.** «عرض جميع البرامج» and «عرض بملء الشاشة» on their own line first; then the Category chips at the start, with the two arrows beside them when they fit and under them when they do not. A laptop keeps the chips at the start and the arrows and actions at the end.
+
+**§5 — THE SHOW STEPS BACK.** No «ابدئي من هنا» on a Category's card (the card is the choice); «السابق» beside the «×» on every screen after the first, one screen back at a time to the Categories; the ArrowRight key does the same and ArrowLeft moves on, as the page reads.
+
+**§6 — THE GRADUATION SCREEN FITS.** The attire is bounded by what the screen leaves after the bar, the words above and the caption, the line and the button below; on a short screen the screen scrolls from its top rather than clipping the title.
+
+**§7 — NO MARK ON A PARTNER'S CARD.** The monogram of R187 §4 is withdrawn: no logo of any kind.
 
 **Revision 187 (Document Owner, 2026-09-30 — an exam edit refused, and the public pages' design):** **BUILT.**
 

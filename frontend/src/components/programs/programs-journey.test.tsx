@@ -241,7 +241,9 @@ describe('ProgramsJourney', () => {
   it('ends inside the last Category: «إتمام الفئة» without «وتواصل الرحلة», then the attire (R185 §1/§3) — and a layered backdrop', () => {
     expect(html).toContain('src="/journey/graduation-attire.jpg"');
     expect(html.split('src="/journey/graduation-attire.jpg"').length - 1).toBe(1);
-    expect(html).toContain('متى يحين دورُك؟');
+    // R188 §3 — the attire alone on the road: no caption, no line under it.
+    expect(html).not.toContain('متى يحين دورُك؟');
+    expect(html).not.toContain('في نهاية الرحلة');
     expect(html).not.toContain('>قمة الرحلة<');
     // The first Category's graduation continues the road; the last one's ends it.
     expect(html).toContain('تُتمّ المتعلّمة برنامج الطفل وتواصل الرحلة.');
@@ -265,7 +267,9 @@ describe('ProgramsJourney', () => {
     expect(html).toContain('journey__show');
     expect(html).toContain('عرض بملء الشاشة');
     expect(html).toContain('journey__text');
-    expect(html.indexOf('journey__arrows')).toBeLessThan(html.indexOf('عرض جميع البرامج'));
+    // R188 §4 — DOM order is the phone's: the actions, then the chips, then the arrows.
+    expect(html.indexOf('journey__actions')).toBeLessThan(html.indexOf('journey__chips'));
+    expect(html.indexOf('journey__chips')).toBeLessThan(html.indexOf('journey__arrows'));
     expect(html).not.toContain('class="show ');
   });
 

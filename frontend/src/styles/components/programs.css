@@ -31,13 +31,23 @@
   justify-content: space-between;
   gap: var(--space-3);
 }
+/* R188 §4 — on a laptop: the chips at the start, the arrows and the two
+   actions at the end. The DOM order (actions, chips, arrows) is the phone's;
+   `order` lays the laptop out. */
 .journey__chips {
+  order: 1;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
+}
+.journey__actions {
+  order: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 .journey__chip {
   display: inline-flex;
@@ -68,6 +78,7 @@
   color: var(--color-text-secondary);
 }
 .journey__arrows {
+  order: 2;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
@@ -627,13 +638,19 @@
   height: auto;
   border-radius: var(--radius-md);
 }
-/* R185 §3 — «إتمام الفئة» and its words first, the attire under them. */
+/* R185 §3 / R188 §3 — «إتمام الفئة» and its words first, the attire under
+   them, the whole no taller than a card: the last step of the last
+   Category, inside its stage. */
 .journey__milestone--summit {
   gap: var(--space-2);
 }
 .journey__milestone--summit .journey__summit {
   width: auto;
   margin-block-start: var(--space-2);
+}
+.journey__milestone--summit .journey__attire img {
+  width: auto;
+  height: 13rem;
 }
 .journey__attireCaption {
   margin: var(--space-2) 0 0;
@@ -763,8 +780,24 @@
   .journey__attire img {
     width: 10rem;
   }
+  /* R188 §4 — the actions on their own line first; then the chips at the
+     start and the arrows beside them when they fit, under them when not. */
+  .journey__actions {
+    order: 0;
+    flex: 1 1 100%;
+  }
   .journey__show,
   .journey__text {
     flex: 1 1 calc(50% - var(--space-2));
+  }
+  .journey__chips {
+    flex: 1 1 auto;
+  }
+  .journey__arrows {
+    flex: 0 0 auto;
+    margin-inline-start: auto;
+  }
+  .journey__milestone--summit .journey__attire img {
+    height: 11rem;
   }
 }

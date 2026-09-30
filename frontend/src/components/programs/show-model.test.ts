@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/programs.js';
 import { buildJourney } from './journey-model.js';
-import { SHOW_START, advance, enterCategory, walkSequence } from './show-model.js';
+import { SHOW_START, advance, enterCategory, retreat, walkSequence } from './show-model.js';
 
 /** R185 §5 — the show's walk: Categories → Levels one by one → graduation → question → Categories. */
 const level = (id: string, over: Partial<PublicProgramLevel> = {}): PublicProgramLevel => ({
@@ -72,6 +72,18 @@ describe('the show walks one tap at a time (R186)', () => {
     ]);
     expect(walkSequence(two, 'b').map((s) => s.kind)).toEqual(['level', 'level']);
     expect(advance(two, { kind: 'walk', start: 'b', at: 1 })).toEqual({ kind: 'graduation' });
+  });
+
+  it('steps back one screen at a time, to the Categories (R188 §5)', () => {
+    expect(retreat(journey, { kind: 'walk', start: 'c', at: 2 })).toEqual({
+      kind: 'walk',
+      start: 'c',
+      at: 1,
+    });
+    expect(retreat(journey, { kind: 'walk', start: 'c', at: 0 })).toEqual(SHOW_START);
+    expect(retreat(journey, { kind: 'question' })).toEqual({ kind: 'graduation' });
+    expect(retreat(journey, { kind: 'graduation' })).toEqual(SHOW_START);
+    expect(retreat(journey, SHOW_START)).toEqual(SHOW_START);
   });
 
   it('a road with no step from the chosen Category goes straight to the graduation; an unknown one to the start', () => {

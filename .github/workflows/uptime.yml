@@ -1,0 +1,48 @@
+# External uptime probe (R188 §1, 2026-09-30).
+#
+# The Owner saw «server not found» on a phone and ERR_ADDRESS_UNREACHABLE on a
+# tethered laptop while the server answered every probe made from elsewhere:
+# both were the mobile network's own blinks. This workflow watches the site
+# from GitHub's network, every 15 minutes, so a REAL outage (the host, DNS,
+# TLS, the API behind nginx) leaves a failed run — and GitHub mails the
+# workflow's committer — instead of being indistinguishable from a hotspot
+# dropping for a minute. It changes nothing on the server and needs no secret.
+#
+# Three tries with a pause between them: one refused connection is a blink,
+# three in a row is an outage. The repository is public, so the minute a run
+# costs is not billed.
+name: Uptime
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: DNS answers from two public resolvers
+        run: |
+          set -euo pipefail
+          for r in 1.1.1.1 8.8.8.8; do
+            a="$(dig +short +time=3 +tries=2 @"$r" A bodouralamal.com | head -1)"
+            echo "@$r → ${a:-NO ANSWER}"
+            [ -n "$a" ] || { echo "::error::DNS gave no A record via $r"; exit 1; }
+          done
+      - name: The site answers over HTTPS (three tries)
+        run: |
+          set -uo pipefail
+          for i in 1 2 3; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://bodouralamal.com/healthz || echo 000)"
+            home="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://bodouralamal.com/ || echo 000)"
+            echo "try $i: /healthz $code, / $home"
+            if [ "$code" = "200" ] && [ "$home" = "200" ]; then exit 0; fi
+            sleep 20
+          done
+          echo "::error::bodouralamal.com did not answer 200 on three tries"
+          exit 1

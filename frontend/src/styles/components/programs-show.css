@@ -83,6 +83,36 @@
   border-radius: var(--radius-pill);
   background: var(--color-accent-fill);
 }
+.show__barActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+/* R188 §5 — a step back, beside the «×»; the chevron points back (right). */
+.show__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-block-size: var(--tap-min);
+  padding-inline: var(--space-3) var(--space-2);
+  border: 1px solid var(--color-on-primary-overlay);
+  border-radius: var(--radius-pill);
+  background: var(--color-on-primary-overlay);
+  color: var(--color-on-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.show__back svg {
+  transform: rotate(-90deg);
+}
+.show__back:hover {
+  background: color-mix(in srgb, var(--color-on-primary) 22%, transparent);
+}
+.show__back:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
 .show__close {
   display: grid;
   place-items: center;
@@ -244,15 +274,6 @@
 }
 .show__categoryRow--seasonal b {
   color: var(--color-accent);
-}
-.show__categoryGo {
-  justify-self: start;
-  margin-block-start: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-pill);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font-weight: 700;
 }
 
 /* ── The strip: a card per tap, an arrow between ────────────────────────── */
@@ -428,12 +449,17 @@
     0 0 0 1rem color-mix(in srgb, var(--color-accent-fill) 28%, transparent),
     var(--shadow-lg);
 }
-/* Bounded by the viewport's height, so the words above and the button
-   below stay on the one screen. */
+/* R188 §6 — bounded by what the screen leaves after the bar, the words above
+   and the caption, the line and the button below, so nothing overlaps; on a
+   short screen the screen scrolls from its top (`safe`), never past it. */
+.show__screen--graduation {
+  align-content: safe center;
+}
 .show__graduation .journey__attire img {
   width: auto;
   max-width: 100%;
-  height: min(46vh, 30rem);
+  height: auto;
+  max-height: clamp(9rem, calc(100vh - 25rem), 30rem);
 }
 .show__graduation .journey__summit {
   width: auto;
@@ -573,6 +599,6 @@
     padding-inline: var(--space-4);
   }
   .show__graduation .journey__attire img {
-    height: min(40vh, 22rem);
+    max-height: clamp(8rem, calc(100vh - 24rem), 22rem);
   }
 }

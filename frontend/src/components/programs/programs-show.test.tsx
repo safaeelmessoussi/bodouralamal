@@ -78,7 +78,10 @@ describe('ProgramsShow', () => {
       html.indexOf('show__categoryStep">براعم الأمل'),
     );
     expect(html).toContain('التربية الإسلامية');
-    expect(html).toContain('ابدئي من هنا');
+    // R188 §5 — no «ابدئي من هنا» on a card (the card itself is the choice), and
+    // no «السابق» on the first screen.
+    expect(html).not.toContain('ابدئي من هنا');
+    expect(html).not.toContain('class="show__back"');
     expect(html).toContain('إغلاق');
   });
 
@@ -101,6 +104,10 @@ describe('ProgramsShow', () => {
     expect(two).toContain('show__dot is-done');
     expect(two).toContain('show__dot is-current');
     expect(two).toContain('انقري للمتابعة');
+    // R188 §5 — «السابق» on every screen after the first.
+    expect(two).toContain('class="show__back"');
+    expect(two).toContain('السابق');
+    expect(render({ kind: 'question' })).toContain('class="show__back"');
   });
 
   it('ends only after the last Category: confetti, «إتمام الفئة», the attire, then the question', () => {
@@ -122,6 +129,13 @@ describe('ProgramsShow', () => {
     expect(SHOW_SOURCE).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches");
     expect(SHOW_SOURCE).toContain("if (event.key === 'Escape') onClose();");
     expect(SHOW_SOURCE).toContain('if (!document.fullscreenElement) onClose();');
+    // R188 §5 — the keys, as the page reads: left forward, right back.
+    expect(SHOW_SOURCE).toContain(
+      "if (event.key === 'ArrowLeft') setState((s) => advance(journey, s));",
+    );
+    expect(SHOW_SOURCE).toContain(
+      "if (event.key === 'ArrowRight') setState((s) => retreat(journey, s));",
+    );
     // R186 — the strip moves to the card just appended.
     expect(SHOW_SOURCE).toContain(
       "node.scrollTo({ left: -node.scrollWidth, behavior: reduced ? 'auto' : 'smooth' });",

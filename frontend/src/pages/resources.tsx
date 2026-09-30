@@ -7,6 +7,7 @@ import {
   type ContentItem,
   type LevelContent,
 } from '../adapters/content.js';
+import { fetchCalendarBootstrap } from '../adapters/calendar.js';
 import type { LibraryEntry } from '../adapters/content.js';
 import { normalizeArabic } from '../components/content/content-filters.js';
 import { ContentCard } from '../components/content/content-card.js';
@@ -87,25 +88,20 @@ export function ResourcesPage(): ReactNode {
 /* ── Page 1 — the library index ──────────────────────────────────────────── */
 
 /**
- * Categories always appear in this order, and it is **not** alphabetical or
- * `display_order`: it is the association's own progression, adult → teen →
- * child. Anything unrecognised sorts last rather than being dropped — a
- * category added later must still appear.
- *
- * **The names are the association's own** (Owner clarification, 2026-09-02;
- * SRS R121). This list read `الكبار / اليافعون / الطفل`, the sex-neutral forms
- * R27's migration introduced while moving the sex restriction into
- * `Level.gender_restriction`. Those are not what the association calls its
- * stages, so **not one of the three matched a real row** and every category
- * ranked equal-last — the progression this constant exists to impose was
- * silently absent.
+ * **R188 §2 — the Super Admin's own order, never a list in code.** The
+ * Categories and the Levels of the library's filters and shelves follow
+ * «الفئات» and «المستويات» exactly as the public calendar bootstrap orders
+ * them (a Level's order is scoped within its Category, §2.2); a row the
+ * bootstrap does not know sorts last rather than being dropped. This replaced
+ * a name list (`المرأة / اليافعات / الطفل`, R121), which was itself hardcoded
+ * and which the Owner did not want.
  */
-const CATEGORY_ORDER = ['المرأة', 'اليافعات', 'الطفل'];
-
-function categoryRank(name: string): number {
-  const index = CATEGORY_ORDER.indexOf(name);
-  return index === -1 ? CATEGORY_ORDER.length : index;
+interface Ranking {
+  category: Map<string, number>;
+  level: Map<string, number>;
 }
+const NO_RANKING: Ranking = { category: new Map(), level: new Map() };
+const rankOf = (map: Map<string, number>, id: string): number => map.get(id) ?? Number.MAX_SAFE_INTEGER;
 
 /** The whole library, filtered on every axis (the Owner, 2026-09-25). */
 interface LibraryFilter {
@@ -139,6 +135,25 @@ function LibraryView({
     ...(initialCategory ? { shelfKey: `category:${initialCategory}` } : {}),
   });
   const [open, setOpen] = useState<ContentItem | null>(null);
+  // R188 §2 — the Super Admin's order for the Categories and Levels, from
+  // the public bootstrap (one small cached read); without it, names order.
+  const [ranking, setRanking] = useState<Ranking>(NO_RANKING);
+  useEffect(() => {
+    let cancelled = false;
+    const day = new Date().toISOString().slice(0, 10);
+    void fetchCalendarBootstrap({ from: day, to: day })
+      .then((bootstrap) => {
+        if (cancelled) return;
+        setRanking({
+          category: new Map(bootstrap.categories.map((c, i) => [c.id, i])),
+          level: new Map(bootstrap.levels.map((l, i) => [l.id, i])),
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -180,16 +195,27 @@ function LibraryView({
       subjects.set(e.subject_id || NO_SUBJECT, e.subject_name ?? t('content.noSubject'));
     }
     const byName = (a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], 'ar');
+    const byCategory = (a: string, b: string): number =>
+      rankOf(ranking.category, a) - rankOf(ranking.category, b);
     return {
-      categories: [...cats].sort((a, b) => categoryRank(a[1]) - categoryRank(b[1])),
-      shelves: [...shelves].filter(([, v]) => filter.categoryId === '' || v.categoryId === filter.categoryId),
+      categories: [...cats].sort((a, b) => byCategory(a[0], b[0]) || byName(a, b)),
+      shelves: [...shelves]
+        .filter(([, v]) => filter.categoryId === '' || v.categoryId === filter.categoryId)
+        // Its Category's place, then — a Category's own shelf first — the Level's.
+        .sort(
+          (a, b) =>
+            byCategory(a[1].categoryId, b[1].categoryId) ||
+            Number(b[0].startsWith('category:')) - Number(a[0].startsWith('category:')) ||
+            rankOf(ranking.level, a[0]) - rankOf(ranking.level, b[0]) ||
+            a[1].label.localeCompare(b[1].label, 'ar'),
+        ),
       years: [...years].sort((a, b) => b[1].localeCompare(a[1])),
       branches: [...branches].sort(byName),
       subjects: [...subjects].sort(byName),
       // Mushaf order, never alphabetical: a reader knows where البقرة is.
       surahs: [...surahs].sort((a, b) => Number(a[0]) - Number(b[0])),
     };
-  }, [entries, filter.categoryId]);
+  }, [entries, filter.categoryId, ranking]);
 
   const filtered = useMemo(() => {
     const q = normalizeArabic(filter.query.trim());
@@ -243,9 +269,18 @@ function LibraryView({
         surah.items.push(e.item);
       }
     }
-    const out = [...cats.values()].sort((a, b) => categoryRank(a.name) - categoryRank(b.name));
+    const out = [...cats.values()].sort(
+      (a, b) =>
+        rankOf(ranking.category, a.id) - rankOf(ranking.category, b.id) ||
+        a.name.localeCompare(b.name, 'ar'),
+    );
     for (const cat of out) {
-      cat.shelves.sort((a, b) => Number(b.kind === 'whole_category') - Number(a.kind === 'whole_category') || a.name.localeCompare(b.name, 'ar'));
+      cat.shelves.sort(
+        (a, b) =>
+          Number(b.kind === 'whole_category') - Number(a.kind === 'whole_category') ||
+          rankOf(ranking.level, a.key) - rankOf(ranking.level, b.key) ||
+          a.name.localeCompare(b.name, 'ar'),
+      );
       for (const shelf of cat.shelves) {
         shelf.years.sort((a, b) => b.label.localeCompare(a.label));
         for (const year of shelf.years) {
@@ -258,7 +293,7 @@ function LibraryView({
       }
     }
     return out;
-  }, [filtered]);
+  }, [filtered, ranking]);
 
   const active = Object.entries(filter).some(([k, v]) => (k === 'query' ? v.trim() !== '' : v !== ''));
   const select = (id: keyof LibraryFilter, label: string, opts: [string, string][], allLabel = t('content.all')) => (

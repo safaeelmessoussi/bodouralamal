@@ -10,8 +10,11 @@ import { t } from '../../i18n/index.js';
  */
 export function SummitFigure({
   sizes = '(max-width: 44rem) 10rem, 12rem',
+  bare = false,
 }: {
   sizes?: string;
+  /** R188 §3 — the attire alone, no caption and no line under it (the road). */
+  bare?: boolean;
 }): ReactNode {
   return (
     <div className="journey__summit" role="group" aria-label={t('programs.journey.summit')}>
@@ -24,11 +27,13 @@ export function SummitFigure({
           loading="lazy"
           decoding="async"
         />
-        <figcaption className="journey__attireCaption">
-          {t('programs.journey.summitQuestion')}
-        </figcaption>
+        {bare ? null : (
+          <figcaption className="journey__attireCaption">
+            {t('programs.journey.summitQuestion')}
+          </figcaption>
+        )}
       </figure>
-      <p className="journey__milestoneText">{t('programs.journey.summitText')}</p>
+      {bare ? null : <p className="journey__milestoneText">{t('programs.journey.summitText')}</p>}
     </div>
   );
 }

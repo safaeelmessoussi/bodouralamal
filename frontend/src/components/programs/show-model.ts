@@ -62,6 +62,22 @@ export function enterCategory(journey: Journey, categoryId: string): ShowState {
     : { kind: 'graduation' };
 }
 
+/** R188 §5 — one step back: the previous slide; from the first slide, the
+ *  Categories; from the graduation, the last slide; from the question, the
+ *  graduation. */
+export function retreat(journey: Journey, state: ShowState): ShowState {
+  switch (state.kind) {
+    case 'categories':
+      return state;
+    case 'walk':
+      return state.at > 0 ? { kind: 'walk', start: state.start, at: state.at - 1 } : SHOW_START;
+    case 'graduation':
+      return SHOW_START;
+    case 'question':
+      return { kind: 'graduation' };
+  }
+}
+
 /** One tap forward: the next slide, then the graduation, then the question,
  *  then back to the Categories. */
 export function advance(journey: Journey, state: ShowState): ShowState {

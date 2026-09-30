@@ -295,3 +295,29 @@ describe("category_id narrows the Level list SERVER-SIDE (§4.4)", () => {
     expect(res.body.error?.code).toBe("VALIDATION_FAILED");
   });
 });
+
+/** R188 §2 — the Levels come in the Super Admin's order: «الفئات» first, then
+ *  each Category's own «المستويات» order, never interleaved by the Level's
+ *  order alone. */
+describe("GET /calendar/bootstrap — the Levels in the Super Admin's order", () => {
+  it("lists a later Category's first Level after an earlier Category's last", async () => {
+    const TAG = "[bootstrap-order-test]";
+    const later = await prisma.category.create({ data: { name: `${TAG} ب`, displayOrder: 9002 } });
+    const earlier = await prisma.category.create({ data: { name: `${TAG} أ`, displayOrder: 9001 } });
+    const lateFirst = await prisma.level.create({ data: { name: `${TAG} ب-1`, categoryId: later.id, displayOrder: 1 } });
+    const earlyLast = await prisma.level.create({ data: { name: `${TAG} أ-2`, categoryId: earlier.id, displayOrder: 2 } });
+    const earlyFirst = await prisma.level.create({ data: { name: `${TAG} أ-1`, categoryId: earlier.id, displayOrder: 1 } });
+    try {
+      const res = await call("/calendar/bootstrap?from=2026-09-01&to=2026-09-30");
+      expect(res.status).toBe(200);
+      const ids = (res.body.data!.levels as { id: string }[]).map((l) => l.id);
+      const at = (id: string) => ids.indexOf(id);
+      expect(at(earlyFirst.id)).toBeGreaterThanOrEqual(0);
+      expect(at(earlyFirst.id)).toBeLessThan(at(earlyLast.id));
+      expect(at(earlyLast.id)).toBeLessThan(at(lateFirst.id));
+    } finally {
+      await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
+      await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
+    }
+  });
+});

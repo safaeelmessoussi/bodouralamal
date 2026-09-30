@@ -9,6 +9,7 @@ import {
   SHOW_START,
   advance,
   enterCategory,
+  retreat,
   walkSequence,
   type ShowSlide,
   type ShowState,
@@ -29,8 +30,10 @@ import { Trophy } from './trophy.js';
  * 4. then the question, «متى يحين دورُك؟», large over everything else, blurred.
  *
  * A tap anywhere on a screen moves on (a control on a card — «…», «عرض أقل»
- * — does not); so does the visible «انقري للمتابعة» button, for a keyboard.
- * Escape, the «×» and leaving the browser's full screen all close it. Under
+ * — does not); so does the visible «انقري للمتابعة» button, for a keyboard;
+ * «السابق» (and the ArrowRight key — back, as the page reads) steps back one
+ * screen at a time, to the Categories (R188 §5). Escape, the «×» and leaving
+ * the browser's full screen all close it. Under
  * `prefers-reduced-motion` nothing zooms, slides or falls and nothing
  * advances by itself: every step is a tap.
  *
@@ -64,6 +67,9 @@ export function ProgramsShow({
     document.body.style.overflow = 'hidden';
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onClose();
+      // As the page reads: left is forward, right is back.
+      if (event.key === 'ArrowLeft') setState((s) => advance(journey, s));
+      if (event.key === 'ArrowRight') setState((s) => retreat(journey, s));
     };
     const onFullscreen = (): void => {
       if (!document.fullscreenElement) onClose();
@@ -77,7 +83,7 @@ export function ProgramsShow({
       document.removeEventListener('fullscreenchange', onFullscreen);
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
     };
-  }, [open, onClose, initialState]);
+  }, [open, onClose, initialState, journey]);
 
   // R186 — the strip moves along so the card just appended is in view (the
   // earlier ones shift to the right, where the road began).
@@ -99,6 +105,7 @@ export function ProgramsShow({
   if (!open) return null;
 
   const next = (): void => setState((s) => advance(journey, s));
+  const back = (): void => setState((s) => retreat(journey, s));
   const pick = (categoryId: string): void => {
     if (reduced) {
       setState(enterCategory(journey, categoryId));
@@ -138,14 +145,22 @@ export function ProgramsShow({
             ? t('programs.show.title')
             : t('programs.journey.categoryTitle').replace('{name}', currentCategory.name)}
         </p>
-        <button
-          type="button"
-          className="show__close"
-          onClick={onClose}
-          aria-label={t('programs.show.close')}
-        >
-          <Icon name="close" size={22} />
-        </button>
+        <div className="show__barActions">
+          {state.kind !== 'categories' ? (
+            <button type="button" className="show__back" onClick={back}>
+              <Icon name="chevron" size={18} />
+              {t('programs.show.back')}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="show__close"
+            onClick={onClose}
+            aria-label={t('programs.show.close')}
+          >
+            <Icon name="close" size={22} />
+          </button>
+        </div>
       </div>
 
       {state.kind === 'categories' ? (
@@ -319,7 +334,6 @@ function CategoryCard({
           {category.seasonalSubjects.map((subject) => subject.name).join('، ')}
         </span>
       ) : null}
-      <span className="show__categoryGo">{t('programs.show.begin')}</span>
     </button>
   );
 }

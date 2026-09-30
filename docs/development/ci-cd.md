@@ -32,6 +32,9 @@ Locally: `for g in scripts/ci/check-*.sh; do bash "$g" || echo "FAILED: $g"; don
 ## Integration job
 `scripts/ci/test-integration.sh` builds a uniquely named disposable Compose project (base graph + `scripts/ci/fixtures/docker-compose.integration.yml`; loopback ports; fixture-only credentials; all migrations; production + fixture seeds; waits for the real health contract), runs `scripts/test/run-integration-suite.sh` — which digests every table before/after and fails on residue — and always tears the project down. Never a shared database.
 
+## Uptime probe (`.github/workflows/uptime.yml`, R188 §1)
+Every 15 minutes from GitHub's network: DNS via 1.1.1.1 and 8.8.8.8, then `/healthz` and `/` over HTTPS, three tries 20 s apart. A failed run is a real outage of the site (host, DNS, TLS or the API) and GitHub mails the workflow's committer; a blink of the Owner's own mobile network leaves no trace here — which is the point: the two were indistinguishable before. Changes nothing on the server; no secret.
+
 ## Not yet in CI (each a dedicated task — `TASKS.md` E3/E6)
 Generated permission-matrix tests · authenticated E2E journeys · ≥80 % coverage gate on services/policies · `TD3_REQUIRE_COMPLETE=1` · `verify-backup-restore.sh`.
 
