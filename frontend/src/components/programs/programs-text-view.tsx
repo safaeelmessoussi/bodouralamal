@@ -6,7 +6,6 @@ import { Badge } from '../ui/badge.js';
 import { Dialog } from '../ui/dialog.js';
 import {
   ageWords,
-  audienceKey,
   levelAgeWords,
   memorisationWords,
   programmeSubjects,
@@ -62,14 +61,11 @@ export function ProgramsTextView({
           >
             <header className="programs-text__head">
               <h3 id={`programs-text-category-${category.id}`}>
-                {t('programs.textView.categoryOrdinal').replace('{n}', String(category.position))}{' '}
-                {category.name}
+                {t('programs.journey.categoryTitle').replace('{name}', category.name)}
               </h3>
-              <p className="programs-text__age">
-                {[ageWords(category, t), t(`programs.journey.audience.${audienceKey(category)}`)]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
+              {ageWords(category, t) ? (
+                <p className="programs-text__age">{ageWords(category, t)}</p>
+              ) : null}
               {category.description ? <p className="muted">{category.description}</p> : null}
               {/* R182 §1 — the Subjects every step shares, once under the name. */}
               {category.sharedSubjects.length > 0 ? (
@@ -90,10 +86,8 @@ export function ProgramsTextView({
                 </p>
               ) : null}
               {category.directEntry ? (
-                // R181 §7 — and who may take that entrance (the steps' own restriction).
                 <p className="muted">
-                  {t('programs.journey.directEntry').replace('{category}', category.name)}{' '}
-                  {t(`programs.journey.audienceEntry.${audienceKey(category)}`)}.
+                  {t('programs.journey.directEntry').replace('{category}', category.name)}
                 </p>
               ) : null}
             </header>
@@ -116,7 +110,6 @@ export function ProgramsTextView({
                   key={step.level.id}
                   level={step.level}
                   focus={focusLevelId === step.level.id}
-                  kicker={t('programs.journey.stepOrdinal').replace('{n}', String(step.position))}
                 />
               ))}
             </ol>
@@ -147,7 +140,8 @@ function LevelRow({
   prep = false,
 }: {
   level: PublicProgramLevel;
-  kicker: string;
+  /** R184 §1 — only a preparatory programme wears a kicker; a step is its name. */
+  kicker?: string;
   note?: string;
   focus: boolean;
   prep?: boolean;
@@ -159,7 +153,7 @@ function LevelRow({
       className={`programs-text__level${prep ? ' programs-text__level--prep' : ''}${focus ? ' programs-text__level--focus' : ''}`}
     >
       <p className="programs-text__levelName">
-        <span className="journey__cardOrdinal">{kicker}</span>
+        {kicker ? <span className="journey__cardOrdinal">{kicker}</span> : null}
         {level.name}
         {ages ? <span className="programs-text__age">{ages}</span> : null}
       </p>

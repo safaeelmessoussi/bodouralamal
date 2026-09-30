@@ -12,7 +12,7 @@ import { httpCall } from "../test-support/http-client.js";
  * anonymous endpoint over otherwise staff-only entities (`Category`,
  * `Level`, `Subject`, `QuranSurah`), so the projection IS the security
  * boundary. A test that only checked the fields it wants would pass just as
- * happily if `enrollment_count`, `gender_restriction` or `display_order`
+ * happily if `enrollment_count`, `gender_restriction` (R184 §2) or `display_order`
  * came along too.
  */
 const config = loadConfig();
@@ -36,7 +36,6 @@ interface Row {
     max_age: number | null;
     journey_role: string;
     memorisation_hizb: number | null;
-    gender_restriction: string;
     subjects: { id: string; name: string; works_by_surah: boolean; seasonal: boolean }[];
     surahs: { id: number; name: string }[];
   }[];
@@ -130,15 +129,15 @@ describe("GET /programs — public access", () => {
       ["description", "holds_own_login", "id", "levels", "max_age", "min_age", "name", "subjects"].sort(),
     );
     expect(Object.keys(rows[0]!.levels[0]!).sort()).toEqual(
-      // R181 §6/§7 — the Hizb count and who the Level admits (its audience, not
-      // operational data) join the projection.
-      ["description", "gender_restriction", "id", "journey_role", "max_age", "memorisation_hizb", "min_age", "name", "subjects", "surahs"].sort(),
+      // R181 §6 — the Hizb count joins the projection; R184 §2 — the audience
+      // (`gender_restriction`, R181 §7) leaves it again: the page writes no
+      // audience words, so the column has no public reader.
+      ["description", "id", "journey_role", "max_age", "memorisation_hizb", "min_age", "name", "subjects", "surahs"].sort(),
     );
-    // R181 §7 — `gender_restriction` is the programme's audience and travels;
-    // `genderRestriction` (the internal spelling) still must not.
     for (const leaked of [
       "enrollment_count",
       "enrollmentCount",
+      "gender_restriction",
       "genderRestriction",
       "display_order",
       "displayOrder",
@@ -235,8 +234,8 @@ describe("GET /programs — public access", () => {
     const [prep, step] = row.levels;
     expect(prep!.subjects).toEqual([]);
     expect(step!.subjects.map((s) => [s.name, s.works_by_surah])).toEqual([[`${TAG} حفظ`, true]]);
-    expect(prep).toMatchObject({ memorisation_hizb: 5, gender_restriction: "girls_only" });
-    expect(step).toMatchObject({ memorisation_hizb: null, gender_restriction: "any" });
+    expect(prep).toMatchObject({ memorisation_hizb: 5 });
+    expect(step).toMatchObject({ memorisation_hizb: null });
   });
 
   it("renders a Level with no Subjects or Surahs honestly — an empty list, never invented", async () => {

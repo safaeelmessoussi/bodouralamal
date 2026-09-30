@@ -1,9 +1,21 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–183 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–184 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 184 (Document Owner's fourth review of the journey, 2026-09-30 — five points):** **BUILT.**
+
+**§1 — A LEVEL'S CARD IS TITLED BY ITS NAME.** «المستوى N» was the page's own numbering; nothing the Super Admin did not enter is written. The Level's name takes the pill «المستوى N» wore, a size larger — the card is about the name; «المستوى 1» or «السنة 1» is the Super Admin's to put in the Level's description. A preparatory programme alone keeps its «برنامج تمهيدي» kicker (a column, R180 §6).
+
+**§2 — THE CATEGORY CARD IS «فئة الطفل» AND ITS DESCRIPTION.** No «الفئة N» (numbered by nobody) and no audience words («للفتيات فقط», «للنساء فقط», «للبنات والبنين» — R181 §7 and R182 §5 are withdrawn): who a Category is for is in its own description, entered on «الفئات». The derived ages stay. `/programs` no longer carries `gender_restriction` (no public reader); `holds_own_login` stays for §7 of R182.
+
+**§3 — THE ROAD OPENS AT THE WOMEN'S FIRST LEVEL.** Flush at the panel's start edge, the «مداخل أخرى» note before it out of view; the stage's stuck head stays above the card. The landing page still opens on the road (R183 §3).
+
+**§4 — THE ATTIRE ABOVE THE RIDGES.** The backdrop's near ridge washed over the image and «متى يحين دورُك؟»; the summit now stands above it.
+
+**§5 — SMALLER CELL TEXT ON A SMALL SCREEN.** The month calendar's chips step down (0.74 rem under 60 rem, 0.62 rem on a phone, tighter padding) and break a word only when it is wider than the line — so «مجموعة», «أمرشيش», «[تجريبي]» stand whole in a 47 px cell.
 
 **Revision 183 (Document Owner's third review of the journey, 2026-09-30 — six points):** **BUILT.**
 

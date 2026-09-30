@@ -38,7 +38,6 @@ const catalogue: PublicProgramCategory[] = [
         max_age: 7,
         journey_role: 'step',
         memorisation_hizb: null,
-        gender_restriction: 'any',
         subjects: [
           { id: 's1', name: 'حفظ القرآن', works_by_surah: true, seasonal: false },
           // R183 §1 — a seasonal course by Surah counts for nothing in «حفظ: …».
@@ -54,7 +53,6 @@ const catalogue: PublicProgramCategory[] = [
         max_age: 12,
         journey_role: 'step',
         memorisation_hizb: 5,
-        gender_restriction: 'any',
         subjects: [],
         surahs: [],
       },
@@ -77,7 +75,6 @@ const catalogue: PublicProgramCategory[] = [
         max_age: null,
         journey_role: 'preparatory',
         memorisation_hizb: null,
-        gender_restriction: 'girls_only',
         subjects: [{ id: 's9', name: 'القراءة', works_by_surah: false, seasonal: false }],
         surahs: [],
       },
@@ -89,7 +86,6 @@ const catalogue: PublicProgramCategory[] = [
         max_age: null,
         journey_role: 'step',
         memorisation_hizb: 10,
-        gender_restriction: 'girls_only',
         subjects: [
           { id: 's1', name: 'حفظ القرآن', works_by_surah: true, seasonal: false },
           { id: 's2', name: 'تفسير القرآن', works_by_surah: true, seasonal: false },
@@ -117,12 +113,15 @@ const html = renderToStaticMarkup(
 describe('ProgramsJourney', () => {
   it("is a stage per Category, each bearing the Category's name ABOVE its Levels, each a terrace higher", () => {
     expect(html.split('class="journey__stage"').length - 1).toBe(2);
-    expect(html.indexOf('stage__title" id="stage-kids-title">الطفل')).toBeLessThan(
+    // R184 §2 — «فئة الطفل»: the name the Super Admin entered, no ordinal.
+    expect(html.indexOf('stage__title" id="stage-kids-title">فئة الطفل')).toBeLessThan(
       html.indexOf('كتاكيت الأمل'),
     );
-    expect(html.indexOf('stage__title" id="stage-women-title">المرأة')).toBeLessThan(
+    expect(html.indexOf('stage__title" id="stage-women-title">فئة المرأة')).toBeLessThan(
       html.indexOf('وميض الأمل'),
     );
+    expect(html).not.toContain('الفئة 1');
+    expect(html).not.toContain('stage__ordinal');
     expect(html).toContain('--terrace:0');
     expect(html).toContain('--terrace:1');
     expect(html).toContain('journey__stage journey__stage--summit');
@@ -157,8 +156,8 @@ describe('ProgramsJourney', () => {
     const block = html.slice(from, html.indexOf('stage__cell stage__cell--stop', from));
     expect(block).toContain('مداخل أخرى إلى هذه الفئة');
     expect(block).toContain('التحاق مباشر بـ«وميض الأمل»');
-    // R182 §5 — an adult Category says «للنساء», never «للفتيات».
-    expect(block).toContain('للنساء فقط');
+    // R184 §2 — no audience words of the page's; the age stays.
+    expect(block).not.toContain('للنساء');
     expect(block).not.toContain('للفتيات');
     expect(block).toContain('من 18 سنة');
     expect(block).toContain('برنامج تمهيدي');
@@ -180,26 +179,34 @@ describe('ProgramsJourney', () => {
     expect(html).toContain('مقرر الحفظ: 5 أحزاب'); // nothing by Surah → the generic words
     expect(html).toContain('حفظ وتفسير: 10 أحزاب');
     expect(html).not.toContain('مقرر الحفظ: 10');
-    expect(html).toContain('المستوى 0');
+    expect(html).toContain('المستوى 0'); // the Super Admin's description, not a number of the page's
+    // R184 §1 — the card is titled by the Level's NAME; no «المستوى N» of the page's.
+    const k1 = html.slice(
+      html.indexOf('id="journey-level-k1"'),
+      html.indexOf('id="journey-level-k2"'),
+    );
+    expect(k1).toContain('journey__cardTitle" id="journey-level-k1-title">كتاكيت الأمل');
+    expect(k1).not.toContain('journey__cardOrdinal');
+    expect(html).not.toContain('المستوى 1');
+    expect(html).not.toContain('المستوى 2');
+    // …the preparatory programme alone keeps its role kicker (a column, R180 §6).
+    expect(html.split('journey__cardOrdinal journey__cardOrdinal--prep').length - 1).toBe(1);
     // The Surahs under it — whole, with «…» offered only past six (the phone clamps).
     const w1 = html.slice(html.indexOf('id="journey-level-w1"'), html.indexOf('إتمام فئة المرأة'));
     expect(w1).toContain('سورة 1، سورة 2');
     expect(w1).toContain('سورة 8');
     expect(w1).toContain('class="journey__surahsMore"');
-    const k1 = html.slice(
-      html.indexOf('id="journey-level-k1"'),
-      html.indexOf('id="journey-level-k2"'),
-    );
     expect(k1).toContain('الفاتحة');
     expect(k1).not.toContain('journey__surahsMore');
   });
 
-  it('names each Category with its derived range and its audience, its shared Subjects in an annexe UNDER the card (R182 §1, R183 §2), and keeps an empty Category off the road', () => {
+  it('names each Category with its derived range and its own description — no audience words (R184 §2) — its shared Subjects in an annexe UNDER the card (R182 §1, R183 §2), and keeps an empty Category off the road', () => {
     expect(html).toContain('من 6 إلى 12 سنة');
-    expect(html).toContain('للبنات والبنين');
+    expect(html).not.toContain('للبنات والبنين');
+    expect(html).toContain('برنامج الطفل');
     expect(html).not.toContain('فئة بلا مستويات');
     const card = html.slice(html.indexOf('id="stage-kids-title"'), html.indexOf('</header>'));
-    // The card keeps only the ordinal, the name, the ages and the audience.
+    // The card keeps only the name, the ages and the description.
     expect(card).not.toContain('مواد مشتركة');
     const annex = html.slice(
       html.indexOf('class="stage__annex"'),
@@ -284,8 +291,10 @@ describe('ProgramsTextView — the same journey, to scan', () => {
       expect(text).toContain(name);
     }
     expect(text.indexOf('الطفل')).toBeLessThan(text.indexOf('المرأة'));
-    expect(text).toContain('للنساء فقط');
+    expect(text).toContain('فئة المرأة');
+    expect(text).not.toContain('للنساء');
     expect(text).not.toContain('للفتيات');
+    expect(text).not.toContain('الفئة 1');
     expect(text).toContain('فئة بلا مستويات');
     expect(text).toContain('لم تُسجَّل مستويات لهذه الفئة بعد.');
     expect(text).toContain('id="programs-text-level-w1"');

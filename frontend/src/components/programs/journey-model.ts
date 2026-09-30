@@ -45,16 +45,11 @@ export interface JourneyCategory {
   steps: JourneyStep[];
   /** §6 — the programmes that lead into the first step. */
   preparatory: PublicProgramLevel[];
-  /** 1-based position on the journey. */
+  /** 1-based position on the journey (the order only — never shown as a
+   *  number: R184 §2, nothing the Super Admin did not enter is written). */
   position: number;
   /** §5 — a learner may join here without the previous Category. */
   directEntry: boolean;
-  /**
-   * R181 §7 — who the Category's steps admit, from each Level's own
-   * `gender_restriction` (§4.4b, never a name): `girls` when every step is
-   * girls-only, `boys` when every step is boys-only, `any` otherwise.
-   */
-  audience: 'any' | 'girls' | 'boys';
 }
 
 export interface Journey {
@@ -100,10 +95,8 @@ export function buildJourney(categories: readonly PublicProgramCategory[]): Jour
       preparatory: source.levels.filter((level) => level.journey_role === 'preparatory'),
       position: index + 1,
       directEntry: index > 0,
-      audience: 'any',
     };
     const ordinary = source.levels.filter((level) => level.journey_role !== 'preparatory');
-    category.audience = categoryAudience(ordinary);
     category.steps = ordinary.map((level, at) => ({
       kind: 'step',
       level,
@@ -117,23 +110,12 @@ export function buildJourney(categories: readonly PublicProgramCategory[]): Jour
   return { categories: out, steps };
 }
 
-/** R181 §7 — see `JourneyCategory.audience`. Empty → `any`. */
-export function categoryAudience(levels: readonly PublicProgramLevel[]): 'any' | 'girls' | 'boys' {
-  if (levels.length > 0 && levels.every((level) => level.gender_restriction === 'girls_only'))
-    return 'girls';
-  if (levels.length > 0 && levels.every((level) => level.gender_restriction === 'boys_only'))
-    return 'boys';
-  return 'any';
-}
-
-/**
- * R182 §5 — the audience in words: an adult Category (its beneficiaries hold
- * the login) says «للنساء فقط», a younger one «للفتيات فقط»; the sex is the
- * steps' own restriction (R181 §7), the adulthood the Category's marker.
+/*
+ * R184 §2 — no audience words. «للفتيات فقط» / «للنساء فقط» / «للبنات
+ * والبنين» were composed here from the Levels' restriction (R181 §7, R182
+ * §5); the Owner keeps that in the Category's own description, entered on
+ * «الفئات», and the page writes nothing the Super Admin did not enter.
  */
-export function audienceKey(category: Pick<JourneyCategory, 'audience' | 'adult'>): string {
-  return `${category.adult ? 'adult' : 'young'}.${category.audience}`;
-}
 
 /**
  * R183 §1 — a seasonal course (`seasonal`, a column on the Subject) is not

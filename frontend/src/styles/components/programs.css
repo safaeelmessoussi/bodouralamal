@@ -186,13 +186,6 @@
   color: var(--color-on-primary);
   box-shadow: var(--shadow-sm);
 }
-.stage__ordinal {
-  margin: 0;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  opacity: 0.85;
-}
 .stage__title {
   margin: 0;
   font-family: var(--font-family-display);
@@ -209,9 +202,6 @@
 }
 .stage__age {
   font-weight: 700;
-}
-.stage__audience {
-  opacity: 0.9;
 }
 .stage__text {
   margin: 0;
@@ -327,11 +317,18 @@
   color: var(--color-accent);
 }
 .journey__cardTitle {
+  /* R184 §1 — the Level's name wears the pill «المستوى N» wore, a size up:
+     it is what the card is about, and the page numbers nothing itself. */
+  justify-self: start;
   margin: 0;
+  padding: 0.2rem var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
   font-family: var(--font-family-display);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-lg);
   line-height: var(--line-height-tight);
   color: var(--color-primary-strong);
+  text-wrap: balance;
 }
 .journey__cardAge {
   font-weight: 700;
@@ -592,6 +589,10 @@
   align-self: flex-end;
 }
 .journey__summit {
+  /* R184 §4 — above the ridges: the backdrop's near ridge used to wash over
+     the attire and its caption. */
+  position: relative;
+  z-index: 1;
   display: grid;
   justify-items: center;
   gap: var(--space-2);

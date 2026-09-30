@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint — current Revision 183 (2026-09-30); see the revision ledger below.
+**Status:** Final MVP Blueprint — current Revision 184 (2026-09-30); see the revision ledger below.
 **Revision date:** 2026-09-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** Safae El Messoussi
@@ -24,7 +24,7 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
-**Revision ledger (R1–R183):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 183** (2026-09-30).
+**Revision ledger (R1–R184):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 184** (2026-09-30).
 
 Where §4 (functional) and §12–§20 (rules/constraints) describe the same behavior, they must agree; if an implementer ever finds a conflict, **§12 Business Rules win**, and the conflict must be reported, not silently resolved.
 
@@ -631,7 +631,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 (The authoritative sitemap and navigation hierarchy is §14.1; this section describes each page's content and behavior. End-to-end journeys connecting these pages: §17.)
 
 ### 5.1 Public (unauthenticated)
-* **Landing Page (`/`)** — Association identity, mission, **«برامجنا التعليمية» as a journey (Revision 180)** — served by the public `GET /programs` (TD-3.16), never hardcoded: one road that climbs from the first Level of the youngest Category, step by step through each Category to its graduation and on to the next, to the summit — each Category a stage bearing its name and its audience («للنساء فقط» for the adult Category — `holds_own_login`, Revision 182 §5 — «للفتيات فقط» / «للبنات والبنين» otherwise, from its Levels' own restriction) above its Levels, with its whole-Category Subjects once in an annexe under the card and its seasonal courses («دورات موسمية», `is_seasonal`, Revision 183 §1–§2) on their own line, its Levels rising like stairs inside it, a trophy after its last Level, and the graduation attire at the summit (Revision 181 §3–§4, Revision 182 §4, Revision 183 §4); one rising arrow leads from each Level to the next, drawn on as the visitor scrolls (Revision 182 §6; still under `prefers-reduced-motion`, and without JavaScript); each Level's card says its own Subjects (a seasonal course apart), «حفظ وتفسير: N أحزاب» (its by-Surah Subjects' names, Revision 182 §3) and its Surahs (a phone clamps a long list behind «…»); every Category after the first may be entered directly at its FIRST Level (never a later one), and a `preparatory` Level (§7, a column) leads into its Category's first Level — both in one small note beside that Level (Revision 182 §2); the panel opens on the adult Category (Revision 182 §7) and a fresh arrival at «/» opens on the road itself (Revision 183 §3); and **«عرض جميع البرامج»** opens the same catalogue as text to scan, from the same read — **branch list with contact details and a map link — served by the public `GET /branches` (TD-3.9, Revision 35) and never hardcoded, so a branch added in the back office appears here with no frontend change**, read-only public calendar, unrestricted public resources. Login/Register CTAs. (Language switcher ships with the FR/EN translations post-MVP, §10.1 — MVP is Arabic-only.)
+* **Landing Page (`/`)** — Association identity, mission, **«برامجنا التعليمية» as a journey (Revision 180)** — served by the public `GET /programs` (TD-3.16), never hardcoded: one road that climbs from the first Level of the youngest Category, step by step through each Category to its graduation and on to the next, to the summit — each Category a stage bearing «فئة {name}» and its own description — nothing the Super Admin did not enter: no ordinal, no audience words (Revision 184 §2) — above its Levels, with its whole-Category Subjects once in an annexe under the card and its seasonal courses («دورات موسمية», `is_seasonal`, Revision 183 §1–§2) on their own line, its Levels rising like stairs inside it, a trophy after its last Level, and the graduation attire at the summit (Revision 181 §3–§4, Revision 182 §4, Revision 183 §4); one rising arrow leads from each Level to the next, drawn on as the visitor scrolls (Revision 182 §6; still under `prefers-reduced-motion`, and without JavaScript); each Level's card is titled by the Level's name (Revision 184 §1 — no «المستوى N» of the page's) and says its own Subjects (a seasonal course apart), «حفظ وتفسير: N أحزاب» (its by-Surah Subjects' names, Revision 182 §3) and its Surahs (a phone clamps a long list behind «…»); every Category after the first may be entered directly at its FIRST Level (never a later one), and a `preparatory` Level (§7, a column) leads into its Category's first Level — both in one small note beside that Level (Revision 182 §2); the panel opens at the adult Category's first Level (Revision 182 §7, Revision 184 §3) and a fresh arrival at «/» opens on the road itself (Revision 183 §3); and **«عرض جميع البرامج»** opens the same catalogue as text to scan, from the same read — **branch list with contact details and a map link — served by the public `GET /branches` (TD-3.9, Revision 35) and never hardcoded, so a branch added in the back office appears here with no frontend change**, read-only public calendar, unrestricted public resources. Login/Register CTAs. (Language switcher ships with the FR/EN translations post-MVP, §10.1 — MVP is Arabic-only.)
 * **Registration Page (`/register`)** — "Continue with Google" entry executing the OAuth-first sequence (§4.1b); adult self-registration form or unified Parent + Child form with read-only pre-populated Google email; **الاسم الشخصي and الاسم العائلي as separate required fields (Revision 40)**, with `name_arabic` composed server-side; **a required Branch selector (Revision 39)**, populated from the public `GET /branches` and never hardcoded, so a branch added in the back office becomes selectable here with no frontend change; generic consent checkbox and explicit Parental Media Consent checkbox for minors; submits into `Pending`. **The form offers no Level, Room or Group** — those are administrative decisions after approval (§4.1).
 * **Login Page (`/login`)** — Google OAuth button only. No password fields. Deactivated and Pending states per §4.1/§2.1.
 * **Content Access Changed Page (`/content-unavailable`)** — friendly error page for stale public links to now-private content (§3.1).
@@ -1415,14 +1415,13 @@ GET /programs   (public — anonymous) → the §5.1 landing-page programme sect
                   min_age, max_age (DERIVED from its first/last Level,
                   Revision 180 §4), subjects[] (its whole-Category
                   Subjects, Revision 182 §1), holds_own_login (Revision
-                  182 §5 — the adult marker, so a Category can say
-                  «للنساء فقط») and levels[]; per Level: id, name,
-                  description, min_age, max_age, journey_role
-                  (step | preparatory, Revision 180 §6), memorisation_hizb
-                  and gender_restriction (Revision 181 §6/§7 — the
-                  programme's audience, so a Category can say «للفتيات
-                  فقط»), subjects[] (its OWN rows only, Revision 182 §1)
-                  and surahs[]; per Subject: id, name, works_by_surah
+                  182 §7 — the adult marker the road opens on) and
+                  levels[]; per Level: id, name, description, min_age,
+                  max_age, journey_role (step | preparatory, Revision 180
+                  §6), memorisation_hizb (Revision 181 §6), subjects[]
+                  (its OWN rows only, Revision 182 §1) and surahs[] — no
+                  gender_restriction since Revision 184 §2 (the page
+                  writes no audience words); per Subject: id, name, works_by_surah
                   (Revision 182 §3), seasonal (Revision 183 §1 — listed
                   apart as «دورات موسمية»); per Surah: id, name (Arabic).
                   Never: enrolment_count, display_order,

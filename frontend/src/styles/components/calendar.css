@@ -833,15 +833,32 @@ tr:last-child .cal-cell {
   box-shadow: var(--shadow-focus);
 }
 
+/* R184 §5 (Owner, 2026-09-30) — a small screen's cell is narrow enough that
+   a word was cut across several lines; a step down in size lets most words
+   stand whole, and a word breaks only when it is wider than the line
+   (`break-word`, not `anywhere`, which breaks eagerly). */
+@media (max-width: 60rem) {
+  .event-chip {
+    font-size: 0.74rem;
+    line-height: 1.25;
+  }
+  .event-chip__title {
+    overflow-wrap: break-word;
+  }
+}
 @media (max-width: 44rem) {
   .cal-title {
     font-size: var(--font-size-lg);
   }
   /* A month cell is ~48 px wide on a phone: the chip keeps its colour bar
      and drops everything else that costs width. */
+  .cal-day {
+    padding: 0.1rem;
+  }
   .event-chip {
     box-shadow: inset 2px 0 0 currentcolor;
-    font-size: 0.78rem;
-    line-height: 1.25;
+    padding: 0.15rem 0.15rem 0.15rem 0.25rem;
+    font-size: 0.62rem;
+    line-height: 1.2;
   }
 }

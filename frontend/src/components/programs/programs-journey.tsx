@@ -8,7 +8,6 @@ import { Icon } from '../ui/icon.js';
 import { ArrowheadDefs, DirectionArrow } from './direction-arrow.js';
 import {
   ageWords,
-  audienceKey,
   levelAgeWords,
   memorisationWords,
   programmeSubjects,
@@ -80,15 +79,20 @@ export function ProgramsJourney({
   // R182 §7 — most visitors are women: the panel opens on the adult Category
   // (the one whose beneficiaries hold their own login, R170 §6 — a marker,
   // never a name) when there is one; the road before it is a swipe away.
+  // R184 §3 — at its FIRST STEP's card, not at the «مداخل أخرى» note that
+  // precedes it: the stage's stuck head stays in view above the card.
   useEffect(() => {
     const root = scroller.current;
     const adult = journey.categories.find((category) => category.adult);
     if (!root || !adult) return;
-    const target = root.querySelector<HTMLElement>(`[data-journey-category="${adult.id}"]`);
+    const firstStep = adult.steps[0]?.level.id;
+    const target =
+      (firstStep ? root.querySelector<HTMLElement>(`#journey-level-${firstStep}`) : null) ??
+      root.querySelector<HTMLElement>(`[data-journey-category="${adult.id}"]`);
     if (!target) return;
-    // Bring its start (right) edge to the panel's, without moving the page.
-    root.scrollLeft +=
-      target.getBoundingClientRect().right - root.getBoundingClientRect().right + 24;
+    // Bring its start (right) edge flush to the panel's, without moving the
+    // page: nothing of the cell before it shows (R184 §3).
+    root.scrollLeft += target.getBoundingClientRect().right - root.getBoundingClientRect().right;
   }, [journey]);
 
   // R183 §3 — the landing page OPENS on the journey: on a fresh arrival at
@@ -225,18 +229,16 @@ function Stage({
       {/* The Category's name ABOVE its Levels (R181 §3), and it stays in view
           while the stage scrolls (sticky at the start edge). */}
       <header className="stage__head">
-        <p className="stage__ordinal" aria-hidden="true">
-          {t('programs.journey.categoryOrdinal').replace('{n}', String(category.position))}
-        </p>
+        {/* R184 §2 — «فئة الطفل», then the ages and the Super Admin's own
+            description; no ordinal and no audience words of the page's. */}
         <h3 className="stage__title" id={`stage-${category.id}-title`}>
-          {category.name}
+          {t('programs.journey.categoryTitle').replace('{name}', category.name)}
         </h3>
-        <p className="stage__meta">
-          {ages ? <span className="stage__age">{ages}</span> : null}
-          <span className="stage__audience">
-            {t(`programs.journey.audience.${audienceKey(category)}`)}
-          </span>
-        </p>
+        {ages ? (
+          <p className="stage__meta">
+            <span className="stage__age">{ages}</span>
+          </p>
+        ) : null}
         {category.description ? <p className="stage__text">{category.description}</p> : null}
       </header>
       {/* R182 §1 / R183 §2 — the Subjects every step shares, said once, as an
@@ -379,12 +381,11 @@ function Entrances({
             <span className="entrances__lead">
               {t('programs.journey.directEntryShort').replace('{step}', firstStep)}
             </span>
-            <span className="entrances__note">
-              {t(`programs.journey.audienceEntry.${audienceKey(category)}`)}
-              {category.minAge !== null
-                ? ` — ${t('admin.taxonomy.ageFrom').replace('{min}', String(category.minAge))}`
-                : ''}
-            </span>
+            {category.minAge !== null ? (
+              <span className="entrances__note">
+                {t('admin.taxonomy.ageFrom').replace('{min}', String(category.minAge))}
+              </span>
+            ) : null}
           </p>
         ) : null}
         {category.preparatory.map((level) => (
@@ -455,12 +456,14 @@ function StepCard({
       id={`journey-level-${level.id}`}
       aria-labelledby={`journey-level-${level.id}-title`}
     >
-      <p className="journey__cardKicker">
-        <span className="journey__cardOrdinal">
-          {t('programs.journey.stepOrdinal').replace('{n}', String(step.position))}
-        </span>
-        {ages ? <span className="journey__cardAge">{ages}</span> : null}
-      </p>
+      {/* R184 §1 — the Level's NAME is the card's title, in the pill that
+          «المستوى N» wore: nothing numbered by the page; «المستوى 1» or
+          «السنة 1» is the Super Admin's to put in the description. */}
+      {ages ? (
+        <p className="journey__cardKicker">
+          <span className="journey__cardAge">{ages}</span>
+        </p>
+      ) : null}
       <h4 className="journey__cardTitle" id={`journey-level-${level.id}-title`}>
         {level.name}
       </h4>

@@ -4,9 +4,7 @@ import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/p
 import { t } from '../../i18n/index.js';
 import {
   ageWords,
-  audienceKey,
   buildJourney,
-  categoryAudience,
   journeyOrder,
   memorisationWords,
   programmeSubjects,
@@ -27,7 +25,6 @@ const level = (id: string, over: Partial<PublicProgramLevel> = {}): PublicProgra
   max_age: null,
   journey_role: 'step',
   memorisation_hizb: null,
-  gender_restriction: 'any',
   subjects: [],
   surahs: [],
   ...over,
@@ -122,42 +119,12 @@ describe('buildJourney — steps, graduations and the ways in', () => {
   });
 });
 
-/** R181 §7 — the audience is read off the steps' own restriction, never a name. */
-describe('categoryAudience', () => {
-  it('girls only when every step is girls-only; everyone otherwise', () => {
-    expect(
-      categoryAudience([
-        level('a', { gender_restriction: 'girls_only' }),
-        level('b', { gender_restriction: 'girls_only' }),
-      ]),
-    ).toBe('girls');
-    expect(categoryAudience([level('a', { gender_restriction: 'girls_only' }), level('b')])).toBe(
-      'any',
-    );
-    expect(categoryAudience([level('a', { gender_restriction: 'boys_only' })])).toBe('boys');
-    expect(categoryAudience([])).toBe('any');
-    const journey = buildJourney([
-      category('teens', [level('t1', { gender_restriction: 'girls_only' })]),
-    ]);
-    expect(journey.categories[0]!.audience).toBe('girls');
-  });
-});
-
-/** R182 §5 — «للنساء» for an adult Category, «للفتيات» for a younger one; the marker, never a name. */
-describe('audienceKey', () => {
-  it("pairs the steps' restriction with the Category's adulthood", () => {
-    const girls = [level('a', { gender_restriction: 'girls_only' })];
-    const women = buildJourney([category('w', girls, { holds_own_login: true })]).categories[0]!;
-    const teens = buildJourney([category('t', girls)]).categories[0]!;
-    expect(audienceKey(women)).toBe('adult.girls');
-    expect(audienceKey(teens)).toBe('young.girls');
-    expect(t(`programs.journey.audience.${audienceKey(women)}`)).toBe('للنساء فقط');
-    expect(t(`programs.journey.audience.${audienceKey(teens)}`)).toBe('للفتيات فقط');
-    expect(
-      audienceKey(
-        buildJourney([category('n', [level('a')], { holds_own_login: null })]).categories[0]!,
-      ),
-    ).toBe('young.any');
+/** R184 §2 — the page composes no audience words: nothing of the kind is on the model. */
+describe('no audience on the model', () => {
+  it("a Category carries no audience — its description (the Super Admin's) says who it is for", () => {
+    const journey = buildJourney([category('w', [level('a')], { holds_own_login: true })]);
+    expect(journey.categories[0]).not.toHaveProperty('audience');
+    expect(journey.categories[0]!.adult).toBe(true);
   });
 });
 
@@ -169,7 +136,10 @@ describe('memorisationWords', () => {
     { id: 's3', name: 'التربية الإسلامية', works_by_surah: false, seasonal: false },
   ];
   it('leaves a seasonal course out of the label (R183 §1)', () => {
-    const withCourse = [...bySurah, { id: 's9', name: 'دورة قصيرة', works_by_surah: true, seasonal: true }];
+    const withCourse = [
+      ...bySurah,
+      { id: 's9', name: 'دورة قصيرة', works_by_surah: true, seasonal: true },
+    ];
     expect(surahSubjectsLabel(level('x', { subjects: withCourse }), t)).toBe('حفظ وتفسير');
     expect(programmeSubjects(withCourse).map((s) => s.id)).toEqual(['s1', 's2', 's3']);
     expect(seasonalSubjects(withCourse).map((s) => s.id)).toEqual(['s9']);
@@ -182,7 +152,9 @@ describe('memorisationWords', () => {
     expect(surahSubjectsLabel(level('x', { subjects: bySurah.slice(0, 1) }), t)).toBe('حفظ');
     expect(
       surahSubjectsLabel(
-        level('x', { subjects: [{ id: 's4', name: 'التجويد', works_by_surah: true, seasonal: false }] }),
+        level('x', {
+          subjects: [{ id: 's4', name: 'التجويد', works_by_surah: true, seasonal: false }],
+        }),
         t,
       ),
     ).toBe('التجويد');

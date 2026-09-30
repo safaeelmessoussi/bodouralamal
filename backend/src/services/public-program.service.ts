@@ -42,9 +42,6 @@ export interface PublicProgramLevel {
   journeyRole: 'step' | 'preparatory';
   /** R181 §6 — «مقرر الحفظ» in Hizb, the Owner's measure; `null` is «not stated». */
   memorisationHizb: number | null;
-  /** R181 §7 — who the Level admits (§4.4b / R27), so the page can say «للفتيات
-   *  فقط» where a Category is: the programme's audience, not operational data. */
-  genderRestriction: 'any' | 'girls_only' | 'boys_only';
   subjects: PublicSubjectRef[];
   surahs: PublicSurahRef[];
 }
@@ -105,7 +102,6 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
       maxAge: true,
       journeyRole: true,
       memorisationHizb: true,
-      genderRestriction: true,
     },
     // Ordering is scoped within the parent Category (§2.2), same as the
     // admin taxonomy read.
@@ -200,7 +196,6 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
       maxAge: level.maxAge,
       journeyRole: level.journeyRole,
       memorisationHizb: level.memorisationHizb,
-      genderRestriction: level.genderRestriction,
       subjects: subjectsByLevel.get(level.id) ?? [],
       surahs: surahsByLevel.get(level.id) ?? [],
     });
