@@ -36,16 +36,24 @@ await shot('show-1-categories');
 const idx = cats.findIndex((c) => c === 'فئة المرأة');
 await click(`.show__grid li:nth-child(${idx + 1}) .show__category`);
 r.check("choosing a Category zooms its card", await until(`document.querySelector('.show__category.is-zooming') !== null`, 8));
-r.check("…then shows its first Level", await until(`document.querySelector('.show--level .show__card') !== null`));
+r.check("…then shows its first Level as the strip's first card", await until(`document.querySelector('.show--walk .show__card') !== null`));
 await wait(500);
 const first = await evaluate(`document.querySelector('.show__card .journey__cardTitle').textContent`);
-r.check("the first Level card is وميض الأمل, with its dots", first === 'وميض الأمل' && (await evaluate("document.querySelectorAll('.show__dot').length")) === 7 && (await evaluate("document.querySelectorAll('.show__dot.is-current').length")) === 1);
+const slides = await evaluate("document.querySelectorAll('.show__dot').length");
+r.check("the first card is وميض الأمل, one dot per slide to the end of the road", first === 'وميض الأمل' && slides >= 7 && (await evaluate("document.querySelectorAll('.show__dot.is-current').length")) === 1, `${first} ${slides}`);
 await shot('show-2-level');
-// tap through the rest of the Levels
-let taps = 0;
-while ((await evaluate("document.querySelector('.show--level') !== null")) && taps < 10) { await click('.show__screen--level'); await wait(450); taps += 1; }
-r.check("a tap per Level walks to the graduation (7 taps)", taps === 7 && (await evaluate("document.querySelector('.show--graduation') !== null")), String(taps));
-r.check("the graduation: confetti over the whole screen, the words without «وتواصل الرحلة», the attire", await evaluate(`(() => { const s = document.querySelector('.show__screen--graduation'); const c = s.querySelector('.show__confetti').getBoundingClientRect(); return s.querySelectorAll('.show__piece').length === 64 && c.width >= window.innerWidth - 2 && s.textContent.includes('تُتمّ المتعلّمة برنامج المرأة.') && !s.textContent.includes('وتواصل') && !!s.querySelector('.journey__attire img'); })()`));
+// R186 — a tap appends the next card with an arrow between and moves the strip along.
+await click('.show__next');
+await wait(700);
+const strip = JSON.parse(await evaluate(`JSON.stringify((() => { const s = document.querySelector('.show__strip'); const cards = [...s.querySelectorAll('.show__slide')]; const cur = cards.at(-1).getBoundingClientRect(); const sr = s.getBoundingClientRect(); return { cards: cards.length, links: s.querySelectorAll('.show__link .journey__arrowLine').length, current: cards.at(-1).classList.contains('is-current'), firstNotCurrent: !cards[0].classList.contains('is-current'), newestVisible: cur.left >= sr.left - 2 && cur.right <= sr.right + 2, order: cards.map((c) => c.querySelector('.journey__cardTitle')?.textContent ?? 'milestone') }; })())`));
+r.check("the next card is appended with an arrow between; the first card is no longer current; the newest is in view", strip.cards === 2 && strip.links === 1 && strip.current && strip.firstNotCurrent && strip.newestVisible, JSON.stringify(strip));
+await shot('show-2b-strip');
+// tap on to the graduation, counting the taps against the dots
+let taps = 1;
+while ((await evaluate("document.querySelector('.show--walk') !== null")) && taps < 60) { await click('.show__screen--walk'); await wait(350); taps += 1; }
+r.check("a tap per slide walks to the end of the road (one per dot)", taps === slides && (await evaluate("document.querySelector('.show--graduation') !== null")), `${taps} taps, ${slides} dots`);
+r.check("the strip held every card of the way, milestones between Categories", await evaluate("document.querySelector('.show--graduation') !== null"));
+r.check("the graduation: confetti over the whole screen, the LAST Category's words without «وتواصل الرحلة», the attire", await evaluate(`(() => { const s = document.querySelector('.show__screen--graduation'); const c = s.querySelector('.show__confetti').getBoundingClientRect(); const lastName = [...document.querySelectorAll('[data-journey-category] .stage__title')].at(-1).textContent; return s.querySelectorAll('.show__piece').length === 64 && c.width >= window.innerWidth - 2 && s.textContent.includes('تُتمّ المتعلّمة برنامج') && s.textContent.includes(lastName.replace('فئة ', '') + '.') && !s.textContent.includes('وتواصل') && !!s.querySelector('.journey__attire img'); })()`));
 await wait(800);
 await shot('show-3-graduation');
 r.check("the question comes by itself after the graduation", await until(`document.querySelector('.show--question .show__question') !== null`, 20));

@@ -1,11 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   «برامجنا التعليمية» — the full-screen show (SRS Revision 185 §5).
+   «برامجنا التعليمية» — the full-screen show (SRS Revision 185 §5, reshaped
+   by Revision 186).
 
-   One screen at a time over the whole viewport: the Categories to choose
-   from, the chosen Category's Levels one card per tap, its graduation under
+   One screen at a time over the whole viewport, all of it under the road's
+   own sky — a green dawn at the top, a sun, three ridges at the foot: the
+   Categories to choose from (ornamented cards), then the STRIP of cards that
+   grows by one per tap with an arrow between, then the graduation under
    falling confetti, then the one question over everything, blurred. Every
-   colour is the palette's; under `prefers-reduced-motion` nothing zooms or
-   falls. The component is `components/programs/programs-show.tsx`.
+   colour is the palette's; under `prefers-reduced-motion` nothing zooms,
+   slides or falls. The component is `components/programs/programs-show.tsx`.
    ═══════════════════════════════════════════════════════════════════════════ */
 .show {
   position: fixed;
@@ -13,44 +16,96 @@
   z-index: 200;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  background: var(--color-surface);
+  background: linear-gradient(
+    180deg,
+    var(--color-primary-deep) 0%,
+    var(--color-primary-strong) 22%,
+    color-mix(in srgb, var(--color-primary-soft) 70%, var(--color-surface)) 60%,
+    var(--color-surface) 100%
+  );
   color: var(--color-text);
   overflow: hidden;
   outline: none;
 }
+
+/* ── The sky behind every screen ────────────────────────────────────────── */
+.show__backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.show__sun {
+  position: absolute;
+  inset-inline-start: 12%;
+  inset-block-start: 9%;
+  inline-size: clamp(5rem, 12vw, 9rem);
+  block-size: clamp(5rem, 12vw, 9rem);
+  border-radius: var(--radius-full);
+  background: var(--color-accent-fill);
+  box-shadow:
+    0 0 0 1.2rem color-mix(in srgb, var(--color-accent-fill) 22%, transparent),
+    0 0 0 2.6rem color-mix(in srgb, var(--color-accent-fill) 10%, transparent);
+  opacity: 0.9;
+}
+.show__ridges {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  inline-size: 100%;
+  block-size: 42vh;
+  display: block;
+}
+
+/* ── The bar ────────────────────────────────────────────────────────────── */
 .show__bar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   padding: max(var(--space-3), env(safe-area-inset-top, 0px)) var(--space-5) var(--space-3);
-  border-block-end: 1px solid var(--color-border);
-  background: var(--color-surface-raised);
+  color: var(--color-on-primary);
 }
 .show__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   margin: 0;
   font-family: var(--font-family-display);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-lg);
   font-weight: 700;
-  color: var(--color-primary-strong);
+}
+.show__titleMark {
+  inline-size: 0.6rem;
+  block-size: 1.6rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-fill);
 }
 .show__close {
   display: grid;
   place-items: center;
   inline-size: var(--tap-min);
   block-size: var(--tap-min);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-on-primary-overlay);
   border-radius: var(--radius-md);
-  background: var(--color-surface-raised);
-  color: var(--color-text);
+  background: var(--color-on-primary-overlay);
+  color: var(--color-on-primary);
   cursor: pointer;
+}
+.show__close:hover {
+  background: color-mix(in srgb, var(--color-on-primary) 22%, transparent);
 }
 .show__close:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
 }
+
+/* ── A screen ───────────────────────────────────────────────────────────── */
 .show__screen {
   position: relative;
+  z-index: 1;
   display: grid;
   align-content: center;
   justify-items: center;
@@ -65,44 +120,58 @@
 }
 .show__lede {
   margin: 0;
-  font-size: var(--font-size-md);
-  color: var(--color-text-secondary);
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-on-primary);
   text-align: center;
+  text-shadow: 0 1px 0 var(--color-primary-deep);
 }
 
 /* ── The Categories, one screen ─────────────────────────────────────────── */
 .show__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: var(--space-4);
-  width: min(100%, 64rem);
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: var(--space-5);
+  width: min(100%, 68rem);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .show__category {
+  position: relative;
   display: grid;
   gap: var(--space-2);
   width: 100%;
   height: 100%;
-  padding: var(--space-5);
+  padding: var(--space-6) var(--space-5) var(--space-5);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  border-block-end: 4px solid var(--color-primary);
+  border-radius: var(--radius-xl);
   background: var(--color-surface-raised);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   color: var(--color-text);
   font: inherit;
   text-align: start;
   cursor: pointer;
+  overflow: hidden;
   transition:
     transform 320ms ease,
     opacity 320ms ease,
-    box-shadow 160ms ease;
+    box-shadow 200ms ease;
+}
+/* A band of the road's colours across the top, the ornament set beside it. */
+.show__category::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  block-size: 0.5rem;
+  background: linear-gradient(90deg, var(--color-accent-fill), var(--color-primary));
 }
 .show__category:hover,
 .show__category:focus-visible {
-  box-shadow: var(--shadow-md);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
   outline: none;
 }
 /* The chosen card grows toward the reader while the others withdraw. */
@@ -115,10 +184,27 @@
   opacity: 0;
   transform: scale(0.94);
 }
+.show__categoryOrnament {
+  position: absolute;
+  inset-inline-end: var(--space-4);
+  inset-block-start: var(--space-4);
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+}
+.show__ornamentStar {
+  fill: var(--color-accent-soft);
+  stroke: var(--color-accent);
+  stroke-width: 1.2;
+}
+.show__ornamentDot {
+  fill: var(--color-accent);
+}
 .show__categoryTitle {
+  padding-inline-end: 3rem;
   font-family: var(--font-family-display);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-xl);
   font-weight: 700;
+  line-height: var(--line-height-tight);
   color: var(--color-primary-strong);
 }
 .show__categoryAge {
@@ -128,6 +214,26 @@
 .show__categoryText {
   color: var(--color-text-secondary);
   text-wrap: pretty;
+}
+/* The way through the Category: its Levels' names, in order, as a path. */
+.show__categoryPath {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.35rem;
+  margin-block-start: var(--space-1);
+  font-size: var(--font-size-xs);
+}
+.show__categoryStep {
+  padding: 0.1rem var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-weight: 700;
+}
+.show__categoryPathArrow {
+  color: var(--color-accent);
+  font-weight: 700;
 }
 .show__categoryRow {
   font-size: var(--font-size-xs);
@@ -139,34 +245,117 @@
 .show__categoryRow--seasonal b {
   color: var(--color-accent);
 }
+.show__categoryGo {
+  justify-self: start;
+  margin-block-start: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: 700;
+}
 
-/* ── One Level per tap ──────────────────────────────────────────────────── */
+/* ── The strip: a card per tap, an arrow between ────────────────────────── */
+.show__screen--walk {
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  align-content: stretch;
+  padding-block: var(--space-3);
+}
+.show__strip {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  min-height: 0;
+  padding: var(--space-4) var(--space-5);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.show__strip::-webkit-scrollbar {
+  display: none;
+}
+.show__slide {
+  position: relative;
+  flex: none;
+  display: grid;
+  gap: var(--space-2);
+  width: min(78vw, 22rem);
+  transition:
+    transform 320ms ease,
+    opacity 320ms ease;
+  animation: show-slide-in 420ms ease-out both;
+}
+.show__slide:not(.is-current) {
+  opacity: 0.72;
+  transform: scale(0.96);
+}
+.show__slide.is-current .journey__card {
+  box-shadow: var(--shadow-lg);
+  border-block-end-color: var(--color-accent);
+}
+.show__slideCategory {
+  margin: 0;
+  padding: 0.15rem var(--space-3);
+  justify-self: start;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-strong);
+  color: var(--color-on-primary);
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
 .show__card {
-  width: min(100%, 30rem);
-  animation: show-card-in 360ms ease-out both;
+  width: 100%;
+  border-radius: var(--radius-xl);
 }
 .show__card .journey__cardTitle {
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-lg);
 }
-.show__card .journey__surahs {
-  font-size: var(--font-size-sm);
-}
-/* Whole on a big screen: six lines before «…». */
+/* Six lines before «…» here — the screen is the card's alone. */
 .show__card .journey__surahs:not(.is-expanded) .journey__surahsText {
   -webkit-line-clamp: 6;
 }
-@keyframes show-card-in {
+@keyframes show-slide-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateX(-24px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
   }
+}
+.show__link {
+  flex: none;
+  display: block;
+  padding-inline: var(--space-2);
+}
+.show__linkArrow {
+  display: block;
+}
+.show__linkArrow .journey__arrowLine,
+.show__linkArrow .journey__chevron {
+  stroke-width: 3.5;
+}
+/* A Category's milestone in the strip. */
+.show__slide--milestone {
+  width: min(70vw, 16rem);
+}
+.show__milestone {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1.5px dashed var(--color-accent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--color-accent-soft) 60%, var(--color-surface-raised));
+  text-align: center;
 }
 .show__dots {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--space-2);
   margin: 0;
   padding: 0;
@@ -176,24 +365,37 @@
   inline-size: 0.6rem;
   block-size: 0.6rem;
   border-radius: var(--radius-full);
-  background: var(--color-border);
+  background: color-mix(in srgb, var(--color-primary-strong) 25%, transparent);
+  transition: transform 200ms ease;
+}
+.show__dot--milestone {
+  border-radius: var(--radius-xs);
+  transform: rotate(45deg);
 }
 .show__dot.is-done {
-  background: var(--color-primary-soft);
-}
-.show__dot.is-current {
   background: var(--color-primary);
 }
+.show__dot.is-current {
+  background: var(--color-accent);
+  transform: scale(1.4);
+}
+.show__dot--milestone.is-current {
+  transform: rotate(45deg) scale(1.4);
+}
 .show__next {
-  padding: var(--space-2) var(--space-5);
+  padding: var(--space-2) var(--space-6);
   min-block-size: var(--tap-min);
-  border: 1px solid var(--color-border);
+  border: 0;
   border-radius: var(--radius-pill);
-  background: var(--color-surface-raised);
-  color: var(--color-primary-strong);
+  background: var(--color-accent-fill);
+  color: var(--color-primary-deep);
   font: inherit;
   font-weight: 700;
+  box-shadow: var(--shadow-md);
   cursor: pointer;
+}
+.show__next:hover {
+  background: var(--color-accent-fill-hover);
 }
 .show__next:focus-visible {
   outline: none;
@@ -212,14 +414,26 @@
   transition: filter 600ms ease;
 }
 .show__graduation .journey__milestoneTitle {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-xl);
+  color: var(--color-on-primary);
+  text-shadow: 0 1px 0 var(--color-primary-deep);
+}
+.show__graduation > .journey__milestoneText {
+  color: var(--color-on-primary);
+  font-size: var(--font-size-sm);
+}
+/* A glow behind the attire. */
+.show__graduation .journey__attire {
+  box-shadow:
+    0 0 0 1rem color-mix(in srgb, var(--color-accent-fill) 28%, transparent),
+    var(--shadow-lg);
 }
 /* Bounded by the viewport's height, so the words above and the button
    below stay on the one screen. */
 .show__graduation .journey__attire img {
   width: auto;
   max-width: 100%;
-  height: min(48vh, 30rem);
+  height: min(46vh, 30rem);
 }
 .show__graduation .journey__summit {
   width: auto;
@@ -241,9 +455,12 @@
   font-family: var(--font-family-display);
   font-size: var(--font-size-2xl);
   font-weight: 700;
-  color: var(--color-accent);
+  color: var(--color-accent-fill);
   text-align: center;
   text-wrap: balance;
+  text-shadow:
+    0 2px 0 var(--color-primary-deep),
+    0 0 2rem var(--color-primary-deep);
   animation: show-question-in 700ms ease-out both;
   pointer-events: none;
 }
@@ -289,7 +506,7 @@
   background: var(--color-accent);
 }
 .show__piece--b {
-  background: var(--color-primary);
+  background: var(--color-on-primary);
 }
 .show__piece--c {
   background: var(--color-accent-fill);
@@ -310,7 +527,7 @@
     transform: translate3d(var(--drift, 0px), 108vh, 0) rotate(var(--spin, 360deg));
   }
 }
-/* Still (reduced motion, or asked for): scattered, standing. */
+/* Still (reduced motion): scattered, standing. */
 .show__confetti.is-still .show__piece {
   inset-block-start: var(--y, 50%);
   opacity: 0.9;
@@ -319,10 +536,11 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .show__category,
-  .show__card,
+  .show__slide,
   .show__question,
   .show__graduation,
-  .show__confetti {
+  .show__confetti,
+  .show__dot {
     animation: none;
     transition: none;
   }
@@ -345,7 +563,16 @@
   .show__bar {
     padding-inline: var(--space-4);
   }
+  .show__grid {
+    gap: var(--space-4);
+  }
+  .show__category {
+    padding: var(--space-5) var(--space-4) var(--space-4);
+  }
+  .show__strip {
+    padding-inline: var(--space-4);
+  }
   .show__graduation .journey__attire img {
-    height: min(42vh, 22rem);
+    height: min(40vh, 22rem);
   }
 }

@@ -62,39 +62,56 @@ describe('ProgramsShow', () => {
     ).toBe('');
   });
 
-  it('opens on the Categories as cards with their details, one screen', () => {
+  it('opens on the Categories as ornamented cards with their details and their path, under the sky', () => {
     const html = render({ kind: 'categories' });
     expect(html).toContain('role="dialog"');
+    expect(html).toContain('show__backdrop');
+    expect(html.split('journey__ridge ').length - 1).toBe(3);
     expect(html).toContain('اختاري فئة لتبدئي رحلتها');
     expect(html).toContain('class="show__category"');
+    expect(html).toContain('show__ornamentStar');
     expect(html).toContain('فئة الطفل');
     expect(html).toContain('من 6 إلى 12 سنة');
     expect(html).toContain('برنامج الطفل');
+    // R186 — the way through: the Levels' names in order.
+    expect(html.indexOf('show__categoryStep">كتاكيت الأمل')).toBeLessThan(
+      html.indexOf('show__categoryStep">براعم الأمل'),
+    );
     expect(html).toContain('التربية الإسلامية');
+    expect(html).toContain('ابدئي من هنا');
     expect(html).toContain('إغلاق');
   });
 
-  it('shows one Level card per step, with its dots and «انقري للمتابعة»', () => {
-    const html = render({ kind: 'level', categoryId: 'kids', index: 1 });
-    expect(html).toContain('id="show-level-k2"');
-    expect(html).not.toContain('id="journey-level-'); // never the road's own ids
-    expect(html).toContain('براعم الأمل');
-    expect(html).not.toContain('كتاكيت الأمل');
-    expect(html).toContain('show__dot is-done');
-    expect(html).toContain('show__dot is-current');
-    expect(html).toContain('انقري للمتابعة');
-    expect(html).toContain('>فئة الطفل<');
+  it('the strip holds every card walked so far, an arrow between, the newest current (R186)', () => {
+    const one = render({ kind: 'walk', start: 'kids', at: 0 });
+    expect(one).toContain('id="show-level-k1"');
+    expect(one).not.toContain('id="show-level-k2"');
+    expect(one).not.toContain('show__link');
+    expect(one).toContain('show__slideCategory">فئة الطفل');
+    expect(one).toContain('show__slide is-current');
+    const two = render({ kind: 'walk', start: 'kids', at: 1 });
+    expect(two.indexOf('id="show-level-k1"')).toBeLessThan(two.indexOf('id="show-level-k2"'));
+    expect(two.split('class="show__link is-walked"').length - 1).toBe(1);
+    expect(two).toContain('journey__arrowLine');
+    expect(two).not.toContain('id="journey-level-'); // never the road's own ids
+    // The first card is no longer current; the second is.
+    expect(two.indexOf('show__slide is-current')).toBeGreaterThan(
+      two.indexOf('id="show-level-k1"'),
+    );
+    expect(two).toContain('show__dot is-done');
+    expect(two).toContain('show__dot is-current');
+    expect(two).toContain('انقري للمتابعة');
   });
 
-  it('ends a Category under confetti with the attire, then asks the question over everything', () => {
-    const graduation = render({ kind: 'graduation', categoryId: 'kids' });
+  it('ends only after the last Category: confetti, «إتمام الفئة», the attire, then the question', () => {
+    const graduation = render({ kind: 'graduation' });
     expect(graduation).toContain('show__confetti');
     expect(graduation.split('class="show__piece').length - 1).toBe(64);
     expect(graduation).toContain('تُتمّ المتعلّمة برنامج الطفل.');
     expect(graduation).not.toContain('وتواصل الرحلة');
     expect(graduation).toContain('src="/journey/graduation-attire.jpg"');
     expect(graduation).not.toContain('show__question');
-    const question = render({ kind: 'question', categoryId: 'kids' });
+    const question = render({ kind: 'question' });
     expect(question).toContain('show__screen--graduation is-asked');
     expect(question).toContain('class="show__question">متى يحين دورُك؟');
     expect(question).toContain('العودة إلى الفئات');
@@ -105,5 +122,9 @@ describe('ProgramsShow', () => {
     expect(SHOW_SOURCE).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches");
     expect(SHOW_SOURCE).toContain("if (event.key === 'Escape') onClose();");
     expect(SHOW_SOURCE).toContain('if (!document.fullscreenElement) onClose();');
+    // R186 — the strip moves to the card just appended.
+    expect(SHOW_SOURCE).toContain(
+      "node.scrollTo({ left: -node.scrollWidth, behavior: reduced ? 'auto' : 'smooth' });",
+    );
   });
 });

@@ -99,7 +99,7 @@ Results are from the run named per row (2026-08-19 unless stated); none is copie
 | `verify-whole-category-recording.sh` | 7 | R172 §1/§11: «تسجيل صوتي» for «كل مستويات الفئة»; names «مواد المستوى» when nothing is assigned whole | 7/7 |
 | `verify-level-subjects.sh` | 7 | «مواد المستوى» (Staging 2026-09-23): bounded reads, every Level lists its Subjects, edit keeps an assigned Subject without `DUPLICATE` | 7/7 |
 | `verify-level-surahs.sh` | 6 | «مقرر الحفظ» (Production 2026-09-30, `429`): three reads of its own, none per Level, configured Levels list their Surahs | 6/6 |
-| `verify-programs-show.sh` | 12 ×2 | R185 §5 — the full-screen show end to end at a laptop's and a phone's width | 12/12 ×2 |
+| `verify-programs-show.sh` | 14 ×2 | R185 §5 / R186 — the full-screen show end to end (the strip, milestones, the one graduation) at a laptop's and a phone's width | 14/14 ×2 |
 | `verify-operations-status.sh` | 10 | R169 §11 «حالة النظام»: refused anonymously, last in الإدارة, five counts, no payload/key/error text | 8/8 |
 | `verify-trash-restore.sh` | 10 | R169 §8: deleted Subject circle offered «استعادة» (was «غير متاح — يتبعه سجلات أخرى»), seats reported | 6/6 |
 | `verify-room-capacity.sh` | 10 | R169 §3: non-whole capacity refused before the wire; «not stated» when cleared | 8/8 |

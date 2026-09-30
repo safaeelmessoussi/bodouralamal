@@ -1,9 +1,17 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–185 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–186 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 186 (Document Owner's review of the full-screen show, 2026-09-30 — three points):** **BUILT.**
+
+**§1 — A DESIGN WORTH THE SCREEN.** Every screen stands under the road's own sky — a green dawn, a sun, three ridges at the foot; the bar carries the Category's name in white; a Category's card wears a band of the road's colours, an eight-point star, its ages, its description, the way through it (its Levels' names as a path of pills) and «ابدئي من هنا»; the current card of the strip stands forward, the earlier ones a step back; the button is saffron.
+
+**§2 — THE ATTIRE AND THE QUESTION ONLY AT THE END OF THE LAST CATEGORY.** A Category that another follows ends in a milestone card («إتمام فئة X», the trophy) inside the strip, and the walk goes on into the next Category; the graduation screen — confetti, «إتمام الفئة», the attire, then «متى يحين دورُك؟» over everything — comes once, after the last Level of the last Category.
+
+**§3 — A STRIP THAT GROWS.** From the chosen Category's first Level, «انقري للمتابعة» (or a tap anywhere) moves the cards along and appends the next one with an arrow between — the first card to the right, the newest at the left, always in view — until the whole way is laid out; the dots (a diamond for a milestone) mark the place. Harness `verify-programs-show.sh` (14/14 at 1366 and 390 px).
 
 **Revision 185 (Document Owner's fifth review of the journey, 2026-09-30 — six points):** **BUILT.**
 
