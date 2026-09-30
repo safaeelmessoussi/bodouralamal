@@ -310,6 +310,15 @@
   text-align: center;
   color: var(--color-text-muted);
 }
+/* R184 §6 — a phone's stage: the words, then «فتح الملف» to the device's viewer. */
+.preview__placeholder--open {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+}
+.preview__placeholder--open p {
+  margin: 0;
+}
 .preview__pdf {
   width: 100%;
   height: min(70vh, 34rem);

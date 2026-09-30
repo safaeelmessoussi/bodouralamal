@@ -18,7 +18,11 @@ import { Dialog } from '../ui/dialog.js';
  *
  * | Kind      | Behaviour                                    |
  * |-----------|----------------------------------------------|
- * | PDF       | Inline in an `<iframe>`, plus download       |
+ * | PDF       | Inline in an `<iframe>`, plus download — or, |
+ * |           | where the browser has no inline PDF viewer   |
+ * |           | (a phone: `navigator.pdfViewerEnabled` is     |
+ * |           | `false`), «فتح الملف» in the device's viewer  |
+ * |           | (R184 §6; the frame showed a broken icon)    |
  * | Video     | Native `<video controls>`, plus download     |
  * | Audio     | Native `<audio controls>`, plus download     |
  * | Image     | Shown at full width, plus download           |
@@ -181,6 +185,26 @@ export function ContentPreviewDialog({
 function PreviewSurface({ item, url, onError }: { item: ContentItem; url: string; onError: () => void }): ReactNode {
   switch (item.kind) {
     case 'pdf':
+      // R184 §6 (Owner-reported on a phone, 2026-09-30) — Android Chrome has
+      // no inline PDF viewer and paints a broken-file icon into the frame.
+      // The browser says so itself (`pdfViewerEnabled === false`; a browser
+      // that does not answer — Safari — still renders inline), so the stage
+      // offers the file to the device's own viewer instead: a new top-level
+      // context, which every phone can open. The download button below stays.
+      if (typeof navigator !== 'undefined' && navigator.pdfViewerEnabled === false) {
+        return (
+          <div className="preview__placeholder preview__placeholder--open">
+            <p>{t('content.previewPdfOnDevice')}</p>
+            <Button
+              variant="secondary"
+              icon="document"
+              onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+            >
+              {t('content.openFile')}
+            </Button>
+          </div>
+        );
+      }
       // `title` is the accessible name of the frame; without it a screen reader
       // announces an unnamed embedded document.
       return <iframe className="preview__pdf" src={url} title={item.title} />;

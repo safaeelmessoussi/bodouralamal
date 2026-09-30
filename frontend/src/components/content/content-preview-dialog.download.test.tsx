@@ -36,3 +36,24 @@ describe('the download button mints its own attachment-disposed URL', () => {
     expect(source).toContain('.finally(() => setDownloading(false))');
   });
 });
+
+/**
+ * **R184 §6 (Owner report from a phone, 2026-09-30) — a browser with no inline
+ * PDF viewer gets «فتح الملف», not a broken frame.** Android Chrome cannot
+ * render a PDF inside an `<iframe>` and paints its broken-file icon there; it
+ * says so through `navigator.pdfViewerEnabled === false`. A browser that does
+ * not answer (Safari, `undefined`) keeps the frame — it renders inline.
+ */
+describe('a PDF on a device without an inline viewer opens in the device viewer', () => {
+  it('asks the browser (`pdfViewerEnabled === false`), never the user agent string', () => {
+    expect(source).toContain("navigator.pdfViewerEnabled === false");
+    expect(source).not.toMatch(/userAgent|Android|iPhone/);
+  });
+
+  it('offers «فتح الملف» as a new top-level context and keeps the frame otherwise', () => {
+    expect(source).toContain("window.open(url, '_blank', 'noopener,noreferrer')");
+    expect(source).toContain("t('content.openFile')");
+    expect(source).toContain('<iframe className="preview__pdf" src={url} title={item.title} />');
+  });
+});
+

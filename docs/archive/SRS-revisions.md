@@ -5,7 +5,7 @@
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
 
-**Revision 184 (Document Owner's fourth review of the journey, 2026-09-30 — five points):** **BUILT.**
+**Revision 184 (Document Owner's fourth review of the journey, 2026-09-30 — six points):** **BUILT.**
 
 **§1 — A LEVEL'S CARD IS TITLED BY ITS NAME.** «المستوى N» was the page's own numbering; nothing the Super Admin did not enter is written. The Level's name takes the pill «المستوى N» wore, a size larger — the card is about the name; «المستوى 1» or «السنة 1» is the Super Admin's to put in the Level's description. A preparatory programme alone keeps its «برنامج تمهيدي» kicker (a column, R180 §6).
 
@@ -16,6 +16,8 @@ Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry i
 **§4 — THE ATTIRE ABOVE THE RIDGES.** The backdrop's near ridge washed over the image and «متى يحين دورُك؟»; the summit now stands above it.
 
 **§5 — SMALLER CELL TEXT ON A SMALL SCREEN.** The month calendar's chips step down (0.74 rem under 60 rem, 0.62 rem on a phone, tighter padding) and break a word only when it is wider than the line — so «مجموعة», «أمرشيش», «[تجريبي]» stand whole in a 47 px cell.
+
+**§6 — A PDF ON A PHONE.** Android Chrome has no inline PDF viewer and painted its broken-file icon into the preview frame. Where the browser says so (`navigator.pdfViewerEnabled === false` — never a user-agent match; a browser that does not answer keeps the frame), the stage offers «فتح الملف», which opens the file in the device's own viewer as a new top-level context; «تنزيل الملف» stays. §14.6's table gains that row.
 
 **Revision 183 (Document Owner's third review of the journey, 2026-09-30 — six points):** **BUILT.**
 

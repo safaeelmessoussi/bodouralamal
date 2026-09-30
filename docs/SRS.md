@@ -2096,7 +2096,7 @@ Every page and every data-bearing component implements all of: **Loading** (skel
 
 | Type | Behavior |
 |---|---|
-| PDF | Inline browser preview (iframe/viewer) + download |
+| PDF | Inline browser preview (iframe/viewer) + download; where the browser has no inline PDF viewer (`navigator.pdfViewerEnabled === false`, a phone), «فتح الملف» opens it in the device's viewer instead of an empty frame (Revision 184 §6) |
 | Audio (webm/mp4/mpeg/wav) | Embedded native `<audio>` player + download |
 | Images (jpeg/png/webp) | Thumbnail in lists; click → modal lightbox + download |
 | Office files (docx/pptx/xlsx) | **Download only** — no in-browser rendering in MVP |
