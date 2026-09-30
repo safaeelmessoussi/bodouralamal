@@ -56,4 +56,3 @@ describe('a PDF on a device without an inline viewer opens in the device viewer'
     expect(source).toContain('<iframe className="preview__pdf" src={url} title={item.title} />');
   });
 });
-
