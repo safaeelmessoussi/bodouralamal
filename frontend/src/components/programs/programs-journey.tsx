@@ -457,17 +457,21 @@ function Prize({ category }: { category: JourneyCategory }): ReactNode {
   if (category.last) {
     // R189 — a card like a Level's: the last step of the last Category,
     // inside its stage, the attire filling it.
+    // R190 §1 — the same words and the same style as every other milestone
+    // («إتمام الفئة», then the line), and the whole outfit under them with no
+    // frame; the cell is a card's width, so it stands as the last step.
     return (
-      <article
-        className="journey__card journey__card--summit"
+      <div
+        className="journey__milestone journey__milestone--summit"
+        role="group"
         aria-label={t('programs.journey.graduationLabel').replace('{category}', category.name)}
       >
-        <h4 className="journey__cardTitle">{t('programs.journey.graduation')}</h4>
-        <p className="journey__cardText">
+        <p className="journey__milestoneTitle">{t('programs.journey.graduation')}</p>
+        <p className="journey__milestoneText">
           {t('programs.journey.graduationTextLast').replace('{category}', category.name)}
         </p>
-        <SummitFigure bare sizes="(max-width: 44rem) 14rem, 16rem" />
-      </article>
+        <SummitFigure bare sizes="(max-width: 44rem) 12rem, 14rem" />
+      </div>
     );
   }
   return (

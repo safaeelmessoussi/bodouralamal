@@ -1,0 +1,144 @@
+/* Part of the design system — see `src/styles.css` for the layering. */
+
+/* ── «حسابي» (R190 §4) ────────────────────────────────────────────────────
+   One can scan it now: a hero with the person's name, initial, e-mail and
+   state; each section a card with a display heading and a saffron mark; the
+   facts as a tidy key/value list; the QR code beside its words; the
+   enrolments and circles as chips; the deletion card quiet and apart. Every
+   class stays what it was — the page only gained `.profile` and the hero. */
+.profile h1 {
+  position: relative;
+  padding-inline-start: var(--space-4);
+}
+.profile h1::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: 0.15em;
+  inline-size: 0.35rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-fill);
+}
+.profile .card {
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+.profile .card + .card {
+  margin-block-start: var(--space-5);
+}
+.profile .card > h2 {
+  margin: 0;
+  padding-block-end: var(--space-3);
+  border-block-end: 2px solid var(--color-primary-soft);
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-lg);
+  color: var(--color-primary-strong);
+}
+.profile .card > h3 {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.profile__hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--color-primary-faint), var(--color-surface-raised));
+  border: 1px solid var(--color-border-subtle);
+}
+.profile__initial {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  inline-size: 3.5rem;
+  block-size: 3.5rem;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-primary-deep), var(--color-primary));
+  color: var(--color-accent-fill);
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+.profile__heroWords {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.profile__heroName {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-primary-strong);
+}
+.profile__heroEmail {
+  margin: 0;
+  color: var(--color-text-secondary);
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+/* The facts: a label small over its value, each pair its own row. */
+.profile dl.detail-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+.profile dl.detail-list dt {
+  margin-block-start: var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.profile dl.detail-list dd {
+  margin: 0.1rem 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* The enrolments and circles as chips. */
+.profile ul.detail-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.profile ul.detail-list > li {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+/* The QR code beside its words. */
+.profile .user-qr {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-sunken);
+}
+.profile .user-qr__code {
+  box-shadow: var(--shadow-sm);
+}
+.profile .user-qr__caption {
+  flex: 1 1 12rem;
+}
+.profile .role-badges {
+  margin: 0;
+}
+.profile .card--quiet {
+  border-style: dashed;
+  box-shadow: none;
+}
+@media (max-width: 44rem) {
+  .profile .card {
+    padding: var(--space-4);
+  }
+}

@@ -62,7 +62,10 @@
 }
 
 .section__head {
-  max-width: var(--measure);
+  /* R190 §2 — a head takes its container's width: its lede wraps only
+     when the line is full, never at a measure (R177 §1's balance withdrawn:
+     it cut a lede that fit on one line into two). */
+  max-width: none;
   margin-block-end: clamp(1.5rem, 4vw, 2.75rem);
 }
 
@@ -85,12 +88,16 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-md);
   line-height: 1.65;
-  /* R177 §1 (Owner, 2026-09-29) — a lede that needs two lines gets two lines
-     of similar length, never a full line and a three-word tail: `pretty`
-     only avoids a single-word orphan. */
-  text-wrap: balance;
+  /* R190 §2 (Owner, 2026-10-01; supersedes R177 §1) — one line where it fits,
+     wrapped only where the line is full; `pretty` keeps a lone word off the
+     last line. */
+  max-width: none;
+  text-wrap: pretty;
 }
 
 .muted {
   color: var(--color-text-muted);
+  /* R190 §2 — a note is UI text, not prose: the full line, like a lede. */
+  max-width: none;
+  text-wrap: pretty;
 }

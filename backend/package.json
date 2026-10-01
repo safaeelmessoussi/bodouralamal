@@ -23,6 +23,7 @@
     "ops:remove-fixtures": "node dist/src/ops/remove-fixtures.js",
     "ops:reconcile-recordings": "node dist/src/ops/reconcile-recordings.js",
     "ops:recording-segments": "node dist/src/ops/recording-segments.js",
+    "ops:empty-trash": "node dist/src/ops/empty-trash.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts"
   },
   "dependencies": {

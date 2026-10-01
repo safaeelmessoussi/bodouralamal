@@ -253,8 +253,11 @@ describe('ProgramsJourney', () => {
     // «إتمام الفئة» in the title pill, its words, then the attire.
     const women = html.slice(html.indexOf('data-journey-category="women"'));
     const summitCell = women.slice(women.indexOf('stage__cell--prize stage__cell--summit'));
-    expect(summitCell).toContain('class="journey__card journey__card--summit"');
-    expect(summitCell).toContain('journey__cardTitle">إتمام الفئة');
+    // R190 §1 — the same words and style as every other milestone, the whole
+    // outfit under them, unframed (no card, no caption).
+    expect(summitCell).toContain('class="journey__milestone journey__milestone--summit"');
+    expect(summitCell).toContain('journey__milestoneTitle">إتمام الفئة');
+    expect(summitCell).not.toContain('journey__attireCaption');
     expect(summitCell.indexOf('تُتمّ المتعلّمة برنامج المرأة.')).toBeLessThan(
       summitCell.indexOf('journey__attire'),
     );

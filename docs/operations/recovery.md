@@ -57,6 +57,10 @@ sudo bash /opt/bodour/scripts/backup/run-scheduled.sh monitor
 
 - Expected red during the planned backup outage, green after verification. Historic terminal pg-boss failures stay visible until handled through the domain/runbook; never delete jobs to get green. No email/SMS delivery or external host-death detection; assign an operator. TD-7 wording and TD-14/TD-16 **Admin dashboard** alerts remain a Document Owner question; no Docker socket in the API, no invented operational route.
 
+## Emptying «سلة المحذوفات» on the Owner's word (R190 §6)
+
+`docker compose exec -T api npm run --silent ops:empty-trash </dev/null` purges every Trash entry through the page's own door (`purgeEntry`: Super Admin freshness, the declared TD-5 cascade, an audit row), acting as the platform owner, in up to four passes so a parent held only by a trashed child goes once the child has. An entry the service refuses (`DEPENDENTS_EXIST`, `NOT_YET_SUPPORTED`) is left and named — never forced. `DRY_RUN=1` lists without purging. Owner authorization each time; never on a schedule.
+
 ## Restore and fresh-host recovery
 
 If **no repository copy survives**, stop: recovery of the lost data is impossible under this architecture; a password or Git checkout cannot reconstruct it. If the repository survives (or an authorised copy exists), recover onto a clean **Moroccan** host:

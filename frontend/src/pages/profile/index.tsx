@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { fetchMyChildApplications, type MyChildApplication } from '../../adapters/child-applications.js';
+import {
+  fetchMyChildApplications,
+  type MyChildApplication,
+} from '../../adapters/child-applications.js';
 import { fetchMyRoleRequests, type MyRoleRequests } from '../../adapters/role-requests.js';
 import {
   deleteOwnAccount,
@@ -116,7 +119,7 @@ export function ProfilePage(): ReactNode {
   return (
     <>
       <ApplicationHeader />
-      <main id="main" className="section">
+      <main id="main" className="section profile">
         <Container narrow>
           <h1>{t('profile.title')}</h1>
           <p className="lede">{t('profile.lede')}</p>
@@ -160,7 +163,9 @@ function ChildIdentitySection({
 }): ReactNode {
   return (
     <section className="card" aria-labelledby="child-identity-heading">
-      <h2 id="child-identity-heading">{t('studentDashboard.viewingChild').replace('{name}', name)}</h2>
+      <h2 id="child-identity-heading">
+        {t('studentDashboard.viewingChild').replace('{name}', name)}
+      </h2>
 
       <dl className="detail-list">
         <dt>{t('student.account.name')}</dt>
@@ -231,8 +236,7 @@ function ProfileDetails({
    * editing must not silently let either go missing.
    */
   const phoneRequired = profile.is_beneficiary;
-  const phoneError =
-    touched && phoneRequired && phone.trim() === '' ? t('common.required') : null;
+  const phoneError = touched && phoneRequired && phone.trim() === '' ? t('common.required') : null;
   const birthDateError =
     touched && profile.is_beneficiary
       ? birthDate.trim() === ''
@@ -280,8 +284,30 @@ function ProfileDetails({
     <section className="card" aria-labelledby="details-heading">
       <h2 id="details-heading">{t('profile.detailsTitle')}</h2>
 
+      {/* R190 §4 — the person first, at a glance: the name large with its
+          initial beside it, the e-mail, the account's state. The list under
+          it keeps every fact; this is the one a reader looks for. */}
+      <div className="profile__hero">
+        <span className="profile__initial" aria-hidden="true">
+          {/\p{L}/u.exec(profile.name_arabic)?.[0] ?? ''}
+        </span>
+        <div className="profile__heroWords">
+          <p className="profile__heroName">{profile.name_arabic}</p>
+          {profile.email ? (
+            <p className="profile__heroEmail" dir="ltr">
+              {profile.email}
+            </p>
+          ) : null}
+        </div>
+        <Badge tone={profile.account_status === 'active' ? 'ok' : 'warn'}>
+          {t(`admin.users.status.${profile.account_status}`)}
+        </Badge>
+      </div>
+
       <dl className="detail-list">
-        <dt>{t('register.firstNameArabic')} / {t('register.lastNameArabic')}</dt>
+        <dt>
+          {t('register.firstNameArabic')} / {t('register.lastNameArabic')}
+        </dt>
         <dd>{profile.name_arabic}</dd>
         {profile.name_french ? (
           <>
@@ -310,18 +336,18 @@ function ProfileDetails({
       <p className="muted">{t('profile.identityReadOnly')}</p>
 
       {/**
-        * **R96 — the account holder's own QR identity.**
-        *
-        * `/profile` is the person-level surface R65 deliberately placed OUTSIDE
-        * the portals, reachable whatever role you are working as — which makes
-        * it the one home a مؤطِّرة, an Admin, a Super Admin, a guardian and an
-        * adult beneficiary already share. So every one of them reaches their
-        * identity here, through the same component, without a portal-shaped copy.
-        *
-        * **A parent gets HER OWN here, always.** The child's lives on the
-        * child's account view under child context; the two are never swapped,
-        * because a card printed for the wrong person is worse than no card.
-        */}
+       * **R96 — the account holder's own QR identity.**
+       *
+       * `/profile` is the person-level surface R65 deliberately placed OUTSIDE
+       * the portals, reachable whatever role you are working as — which makes
+       * it the one home a مؤطِّرة, an Admin, a Super Admin, a guardian and an
+       * adult beneficiary already share. So every one of them reaches their
+       * identity here, through the same component, without a portal-shaped copy.
+       *
+       * **A parent gets HER OWN here, always.** The child's lives on the
+       * child's account view under child context; the two are never swapped,
+       * because a card printed for the wrong person is worse than no card.
+       */}
       <h3>{t('qr.mine')}</h3>
       <p className="muted">{t('qr.lede')}</p>
       <UserQr qr={profile.qr} caption={profile.name_arabic} />
@@ -345,7 +371,12 @@ function ProfileDetails({
           error={birthDateError}
         />
       ) : null}
-      <TextField label={t('register.nickname')} value={nickname} onChange={setNickname} hint={t('register.nicknameHint')} />
+      <TextField
+        label={t('register.nickname')}
+        value={nickname}
+        onChange={setNickname}
+        hint={t('register.nicknameHint')}
+      />
 
       {notice ? (
         <p className="state" role="status">
@@ -408,9 +439,7 @@ function DeleteAccountSection(): ReactNode {
     <section className="card card--quiet" aria-labelledby="delete-account-heading">
       <h2 id="delete-account-heading">{t('profile.deleteTitle')}</h2>
       <p className="muted">{t('profile.deleteLede')}</p>
-      {blocked === null ? null : (
-        <BlockedNotice error={blocked} item={t('profile.thisAccount')} />
-      )}
+      {blocked === null ? null : <BlockedNotice error={blocked} item={t('profile.thisAccount')} />}
       <div className="register-form__actions">
         <Button variant="danger" onClick={() => setConfirming(true)}>
           {t('profile.deleteAction')}
@@ -611,10 +640,20 @@ export function RoleRequestsSection({
               <h3>{t('profile.requestRole.requestsTitle')}</h3>
               <ul className="detail-list">
                 {mine.requests.map((request) => (
-                  <li key={request.kind} data-role-request={request.kind} data-role-status={request.status}>
+                  <li
+                    key={request.kind}
+                    data-role-request={request.kind}
+                    data-role-status={request.status}
+                  >
                     {t(`admin.approvals.roleKind.${request.kind}`)}{' '}
                     <Badge
-                      tone={request.status === 'approved' ? 'ok' : request.status === 'pending' ? 'warn' : 'neutral'}
+                      tone={
+                        request.status === 'approved'
+                          ? 'ok'
+                          : request.status === 'pending'
+                            ? 'warn'
+                            : 'neutral'
+                      }
                     >
                       {t(`admin.approvals.roleStatus.${request.status}`)}
                     </Badge>

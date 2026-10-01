@@ -449,11 +449,9 @@
 /* The description, scoped to the header so the generic `.lede` used on public
    pages keeps its own narrower measure. */
 .admin__head .lede {
-  max-inline-size: var(--measure-lede);
-  /* R177 §1 — `balance` gives a two-line lede two lines of similar length;
-     `pretty` only kept the last line from being a single word. Ignored where
-     unsupported. */
-  text-wrap: balance;
+  /* R190 §2 (supersedes R177 §1) — the full line, wrapped only when full. */
+  max-inline-size: none;
+  text-wrap: pretty;
 }
 
 /* R69 — the trail above the heading. Quieter than the title it sits on: it

@@ -310,14 +310,37 @@
   text-align: center;
   color: var(--color-text-muted);
 }
-/* R184 §6 — a phone's stage: the words, then «فتح الملف» to the device's viewer. */
-.preview__placeholder--open {
+/* R190 §5 — a phone's stage: the document drawn page by page, scrolling
+   inside the stage's own height, «فتح الملف» (the device's viewer) under it. */
+.preview__pdfInPage {
   display: grid;
-  justify-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  width: 100%;
 }
-.preview__placeholder--open p {
+.preview__pdfCanvas {
+  width: 100%;
+  max-height: min(70vh, 34rem);
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+}
+.preview__pdfPages {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+.preview__pdfPage {
+  display: block;
+  max-width: 100%;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+.preview__pdfStatus {
   margin: 0;
+  padding: var(--space-2);
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
 .preview__pdf {
   width: 100%;

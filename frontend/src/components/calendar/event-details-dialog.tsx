@@ -142,6 +142,41 @@ export function EventDetailsDialog({
     >
       {occurrence && date ? (
         <>
+          {/* R190 §3 — what a reader wants first, at a glance: the kind, the
+              day (and its Hijri date), the hour; then the description; then
+              the rest of the facts as tiles. The dl keeps its dt/dd pairs. */}
+          <div className={`details__hero details__hero--${OCCURRENCE_KIND_BADGE[occurrence.kind]}`}>
+            {/* The labels stay for a screen reader; the eye needs none here. */}
+            <span className="visually-hidden">{t('calendar.detailsKind')}</span>
+            <span className={`badge badge--${OCCURRENCE_KIND_BADGE[occurrence.kind]}`}>
+              {occurrence.scheduling_type_name ?? t(OCCURRENCE_KIND_LABEL[occurrence.kind])}
+            </span>
+            <p className="details__heroDate">
+              <span className="visually-hidden">{t('calendar.detailsDate')} </span>
+              <time dateTime={occurrence.date}>
+                {date.getDate()} {months[date.getMonth()] ?? ''} {date.getFullYear()}
+              </time>
+              {occurrence.hijri_date ? (
+                <span className="details__hijri">
+                  {' — '}
+                  {hijriLabel(occurrence)}
+                </span>
+              ) : null}
+            </p>
+            {occurrence.start_time ? (
+              <p className="details__heroTime">
+                <span className="visually-hidden">{t('calendar.detailsTime')} </span>
+                {occurrence.start_time}
+                {occurrence.end_time ? ` — ${occurrence.end_time}` : ''}
+              </p>
+            ) : null}
+            {occurrence.status === 'cancelled' ? (
+              <p className="details__heroStatus" role="status">
+                {t('calendar.cancelled')}
+              </p>
+            ) : null}
+          </div>
+
           {/* The description leads, because it is prose the reader wants before
               a table of attributes — and it is the one field that cannot be
               scanned. */}
@@ -149,174 +184,146 @@ export function EventDetailsDialog({
             <p className="details__description">{occurrence.description}</p>
           ) : null}
 
-          <dl className="details">
+          <dl className="details details--tiles">
             {/* **SRS Revision 163 §2 — «العنوان», for every kind.** The heading
                 above is what the calendar chip shows, which for a class is its
                 Subject; the title somebody typed (R57) was shown nowhere. */}
             {occurrence.item_title ? (
-              <>
+              <div className="details__item details__item--wide">
                 <dt>{t('calendar.detailsItemTitle')}</dt>
                 <dd>{occurrence.item_title}</dd>
-              </>
+              </div>
             ) : null}
 
             {/* SRS Revision 165 §2 — which Surah(s) a by-Surah class or exam is
                 about; absent wherever the Subject has none. */}
             {(occurrence.surah_names ?? []).length > 0 ? (
-              <>
+              <div className="details__item details__item--wide">
                 <dt>{t('calendar.detailsSurahs')}</dt>
                 <dd>{(occurrence.surah_names ?? []).join('، ')}</dd>
-              </>
+              </div>
             ) : null}
-
-            <dt>{t('calendar.detailsDate')}</dt>
-            <dd>
-              <time dateTime={occurrence.date}>
-                {date.getDate()} {months[date.getMonth()] ?? ''} {date.getFullYear()}
-              </time>
-              {/* Only when the backend supplied one — a month the Ministry has
-                  not announced carries no Hijri label at all (Revision 31).
-                  **Owner-reported, 2026-09-16 — was rendered as the raw
-                  `"1448-03-22"` ministry string, with no separator from the
-                  Gregorian date beside it** (a stray `dir="ltr"` put the
-                  gap-giving margin on the wrong logical side of an RTL row,
-                  so the two ran together). Formatted into the same
-                  `day month year` label `day-events-dialog.tsx` already
-                  uses for a Hijri date, with an explicit separator rather
-                  than a margin. */}
-              {occurrence.hijri_date ? (
-                <span className="details__hijri">{' — '}{hijriLabel(occurrence)}</span>
-              ) : null}
-            </dd>
-
-            {occurrence.start_time ? (
-              <>
-                <dt>{t('calendar.detailsTime')}</dt>
-                {/* **Owner-reported, 2026-09-16 — `dir="ltr"` on an RTL row's
-                    value put it on the opposite side from every other
-                    field.** The time itself needs no direction override: a
-                    plain `HH:MM — HH:MM` string is a single strongly-LTR run
-                    with no Arabic in it, so the digits still read left to
-                    right without forcing the whole cell's own direction. */}
-                <dd>
-                  {occurrence.start_time}
-                  {occurrence.end_time ? ` — ${occurrence.end_time}` : ''}
-                </dd>
-              </>
-            ) : null}
-
-            <dt>{t('calendar.detailsKind')}</dt>
-            <dd>
-              <span className={`badge badge--${OCCURRENCE_KIND_BADGE[occurrence.kind]}`}>
-                {occurrence.scheduling_type_name ?? t(OCCURRENCE_KIND_LABEL[occurrence.kind])}
-              </span>
-            </dd>
 
             {/* Recurrence is meaningful only when there is one; `none` is the
                 default every event carries, so printing "لا يتكرر" on every
                 single item would be noise. */}
             {occurrence.recurrence && occurrence.recurrence !== 'none' ? (
-              <>
+              <div className="details__item">
                 <dt>{t('calendar.detailsRecurrence')}</dt>
                 <dd>{recurrenceLabel(occurrence.recurrence)}</dd>
-              </>
+              </div>
             ) : null}
 
             {categories ? (
-              <>
+              <div className="details__item">
                 <dt>{t('calendar.detailsCategory')}</dt>
                 <dd>{categories}</dd>
-              </>
+              </div>
             ) : null}
 
             {levels ? (
-              <>
+              <div className="details__item">
                 <dt>{t('calendar.detailsLevel')}</dt>
                 <dd>{levels}</dd>
-              </>
+              </div>
             ) : null}
 
             {groups ? (
-              <><dt>{t('calendar.detailsGroup')}</dt><dd>{groups}</dd></>
+              <div className="details__item">
+                <dt>{t('calendar.detailsGroup')}</dt>
+                <dd>{groups}</dd>
+              </div>
             ) : null}
             {circles ? (
-              <><dt>{t('calendar.detailsCircle')}</dt><dd>{circles}</dd></>
+              <div className="details__item">
+                <dt>{t('calendar.detailsCircle')}</dt>
+                <dd>{circles}</dd>
+              </div>
             ) : null}
 
             {occurrence.subject_name ? (
-              <><dt>{t('calendar.table.subject')}</dt><dd>{occurrence.subject_name}</dd></>
+              <div className="details__item">
+                <dt>{t('calendar.table.subject')}</dt>
+                <dd>{occurrence.subject_name}</dd>
+              </div>
             ) : null}
             {audience ? (
-              <><dt>{t('calendar.table.audience')}</dt><dd>{audience}</dd></>
+              <div className="details__item">
+                <dt>{t('calendar.table.audience')}</dt>
+                <dd>{audience}</dd>
+              </div>
             ) : null}
             {occurrence.status === 'cancelled' ? (
-              <><dt>{t('calendar.detailsStatus')}</dt><dd role="status">{t('calendar.cancelled')}</dd></>
+              <div className="details__item">
+                <dt>{t('calendar.detailsStatus')}</dt>
+                <dd role="status">{t('calendar.cancelled')}</dd>
+              </div>
             ) : null}
             {branches ? (
-              <>
+              <div className="details__item">
                 <dt>{t('calendar.detailsBranch')}</dt>
                 <dd>{branches}</dd>
-              </>
+              </div>
             ) : null}
 
             {/**
-              * **R97 — طريقة الحضور**, and only for the kinds that have one.
-              *
-              * `deliveryLabel` returns `null` for an Event and an Exam, which
-              * carry no delivery model at all — so the row is absent for them
-              * rather than asserting «حضوري» about something the row does not
-              * say. Same discipline as every other field here.
-              *
-              * «دخول الحصة» now exists (R98) and is rendered below the list —
-              * an action, not a field, so it does not sit in the definition
-              * list beside the facts.
-              */}
+             * **R97 — طريقة الحضور**, and only for the kinds that have one.
+             *
+             * `deliveryLabel` returns `null` for an Event and an Exam, which
+             * carry no delivery model at all — so the row is absent for them
+             * rather than asserting «حضوري» about something the row does not
+             * say. Same discipline as every other field here.
+             *
+             * «دخول الحصة» now exists (R98) and is rendered below the list —
+             * an action, not a field, so it does not sit in the definition
+             * list beside the facts.
+             */}
             {deliveryLabel(occurrence) ? (
-              <>
+              <div className="details__item">
                 <dt>{t('delivery.label')}</dt>
                 <dd>{deliveryLabel(occurrence)}</dd>
-              </>
+              </div>
             ) : null}
 
             {mediaLabel(occurrence) ? (
-              <>
+              <div className="details__item">
                 <dt>{t('delivery.mediaLabel')}</dt>
                 <dd>{mediaLabel(occurrence)}</dd>
-              </>
+              </div>
             ) : null}
 
             {/* An online occurrence holds no room at all (R97), so this is
                 absent by construction rather than by a check here. */}
             {occurrence.room_name ? (
-              <>
+              <div className="details__item">
                 <dt>{t('calendar.detailsRoom')}</dt>
                 <dd>{occurrence.room_name}</dd>
-              </>
+              </div>
             ) : null}
 
             {occurrence.instructors.length > 0 ? (
-              <>
+              <div className="details__item">
                 <dt>{t('calendar.detailsInstructors')}</dt>
                 {/* Rendered exactly as returned — the backend already decided
                     which name is public (Revision 36.1, §20 rule 21). */}
                 <dd>{occurrence.instructors.map((i) => i.display_name).join('، ')}</dd>
-              </>
+              </div>
             ) : null}
 
             {/* Owner-reported, 2026-09-16 — an exam's own ExamStaff, named in
                 its own row: §4.6 calls them supervisors, never instructors. */}
             {occurrence.supervisors.length > 0 ? (
-              <>
+              <div className="details__item">
                 <dt>{t('calendar.detailsSupervisors')}</dt>
                 <dd>{occurrence.supervisors.map((i) => i.display_name).join('، ')}</dd>
-              </>
+              </div>
             ) : null}
 
             {occurrence.visibility ? (
-              <>
+              <div className="details__item">
                 <dt>{t('calendar.detailsVisibility')}</dt>
                 <dd>{visibilityLabel(occurrence.visibility)}</dd>
-              </>
+              </div>
             ) : null}
           </dl>
 
@@ -324,15 +331,15 @@ export function EventDetailsDialog({
           <ExamAvailabilityAction occurrence={occurrence} />
 
           {/**
-            * **R123 — الحضور, where the occurrence already is.**
-            *
-            * All four calendars open this dialog, so putting the register here
-            * gives one entry point for a class, an activity and a sitting with
-            * no new route and no menu node that would show nothing until a deep
-            * link filled it (rule A). The panel decides nothing: staff get the
-            * sheet because the server allows the read, a beneficiary gets one
-            * button and never the roster, and a عطلة or a حفل renders neither.
-            */}
+           * **R123 — الحضور, where the occurrence already is.**
+           *
+           * All four calendars open this dialog, so putting the register here
+           * gives one entry point for a class, an activity and a sitting with
+           * no new route and no menu node that would show nothing until a deep
+           * link filled it (rule A). The panel decides nothing: staff get the
+           * sheet because the server allows the read, a beneficiary gets one
+           * button and never the roster, and a عطلة or a حفل renders neither.
+           */}
           <AttendancePanel occurrence={occurrence} canManage={canManage} />
 
           <OccurrenceMaterials key={occurrence.id} occurrence={occurrence} canManage={canManage} />
@@ -569,12 +576,12 @@ function OccurrenceMaterials({
   return (
     <>
       {/**
-        * **R137 — a lesson may gain a quick test days later, without
-        * pretending it happened today.** The Session's own date never
-        * changes; whether the linked exam can be OPENED right now is a
-        * separate fact, read exactly as an exam occurrence's own dialog
-        * reads it (`ExamAccessAction`, shared).
-        */}
+       * **R137 — a lesson may gain a quick test days later, without
+       * pretending it happened today.** The Session's own date never
+       * changes; whether the linked exam can be OPENED right now is a
+       * separate fact, read exactly as an exam occurrence's own dialog
+       * reads it (`ExamAccessAction`, shared).
+       */}
       {state === 'ready' && (linkedExams.length > 0 || canLinkExam) ? (
         <section className="details__section" aria-labelledby="details-linked-exams">
           <h3 id="details-linked-exams" className="details__section-title">
@@ -599,14 +606,14 @@ function OccurrenceMaterials({
             </ul>
           )}
           {/**
-            * **R137 — إضافة اختبار / ربط اختبار.** Routes to الجدولة, the
-            * one canonical scheduling write (R136) — never a second form
-            * here. The Session is prefilled as the target; which paper to
-            * use is still the operator's own choice, made there. Rule O:
-            * offered only to staff who could plausibly reach الجدولة at
-            * all, never decided here — the route itself still refuses
-            * anyone the server would.
-            */}
+           * **R137 — إضافة اختبار / ربط اختبار.** Routes to الجدولة, the
+           * one canonical scheduling write (R136) — never a second form
+           * here. The Session is prefilled as the target; which paper to
+           * use is still the operator's own choice, made there. Rule O:
+           * offered only to staff who could plausibly reach الجدولة at
+           * all, never decided here — the route itself still refuses
+           * anyone the server would.
+           */}
           {canLinkExam ? (
             <p className="details__action">
               <ButtonLink
@@ -620,59 +627,68 @@ function OccurrenceMaterials({
         </section>
       ) : null}
 
-    <section className="details__section" aria-labelledby="details-materials">
-      <h3 id="details-materials" className="details__section-title">
-        {t('session.materials')}
-      </h3>
+      <section className="details__section" aria-labelledby="details-materials">
+        <h3 id="details-materials" className="details__section-title">
+          {t('session.materials')}
+        </h3>
 
-      {state === 'loading' ? <p className="muted">{t('notifications.loading')}</p> : null}
-      {state === 'error' ? <><p className="muted">{t('calendar.error')}</p><Button onClick={() => setAttempt((n) => n + 1)}>{t('states.offlineRetry')}</Button></> : null}
+        {state === 'loading' ? <p className="muted">{t('notifications.loading')}</p> : null}
+        {state === 'error' ? (
+          <>
+            <p className="muted">{t('calendar.error')}</p>
+            <Button onClick={() => setAttempt((n) => n + 1)}>{t('states.offlineRetry')}</Button>
+          </>
+        ) : null}
 
-      {/**
-        * **Two sections, always both** (2026-08-20).
-        *
-        * The combined «لا تسجيلات ولا مواد مرفقة بهذه الحصة» collapsed two
-        * different questions into one sentence, and then a heading repeated one
-        * of them underneath. A reader looking for *is there a recording* had to
-        * parse a sentence about something else as well.
-        *
-        * They are separate concepts and are rendered separately, each with its
-        * own empty state — and **only after a successful read**: an error says
-        * so instead of claiming there is nothing (§B8).
-        */}
-      {state === 'ready' ? (
-        <>
-          <h4 className="details__section-subtitle">{t('session.recordings')}</h4>
-          {recordings.length === 0 ? (
-            <p className="muted">{t('session.noRecordings')}</p>
-          ) : (
-            <ul className="details__list">
-              {recordings.map((item) => (
-                <li key={item.id}>
-                  {/* The existing library flow, which is where the download
+        {/**
+         * **Two sections, always both** (2026-08-20).
+         *
+         * The combined «لا تسجيلات ولا مواد مرفقة بهذه الحصة» collapsed two
+         * different questions into one sentence, and then a heading repeated one
+         * of them underneath. A reader looking for *is there a recording* had to
+         * parse a sentence about something else as well.
+         *
+         * They are separate concepts and are rendered separately, each with its
+         * own empty state — and **only after a successful read**: an error says
+         * so instead of claiming there is nothing (§B8).
+         */}
+        {state === 'ready' ? (
+          <>
+            <h4 className="details__section-subtitle">{t('session.recordings')}</h4>
+            {recordings.length === 0 ? (
+              <p className="muted">{t('session.noRecordings')}</p>
+            ) : (
+              <ul className="details__list">
+                {recordings.map((item) => (
+                  <li key={item.id}>
+                    {/* The existing library flow, which is where the download
                       permission and the presigned URL live (TD-3.5) — never a
                       second viewer. */}
-                  <a href={`/resources?level=${item.level_id}&content=${item.id}`}>{item.title}</a>
-                </li>
-              ))}
-            </ul>
-          )}
+                    <a href={`/resources?level=${item.level_id}&content=${item.id}`}>
+                      {item.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
 
-          <h4 className="details__section-subtitle">{t('session.attachments')}</h4>
-          {materials.length === 0 ? (
-            <p className="muted">{t('session.noAttachments')}</p>
-          ) : (
-            <ul className="details__list">
-              {materials.map((item) => (
-                <li key={item.id}>
-                  <a href={`/resources?level=${item.level_id}&content=${item.id}`}>{item.title}</a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      ) : null}
-    </section>
+            <h4 className="details__section-subtitle">{t('session.attachments')}</h4>
+            {materials.length === 0 ? (
+              <p className="muted">{t('session.noAttachments')}</p>
+            ) : (
+              <ul className="details__list">
+                {materials.map((item) => (
+                  <li key={item.id}>
+                    <a href={`/resources?level=${item.level_id}&content=${item.id}`}>
+                      {item.title}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        ) : null}
+      </section>
     </>
   );
 }
@@ -687,7 +703,10 @@ function OccurrenceMaterials({
  * composes the SAME `day month year` shape `day-events-dialog.tsx`'s own
  * `hijriLabel` already renders from a `HijriDay`'s separate numeric fields.
  */
-function hijriLabel(occurrence: { hijri_date: string | null; hijri_month_ar: string | null }): string {
+function hijriLabel(occurrence: {
+  hijri_date: string | null;
+  hijri_month_ar: string | null;
+}): string {
   if (!occurrence.hijri_date) return '';
   const day = Number(occurrence.hijri_date.slice(8, 10));
   const year = occurrence.hijri_date.slice(0, 4);

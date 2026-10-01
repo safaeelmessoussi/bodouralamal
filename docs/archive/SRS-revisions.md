@@ -1,9 +1,25 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–189 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–190 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 190 (Document Owner, 2026-10-01 — seven points):** **BUILT.**
+
+**§1 — THE LAST MILESTONE LIKE THE OTHERS.** «إتمام الفئة» and «بعد آخر مستوى، تُتمّ المتعلّمة برنامج المرأة.» in the same style as every other Category's milestone, and the whole outfit under them with no frame (R189's card withdrawn); about a Level card's height, inside the stage.
+
+**§2 — A LEDE ON ONE LINE.** Ledes, page intros and notes («كل الدروس والتسجيلات…», «الفرع هو الذي أُنشئت فيه الحلقة…», «اختبارات تُبنى سؤالاً بسؤال…», «فصول كل سنة دراسية…», «تبقى مهلة السبعة أيام…») take their container's width and wrap only where the line is full — R177 §1's `balance` and the 64ch measure on `.lede`, `.section__head`, `.admin__head .lede` and `.muted` are withdrawn (`pretty` keeps a lone word off the last line). Prose paragraphs keep the measure.
+
+**§3 — AN OCCURRENCE'S DIALOG ONE CAN SCAN.** A hero first on a wash of the kind's colour — the kind, the day with its Hijri date large, the hour, a cancelled state loud — then the description, then every other fact as a tile (label small, value bold), two to a row, the title and the Surahs across the row. The `dl`/`dt`/`dd` stay; the hero keeps the labels for a screen reader.
+
+**§4 — «حسابي» ONE CAN SCAN.** A hero with the person's initial, name, e-mail and state; each section a card with a display heading; the facts as a label-over-value list; the QR code beside its words; enrolments and circles as chips; the deletion card quiet and apart.
+
+**§5 — A PDF DRAWN IN THE PAGE ON A PHONE.** Where the browser has no PDF viewer (`navigator.pdfViewerEnabled === false`), the document is rendered page by page onto canvases by pdf.js — loaded on demand as its own chunk and bundled on this origin (worker, CMaps and standard fonts under `/pdfjs/`; §3.1's CSP admits no external script) — with «فتح الملف» (R184 §6) as a second way under it. nginx types `.mjs` as an octet stream under `nosniff`, so the worker ships as `.js`. Proved phone-emulated on a real two-page PDF (drawn, not blank, nothing left the origin) and on a laptop (the frame as before).
+
+**§6 — «EMPTY سلة المحذوفات FOR ME».** `ops:empty-trash` purges every entry through the page's own door, acting as the platform owner, refusals left and named; `DRY_RUN=1` lists. Run on the server on the Owner's word after this commit is deployed (the script ships in the image).
+
+**§7 — THE LEGAL TEXTS.** Drafts of «سياسة الخصوصية» and «شروط الاستعمال» handed to the Owner to publish through «الإعدادات» (R138 §12/§13 — no legal text is ever deployed as code); the association's legal name, address and contact are hers to fill, and her legal advisor's word is the last.
 
 **Revision 189 (Document Owner, 2026-09-30 — the road's end looked broken):** **BUILT.** The attire stood on bare white beside the last Level, outside the ridges and, to the eye, outside its Category: since R187 §2 the panel is a flex box and the road was allowed to shrink, so its last cells overflowed the road's own box — past the backdrop. The road no longer shrinks (`flex: none`), so the backdrop spans it whole; and the last Category's graduation is now a CARD like a Level's — «إتمام الفئة» in the title pill, its words, the attire filling the card's width (its upper part, where the sashes read) — the same width as a Level card and about its height, standing as the stage's last step, inside the stage.
 
