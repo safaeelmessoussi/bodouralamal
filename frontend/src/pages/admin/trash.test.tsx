@@ -4,7 +4,7 @@ import type { TrashEntry } from '../../adapters/trash.js';
 import { ar } from '../../i18n/ar.js';
 import { ADMIN_MODULES } from '../../lib/admin-modules.js';
 import { IMPLEMENTED_ADMIN_PATHS } from './index.js';
-import { TRASH_ENTITY_TYPES } from './trash.js';
+import { TRASH_ENTITY_TYPES, purgeNotice, restoredNotice } from './trash.js';
 
 /**
  * `/admin/trash` — the client half of the contract, and the one property this
@@ -58,33 +58,49 @@ describe('the adapter type matches the wire contract', () => {
     // a field, and the screen renders it.
     const blocked: TrashEntry = {
       ...WIRE,
-      target_entity: 'User',
+      target_entity: 'NoSuchEntity',
       restorable: false,
-      restore_blocked_reason: 'CASCADE_RELATIONSHIPS',
+      restore_blocked_reason: 'NOT_YET_SUPPORTED',
     };
     expect(blocked.restorable).toBe(false);
-    expect(blocked.restore_blocked_reason).toBe('CASCADE_RELATIONSHIPS');
+    expect(blocked.restore_blocked_reason).toBe('NOT_YET_SUPPORTED');
   });
 });
 
 describe('the screen explains itself', () => {
   it('has a sentence for every blocked reason the server can send', () => {
-    // A missing one would render as a raw enum in the column an administrator
-    // reads to find out why their own data cannot be restored.
-    for (const reason of [
-      'CASCADE_RELATIONSHIPS',
-      'CASCADE_CHILDREN',
-      'INCOMPLETE_SNAPSHOT',
-      'NOT_YET_SUPPORTED',
-    ] as const) {
-      expect(ar.admin.trash.blocked[reason]).toBeTruthy();
-    }
+    // R191 — every type that reaches the Trash is restorable; the one reason
+    // left is a type no deletion writes. A missing sentence would render as a
+    // raw enum in the column an administrator reads.
+    expect(ar.admin.trash.blocked.NOT_YET_SUPPORTED).toBeTruthy();
+    expect(ar.admin.trash.purgeBlocked.NOT_YET_SUPPORTED).toBeTruthy();
   });
 
   it('names each restore refusal the server can return', () => {
     expect(ar.admin.trash.parentDeleted).toBeTruthy();
     expect(ar.admin.trash.alreadyPurged).toBeTruthy();
     expect(ar.admin.trash.notDeleted).toBeTruthy();
+    // R191 — a live row holds the place; the student has left the Level.
+    expect(ar.admin.trash.duplicateLive).toBeTruthy();
+    expect(ar.admin.trash.notEnrolled).toBeTruthy();
+  });
+
+  it('R191 — says what came back with the record, and what could not be named', () => {
+    const base = { target_entity: 'Event', target_id: WIRE.target_id };
+    expect(restoredNotice({ ...base, scope_links_restored: 3 })).toContain('3');
+    expect(restoredNotice({ ...base, scope_links_unknown: true })).toContain(ar.admin.trash.scopeLinksUnknown);
+    expect(restoredNotice({ ...base, file_restore_queued: true })).toContain(ar.admin.trash.fileRestoreQueued);
+    expect(restoredNotice({ ...base, reopened_as_pending: true })).toContain(ar.admin.trash.reopenedAsPending);
+    expect(restoredNotice({ ...base, cascade_unknown: true })).toContain(ar.admin.trash.cascadeUnknown);
+  });
+
+  it('R191 — the purge confirmation says what a class, an occurrence, an activity or an account takes with it', () => {
+    expect(purgeNotice({ ...WIRE, target_entity: 'RecurringCourseSchedule' })).toContain(ar.admin.trash.purgeTakesClass);
+    expect(purgeNotice({ ...WIRE, target_entity: 'Session' })).toContain(ar.admin.trash.purgeTakesSession);
+    expect(purgeNotice({ ...WIRE, target_entity: 'Event' })).toContain(ar.admin.trash.purgeTakesEvent);
+    expect(purgeNotice({ ...WIRE, target_entity: 'User' })).toContain(ar.admin.trash.purgeTakesUser);
+    // A leaf says only the generic sentence, with the record's name.
+    expect(purgeNotice(WIRE)).toBe(ar.admin.trash.purgeBody.replace('{record}', 'القرآن'));
   });
 
   it('states WHY there is no permanent-delete control', () => {
@@ -118,9 +134,9 @@ describe('R59.1 — the screen never decides who may destroy a record', () => {
     // written a destruction plan for.
     const blocked: TrashEntry = {
       ...WIRE,
-      target_entity: 'User',
+      target_entity: 'NoSuchEntity',
       purgeable: false,
-      purge_blocked_reason: 'ACCOUNTABILITY_RECORD',
+      purge_blocked_reason: 'NOT_YET_SUPPORTED',
     };
     expect(blocked.purgeable).toBe(false);
     // And the reason is renderable — a missing action with no explanation is

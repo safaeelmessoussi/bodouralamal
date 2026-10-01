@@ -14,6 +14,7 @@ import {
   QUARANTINE_SWEEP_MIN_AGE_MS,
   quarantinedContentId,
   quarantineRetiredContentObject,
+  restoreQuarantinedContentObject,
   retirePurgedContentObjects,
   UPLOAD_GC_MIN_AGE_MS,
   UPLOAD_GC_PAGE_SIZE,
@@ -186,6 +187,48 @@ describe('manual content purge exact-key retirement', () => {
         ([command]) =>
           command instanceof DeleteObjectCommand && command.input.Key !== storageKey,
       ),
+    ).toBe(false);
+  });
+
+  it('R191 — brings a quarantined object back to its canonical key, and converges when nothing was moved', async () => {
+    const contentId = '00000000-0000-4000-8000-000000000001';
+    const storageKey = `content/${contentId}/old/file.pdf`;
+    const quarantineKey = quarantineKeyFor(contentId, storageKey);
+    let quarantinePresent = true;
+    let canonicalPresent = false;
+    const send = vi.fn(async (command: unknown) => {
+      if (command instanceof HeadObjectCommand) {
+        const present = command.input.Key === quarantineKey ? quarantinePresent : canonicalPresent;
+        if (!present) throw { name: 'NotFound', $metadata: { httpStatusCode: 404 } };
+        return { ContentLength: 11, ETag: '"etag"', Metadata: { sha256: 'digest' } };
+      }
+      if (command instanceof CopyObjectCommand) {
+        expect(command.input.Key).toBe(storageKey);
+        expect(command.input.CopySource).toContain(quarantineKey);
+        canonicalPresent = true;
+        return {};
+      }
+      if (command instanceof DeleteObjectCommand) {
+        expect(command.input.Key).toBe(quarantineKey);
+        quarantinePresent = false;
+        return {};
+      }
+      throw new Error('unexpected command');
+    });
+    const coordinates = { contentId, bucket: BUCKETS.public, storageKey };
+
+    await expect(restoreQuarantinedContentObject(clients(send), coordinates)).resolves.toBeUndefined();
+    expect(canonicalPresent).toBe(true);
+    expect(quarantinePresent).toBe(false);
+
+    // Run again: the quarantine copy is gone and the canonical object stands —
+    // nothing is copied or deleted (the quarantine job never ran, or this did).
+    const calls = send.mock.calls.length;
+    await expect(restoreQuarantinedContentObject(clients(send), coordinates)).resolves.toBeUndefined();
+    expect(
+      send.mock.calls
+        .slice(calls)
+        .some(([command]) => command instanceof CopyObjectCommand || command instanceof DeleteObjectCommand),
     ).toBe(false);
   });
 

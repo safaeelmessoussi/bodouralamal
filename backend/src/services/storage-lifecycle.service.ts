@@ -329,6 +329,46 @@ export async function quarantineRetiredContentObject(
 }
 
 /**
+ * **Moves a quarantined object back to its canonical key** (R191 — a library
+ * item restored from the Trash). The mirror of `quarantineRetiredContentObject`
+ * and converges the same way: copy precedes delete, so a retry after an
+ * ambiguous delete sees the canonical object and an absent quarantine copy;
+ * both absent is terminal (nothing was ever moved, or a purge took it); the
+ * canonical object already present — the quarantine job never ran, or this
+ * did — leaves only the quarantine copy to drop.
+ */
+export async function restoreQuarantinedContentObject(
+  clients: StorageClients,
+  coordinates: PurgedContentCoordinates,
+): Promise<void> {
+  assertCanonicalCoordinate(coordinates);
+  const quarantineKey = quarantineKeyFor(coordinates.contentId, coordinates.storageKey);
+  const [source, canonical] = await Promise.all([
+    statObjectStrict(clients, coordinates.bucket, quarantineKey),
+    statObjectStrict(clients, coordinates.bucket, coordinates.storageKey),
+  ]);
+  if (source === null) return;
+  if (canonical === null) {
+    await copyObject(
+      clients,
+      { bucket: coordinates.bucket, key: quarantineKey },
+      { bucket: coordinates.bucket, key: coordinates.storageKey },
+      undefined,
+      source.etag === null ? {} : { sourceIfMatch: source.etag },
+    );
+  }
+  const destination = await statObjectStrict(clients, coordinates.bucket, coordinates.storageKey);
+  if (
+    destination === null ||
+    destination.sizeBytes !== source.sizeBytes ||
+    (source.sha256 !== null && destination.sha256 !== source.sha256)
+  ) {
+    throw new Error(`quarantine restore verification failed for ${coordinates.contentId}`);
+  }
+  await deleteObject(clients, coordinates.bucket, quarantineKey);
+}
+
+/**
  * Fulfils one manual permanent-delete obligation from an exact immutable
  * canonical coordinate. Both possible leftovers are targeted because a soft
  * delete copies canonical → quarantine before deleting canonical; a crash can

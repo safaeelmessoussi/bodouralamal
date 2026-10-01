@@ -2,12 +2,12 @@
  * **Empty «سلة المحذوفات»** (Owner's request, 2026-10-01 — R190 §6).
  *
  * Purges every entry of the Trash through the same door the page's «حذف
- * نهائي» uses (`purgeEntry`: Super Admin freshness, the declared cascade,
- * the audit row), acting as the platform owner. An entry the service refuses
- * — `DEPENDENTS_EXIST` (something live still points at it) or
- * `NOT_YET_SUPPORTED` — is left in place and named in the report, never
- * forced: the refusal is the rule, not an obstacle. Children are purged in
- * passes, so a parent blocked only by a trashed child goes on the next pass.
+ * نهائي» uses (`purgeEntry`: Super Admin freshness, the declared consequences,
+ * the deleted dependents first, the audit row; a User de-identified — R191),
+ * acting as the platform owner. An entry the service refuses —
+ * `DEPENDENTS_EXIST` (a LIVE record still uses it) — is left in place and
+ * named in the report, never forced: the refusal is the rule, not an
+ * obstacle. Passes remain for the order a refusal may still impose.
  *
  *   docker compose exec -T api npm run --silent ops:empty-trash </dev/null
  *

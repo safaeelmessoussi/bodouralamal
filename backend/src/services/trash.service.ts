@@ -11,13 +11,18 @@ import { requireRetirement } from '../repositories/storage-retirement.repository
 import { lockEducationalContent } from '../repositories/consent-safeguarding.repository.js';
 import type { Actor } from '../policies/actor.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
-import { enqueueConsentReevaluationForStudent } from './consent-reevaluation.service.js';
-import { deIdentifyAccountSystem } from './account-deletion.service.js';
+import {
+  enqueueConsentReevaluationForSessions,
+  enqueueConsentReevaluationForStudent,
+} from './consent-reevaluation.service.js';
+import { deIdentifyAccountSystem, purgeUserAccount } from './account-deletion.service.js';
+import { recalculateFor } from './quran.service.js';
 import { assertOccurrenceFree, findConflicts } from './course-schedule.service.js';
 
 /**
- * The Trash — **soft-deleted records, browsable; restorable where restoration is
- * PROVEN** (§7, TD-5, BR-15, SRS Revision 52).
+ * The Trash — **soft-deleted records, browsable; every one of them restorable
+ * and every one of them destroyable** (§7, TD-5, BR-15, SRS Revision 52, R59,
+ * **Revision 191**).
  *
  * ## Why restoration is per entity type rather than a single button
  *
@@ -37,18 +42,33 @@ import { assertOccurrenceFree, findConflicts } from './course-schedule.service.j
  * row** — never inferred by a client. A screen cannot know which deletions
  * cascade, and one that guessed would offer a button that quietly breaks people.
  *
- * ## What makes a type restorable
+ * ## R191 — the Owner (2026-10-01): «any element in the Trash can be deleted
+ * permanently, and any element can be restored»
  *
- * **Its deletion is GUARDED rather than CASCADING.** These four refuse to delete
- * while anything references them — a Branch with rooms, a Subject a Level still
- * teaches — so nothing was removed alongside them and clearing the tombstone
- * genuinely restores the whole record. Partner is the simpler leaf case: no
- * table references it, so its tombstone is likewise the complete deletion.
+ * Until this revision a type joined `RESTORABLE` only once its reinstatement
+ * was written and tested, and the rest were listed with a reason
+ * (`CASCADE_RELATIONSHIPS`, `CASCADE_CHILDREN`, `NOT_YET_SUPPORTED`). The
+ * standard is unchanged — a restore brings back what the deletion took, or
+ * says what it could not — but it is now MET for every type that reaches the
+ * Trash: an activity's audience is re-created from its snapshot, a group's
+ * activities re-addressed, an enrolment's circle seats given back where they
+ * still fit, a rejected family link re-opened as a request, a library item's
+ * file brought back from quarantine (`restore_quarantined_object`), a
+ * question's options returned and its place on the paper kept or appended.
+ * What a restore cannot force — a parent that is itself deleted, a slot a
+ * live row has since taken — is refused by name (`PARENT_DELETED`,
+ * `DUPLICATE_LIVE`), never silently half-done.
  *
- * Everything else cascades and stays read-only until its reinstatement is
- * written and tested: a `Level` takes its Administrative Groups, a
- * `TeachingGroup` releases its members, a `RecurringCourseSchedule` removes
- * future Sessions, and a `User` reaches all six relationship types above.
+ * A purge likewise exists for every type: an account is DE-IDENTIFIED (R111,
+ * the row stays for the audit trail), everything else is destroyed with what
+ * exists only because of it — the notices sent about an activity, the
+ * presence recorded at it, the staffing it carried, a class's occurrences
+ * with their attendance, recordings and the quick tests sat in them — and
+ * with the Trash entries of its own deleted dependents (`TRASHED_DEPENDENTS`:
+ * a Level goes with the deleted enrolments still under it). What a purge
+ * never does is destroy a record that was never deleted: a LIVE row that
+ * still uses the entry keeps it, and the refusal names which (`DEPENDENTS_
+ * EXIST`, `blocking_entity`).
  */
 /** The delegate names on a transaction client — `keyof PrismaClient` would
  *  include `$connect` and friends, which are not models. */
@@ -68,27 +88,26 @@ type ModelName =
   | 'academicYear'
   | 'administrativeGroup'
   // R172 §9 — one occurrence deleted on its own.
-  | 'session';
+  | 'session'
+  // R191 — every remaining type that reaches the Trash.
+  | 'event'
+  | 'schedulingType'
+  | 'enrollment'
+  | 'studentTeachingGroup'
+  | 'familyLink'
+  | 'educationalContent'
+  | 'quranProgressLog'
+  | 'levelSubject'
+  | 'categorySubject'
+  | 'levelSurah'
+  | 'sessionContent'
+  | 'examQuestion'
+  | 'attendance';
 
 /** Delegates a purge plan may destroy. Separate from `ModelName` because the
  *  restorable set and the purgeable set are different questions. */
 type PurgeModel =
   | ModelName
-  | 'event'
-  | 'recurringCourseSchedule'
-  | 'session'
-  | 'educationalContent'
-  | 'quranProgressLog'
-  | 'schedulingType'
-  | 'administrativeGroup'
-  | 'teachingGroup'
-  | 'level'
-  | 'enrollment'
-  | 'studentTeachingGroup'
-  | 'levelSubject'
-  | 'categorySubject'
-  | 'sessionContent'
-  | 'familyLink'
   | 'examStaff'
   | 'courseScheduleStaff'
   | 'sessionStaff'
@@ -96,8 +115,9 @@ type PurgeModel =
   | 'eventCategory'
   | 'eventLevel'
   | 'eventAdministrativeGroup'
-  | 'levelSurah'
-  | 'hijriMonthStart';
+  | 'eventStaff'
+  | 'examQuestionOption'
+  | 'notification';
 
 /**
  * Compile-time bridge from each declared owned-child delegate to its generated
@@ -112,6 +132,9 @@ interface ChildWhereByModel {
   eventCategory: Prisma.EventCategoryWhereInput;
   eventLevel: Prisma.EventLevelWhereInput;
   eventAdministrativeGroup: Prisma.EventAdministrativeGroupWhereInput;
+  // R191 — who answered for an activity, and the presence recorded at it.
+  eventStaff: Prisma.EventStaffWhereInput;
+  attendance: Prisma.AttendanceWhereInput;
   levelSubject: Prisma.LevelSubjectWhereInput;
   // R172 §1 — the whole-Category curriculum link, owned like `levelSubject`.
   categorySubject: Prisma.CategorySubjectWhereInput;
@@ -126,9 +149,10 @@ interface ChildWhereByModel {
   // R136 (Codex H2) — the exam's own questions (grandchild options are
   // removed separately, above the loop) and its notifications. Neither is
   // evidence on its own; `Grade`/`StudentExamSubmission`/`Attendance` are,
-  // and are deliberately absent here — `CONDITIONAL_PURGE.Exam` refuses the
-  // whole purge by name while any of those exist.
+  // and go with the exam under R172 §6 (`purgeExamEvidence`).
   examQuestion: Prisma.ExamQuestionWhereInput;
+  // R191 — a question's own options, when the question is the entry.
+  examQuestionOption: Prisma.ExamQuestionOptionWhereInput;
   notification: Prisma.NotificationWhereInput;
 }
 
@@ -155,18 +179,20 @@ type DeclaredChild = {
   };
 }[keyof ChildWhereByModel];
 
+type ParentRef = { field: string; model: ModelName };
+
 const RESTORABLE: Record<
   string,
   {
     model: ModelName;
-    parent?: { field: string; model: ModelName };
+    parent?: ParentRef;
     /**
      * R169 §8 — a record that hangs from SEVERAL things (a circle from its Level
      * AND its Subject). Each named foreign key must point at a LIVE row, or the
      * restore is refused with `PARENT_DELETED` naming which. A `null` key is
      * «none» and is skipped.
      */
-    parents?: { field: string; model: ModelName }[];
+    parents?: ParentRef[];
     /** Rows soft-deleted WITH the record, un-deleted with it. Only where the
      *  reinstatement is a single well-defined statement (R59.3). */
     children?: DeclaredChild[];
@@ -214,15 +240,37 @@ const RESTORABLE: Record<
    * the room and staff it would re-occupy (`restoreEntry`, as R171 §6 does
    * for a cancellation's restore).
    */
-  Session: { model: 'session', parent: { field: 'scheduleId', model: 'recurringCourseSchedule' } },
+  Session: {
+    model: 'session',
+    parent: { field: 'scheduleId', model: 'recurringCourseSchedule' },
+    parents: [
+      { field: 'roomId', model: 'room' },
+      { field: 'subjectId', model: 'subject' },
+    ],
+  },
   /**
    * **R59.3 — the first CASCADING type to join the set**, and it qualifies for
    * the reason the standard has always named: its reinstatement is *written and
    * tested*, not assumed. Deleting an exam soft-deletes exactly one child table,
    * `ExamStaff`, and bringing those rows back is one statement — unlike a `User`,
-   * whose six relationship types are the hazard §7 describes.
+   * whose six relationship types are the hazard §7 describes. R191 — what it
+   * hangs from must be live: its Level, its Branch, the room, the year, the
+   * group, circle or occurrence it is addressed to, its catalogue type.
    */
-  Exam: { model: 'exam', children: [{ model: 'examStaff', fk: 'examId' }] },
+  Exam: {
+    model: 'exam',
+    parents: [
+      { field: 'levelId', model: 'level' },
+      { field: 'branchId', model: 'branch' },
+      { field: 'roomId', model: 'room' },
+      { field: 'academicYearId', model: 'academicYear' },
+      { field: 'administrativeGroupId', model: 'administrativeGroup' },
+      { field: 'teachingGroupId', model: 'teachingGroup' },
+      { field: 'sessionId', model: 'session' },
+      { field: 'schedulingTypeId', model: 'schedulingType' },
+    ],
+    children: [{ model: 'examStaff', fk: 'examId' }],
+  },
   /**
    * R59.5 — nothing cascades, so restoration is the tombstone and nothing else.
    * The withdrawal rule means the run is contiguous when it is put back: only
@@ -246,6 +294,7 @@ const RESTORABLE: Record<
     parents: [
       { field: 'levelId', model: 'level' },
       { field: 'subjectId', model: 'subject' },
+      { field: 'branchId', model: 'branch' },
     ],
   },
   /**
@@ -291,29 +340,149 @@ const RESTORABLE: Record<
       { field: 'levelId', model: 'level' },
       { field: 'administrativeGroupId', model: 'administrativeGroup' },
       { field: 'teachingGroupId', model: 'teachingGroup' },
+      { field: 'schedulingTypeId', model: 'schedulingType' },
     ],
   },
-};
 
-/**
- * Why a type cannot be restored yet, in the terms an administrator would use.
- *
- * **Stable codes**: they appear in the API response and a screen renders them,
- * so renaming one changes what an administrator is told about their own data.
- */
-const BLOCKED_REASON: Record<string, string> = {
-  AdministrativeGroup: 'CASCADE_CHILDREN',
-  // (R172 §9 — `Session` is restorable: one occurrence deleted from
-  // «حصص الجدول» comes back by un-deleting its row; nothing of it was
-  // tombstoned with it.)
-  // An Event's scope joins are HARD deleted, so restoring the row alone would
-  // produce an event with no audience — visible to nobody, which is worse than
-  // absent because it looks restored.
-  Event: 'CASCADE_RELATIONSHIPS',
-  Enrollment: 'CASCADE_RELATIONSHIPS',
-  StudentTeachingGroup: 'CASCADE_RELATIONSHIPS',
-  FamilyLink: 'CASCADE_RELATIONSHIPS',
-  EducationalContent: 'CASCADE_RELATIONSHIPS',
+  /* ── R191 — the types that used to be listed with a reason ──────────────── */
+
+  /**
+   * **An activity comes back with its audience.** `deleteEvent` hard-deletes
+   * the four scope joins but writes their ids into the snapshot (`scope`), so
+   * they are re-created for every audience row that is still live
+   * (`restoreEventScope`); an activity deleted before the snapshot carried
+   * them restores and SAYS so (`scope_links_unknown`). Its staff, the presence
+   * recorded at it and the notices sent about it were never touched.
+   */
+  Event: { model: 'event', parents: [{ field: 'schedulingTypeId', model: 'schedulingType' }] },
+  /**
+   * **A group comes back re-addressed.** Deleting one hard-deletes the
+   * `EventAdministrativeGroup` joins; since R191 the deletion records the
+   * activities' ids (`removed_event_ids`), and a restore re-creates the join
+   * for each that is still live (`restoreGroupEventLinks`).
+   */
+  AdministrativeGroup: {
+    model: 'administrativeGroup',
+    parents: [
+      { field: 'levelId', model: 'level' },
+      { field: 'branchId', model: 'branch' },
+    ],
+  },
+  // Reference rows: the tombstone is the whole deletion. A live row with the
+  // same label (`academic_year_label_live_key`, `scheduling_type_name_live_key`)
+  // refuses the return by name — `DUPLICATE_LIVE`.
+  AcademicYear: { model: 'academicYear' },
+  SchedulingType: { model: 'schedulingType' },
+  // Curriculum links: the pair is unique whether live or deleted, so nothing
+  // can have taken the place; the Level/Category and the Subject must be live.
+  LevelSubject: {
+    model: 'levelSubject',
+    parents: [
+      { field: 'levelId', model: 'level' },
+      { field: 'subjectId', model: 'subject' },
+    ],
+  },
+  CategorySubject: {
+    model: 'categorySubject',
+    parents: [
+      { field: 'categoryId', model: 'category' },
+      { field: 'subjectId', model: 'subject' },
+    ],
+  },
+  LevelSurah: { model: 'levelSurah', parents: [{ field: 'levelId', model: 'level' }] },
+  /**
+   * **An enrolment comes back with the circle seats its ending released**
+   * (`teachingGroupSeats` in the snapshot), each where it still fits — the
+   * circle live, no other live seat for that Subject (`restoreEnrollmentSeats`)
+   * — and consent is re-evaluated for the student, as the ending did. A live
+   * enrolment of the same student at the same Level (`enrollment_student_
+   * level_unique`) refuses the return by name.
+   */
+  Enrollment: {
+    model: 'enrollment',
+    parents: [
+      { field: 'studentId', model: 'user' },
+      { field: 'levelId', model: 'level' },
+      { field: 'administrativeGroupId', model: 'administrativeGroup' },
+      { field: 'branchId', model: 'branch' },
+    ],
+  },
+  /**
+   * **A circle seat comes back** when the student is still enrolled at the
+   * Level (`NOT_ENROLLED` otherwise — the same rule a circle's restore applies
+   * to each seat) and holds no other live seat for the Subject.
+   */
+  StudentTeachingGroup: {
+    model: 'studentTeachingGroup',
+    parents: [
+      { field: 'studentId', model: 'user' },
+      { field: 'teachingGroupId', model: 'teachingGroup' },
+      { field: 'levelId', model: 'level' },
+      { field: 'subjectId', model: 'subject' },
+    ],
+  },
+  /**
+   * **A family link comes back as what its deletion took.** A revoked approved
+   * link returns approved; a REJECTED link — whose rejection was the deletion
+   * — returns as a PENDING request, never into authority (§4.3): the reviewer
+   * decides it again. Consent is re-evaluated for the child.
+   */
+  FamilyLink: {
+    model: 'familyLink',
+    parents: [
+      { field: 'parentId', model: 'user' },
+      { field: 'studentId', model: 'user' },
+    ],
+  },
+  /**
+   * **A library item comes back with its file.** Deletion moved the object to
+   * `quarantine/<id>/…` through an exact storage obligation; the restore
+   * records the reverse obligation (`restore_quarantined_object`) in the same
+   * transaction, and TD-7's worker moves the bytes back to the canonical key
+   * — idempotently, so an object the quarantine job never moved is simply
+   * found in place.
+   */
+  EducationalContent: {
+    model: 'educationalContent',
+    parents: [
+      { field: 'branchId', model: 'branch' },
+      { field: 'subjectId', model: 'subject' },
+      { field: 'levelId', model: 'level' },
+      { field: 'academicYearId', model: 'academicYear' },
+    ],
+  },
+  // A corrected range returns; coverage is recomputed from the live logs as
+  // every log mutation does (§4.5).
+  QuranProgressLog: { model: 'quranProgressLog', parents: [{ field: 'studentId', model: 'user' }] },
+  // The link between a lesson and its material: both ends must be live.
+  SessionContent: {
+    model: 'sessionContent',
+    parents: [
+      { field: 'sessionId', model: 'session' },
+      { field: 'contentId', model: 'educationalContent' },
+    ],
+  },
+  /**
+   * **A question comes back with its options**, into a live exam, keeping its
+   * place on the paper when the place is free and taking the last one
+   * otherwise (`exam_question_order_unique`; the removal closed the gap).
+   */
+  ExamQuestion: {
+    model: 'examQuestion',
+    parent: { field: 'examId', model: 'exam' },
+    children: [{ model: 'examQuestionOption', fk: 'questionId' }],
+  },
+  // A presence record returns to its occurrence; a live record for the same
+  // student and occurrence (`attendance_occurrence_student_unique`) refuses it.
+  Attendance: {
+    model: 'attendance',
+    parents: [
+      { field: 'studentId', model: 'user' },
+      { field: 'sessionId', model: 'session' },
+      { field: 'eventId', model: 'event' },
+      { field: 'examId', model: 'exam' },
+    ],
+  },
 };
 
 /**
@@ -325,31 +494,39 @@ const BLOCKED_REASON: Record<string, string> = {
  * foreign key nobody anticipated, or — worse, if any relation were ever
  * `Cascade` — silently take rows the entry does not describe.
  *
- * ## Owned children versus independent referrers
+ * ## Owned children and consequences versus independent referrers
  *
- * Every plan below lists only the rows that **exist as part of** the record and
- * were removed with it: an Event's four scope joins, a Schedule's staffing and
- * its Sessions, an Exam's supervisors. They have no life of their own, and a
- * purge that left them would leave rows pointing at nothing.
+ * Every plan below lists the rows that **exist as part of** the record or
+ * **only because of it**: an Event's four scope joins, who answered for it,
+ * the presence recorded at it and the notices sent about it (R191); a
+ * Schedule's staffing and its Sessions; an Exam's supervisors, paper and
+ * evidence. They have no life of their own, and a purge that left them would
+ * leave rows pointing at nothing — or, with `Restrict` everywhere, could not
+ * happen at all (the Owner met `notification_event_id_fkey` on an activity,
+ * R191).
  *
- * Everything else that references the record is a **record in its own right**,
- * and the purge does not touch it. It does not need to enumerate them either:
+ * Everything else that references the record is a **record in its own right**.
+ * When it is itself DELETED, it goes with the purge through its own Trash entry
+ * (`TRASHED_DEPENDENTS` — the Owner's «any element», R191: a Level does not wait
+ * for the deleted enrolments under it to be purged one by one). When it is
+ * LIVE, the purge does not touch it and does not need to enumerate it either:
  * the foreign keys are `Restrict`, so PostgreSQL refuses, and `purgeEntry`
- * turns that refusal into `DEPENDENTS_EXIST`. **The database is the authority on
- * what still points at a row** — a hand-maintained list of blockers would be a
- * second copy of the schema, and it would drift.
+ * turns that refusal into `DEPENDENTS_EXIST` naming the holder. **The database
+ * is the authority on what still points at a row** — a hand-maintained list of
+ * blockers would be a second copy of the schema, and it would drift.
  *
- * ## Why `User` has no plan, and is not an oversight
+ * ## `User` has no plan here, and is not an oversight
  *
  * A person's row is referenced by `AuditLog` and `Trash` themselves. Destroying
  * it would take the accountability record BR-15 exists to preserve — *who
- * deleted what, and when* — which is the one thing a safeguarding platform may
- * not lose. Account deletion needs its own decision about anonymisation versus
- * destruction, and that decision is R54's, not this one's.
+ * deleted what, and when*. The Trash's «حذف نهائي» on an account is therefore
+ * R111's DE-IDENTIFICATION (`purgeUserAccount`, the same act as
+ * `DELETE /admin/users/{id}?permanent=true`): the personal fields, credentials
+ * and snapshot go, a non-identifying tombstone stays. Dispatched in `purgeEntry`.
  */
 const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] }> = {
   // No owned children: a Branch's rooms, groups and schedules are all records of
-  // their own, so a Branch with any of them left is refused rather than emptied.
+  // their own, so a Branch with any of them left LIVE is refused rather than emptied.
   Branch: { model: 'branch', children: [{ model: 'eventBranch', fk: 'branchId' }] },
   Category: { model: 'category', children: [{ model: 'eventCategory', fk: 'categoryId' }] },
   Subject: {
@@ -373,22 +550,16 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   Room: { model: 'room' },
 
   /**
-   * **A schedule that never became anything** (Owner decision, 2026-09-02).
-   *
-   * The contract was type-wide: every deleted schedule refused purge with
-   * `CASCADE_CHILDREN`, because destroying one *could* be destroying a
-   * timetable's history. The Owner has now split the two cases, and the split
-   * is a fact about the row rather than about the type:
-   *
-   * * **no `Session` was ever materialized** — the schedule is a plan nobody
-   *   ever taught. There is no history to protect, so it may be purged;
-   * * **any `Session` exists**, live or tombstoned, protected or not — the
-   *   materialized coordinates ARE the institutional record (R59), and the
-   *   schedule stays. `assertNoMaterializedHistory` refuses it by name.
-   *
-   * Its staffing rows are owned by it — `CourseScheduleStaff` has no life of
-   * its own — so they go with it. Sessions are never in this plan: their
-   * presence is what forbids the purge in the first place.
+   * **A class goes with everything it held** — R170 §8 (the Owner, 2026-09-21,
+   * completed 2026-09-22) and R191 (2026-10-01). Its staffing rows are owned
+   * by it (`CourseScheduleStaff` has no life of its own); its occurrences —
+   * every one of them, the past ones that went to the Trash with it AND the
+   * ones protection kept live under it — are destroyed by
+   * `purgeScheduleSessions` with their attendance, their recordings (which
+   * become deleted library items with their own window) and, since R191, the
+   * quick tests sat in them with their evidence (R172 §6's rule, applied to
+   * what an occurrence carried). Until R191 an exam kept the class
+   * (`SESSIONS_HAVE_EXAMS`), which left the Owner unable to empty the Trash.
    */
   RecurringCourseSchedule: {
     model: 'recurringCourseSchedule',
@@ -396,7 +567,8 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   },
 
   // The Level's curriculum mapping and calendar scope join go with it; its
-  // groups, schedules and enrolments are records of their own and block.
+  // groups, schedules and enrolments are records of their own: deleted ones go
+  // with it through their own entries, live ones block.
   Level: {
     model: 'level',
     children: [
@@ -434,7 +606,9 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   },
 
   // An Event IS its audience: the four scope joins carry no information apart
-  // from the event they scope.
+  // from the event they scope. R191 — who answered for it, the presence
+  // recorded at it and the notices sent about it exist only because of it
+  // and go with it (the Owner met `notification_event_id_fkey`).
   Event: {
     model: 'event',
     children: [
@@ -442,6 +616,9 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
       { model: 'eventCategory', fk: 'eventId' },
       { model: 'eventLevel', fk: 'eventId' },
       { model: 'eventAdministrativeGroup', fk: 'eventId' },
+      { model: 'eventStaff', fk: 'eventId' },
+      { model: 'attendance', fk: 'eventId' },
+      { model: 'notification', fk: 'eventId' },
     ],
   },
 
@@ -472,6 +649,12 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
       { model: 'notification', fk: 'examId' },
     ],
   },
+  // R191 — a question removed from a paper nobody had yet answered
+  // (`assertNotFrozen`): its options go with it.
+  ExamQuestion: {
+    model: 'examQuestion',
+    children: [{ model: 'examQuestionOption', fk: 'questionId' }],
+  },
 
   // The link rows belong to the content; the bytes are handled separately by the
   // caller, because they live outside the transaction (R59.1).
@@ -485,12 +668,14 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   // remove the already-tombstoned row without changing current progress.
   QuranProgressLog: { model: 'quranProgressLog' },
 
-  // Reference data with no owned children. Historical Events remain
-  // independent referrers and PostgreSQL refuses the purge while any exists.
+  // Reference data with no owned children. A LIVE activity, exam or class that
+  // still names the type or the year keeps it (PostgreSQL refuses; the holder
+  // is named).
   SchedulingType: { model: 'schedulingType' },
+  AcademicYear: { model: 'academicYear' },
   Partner: { model: 'partner' },
 
-  // Join rows with nothing beneath them.
+  // Join and leaf rows with nothing beneath them.
   HijriMonthStart: { model: 'hijriMonthStart' },
   Enrollment: { model: 'enrollment' },
   StudentTeachingGroup: { model: 'studentTeachingGroup' },
@@ -499,81 +684,183 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   LevelSurah: { model: 'levelSurah' },
   SessionContent: { model: 'sessionContent' },
   FamilyLink: { model: 'familyLink' },
+  Attendance: { model: 'attendance' },
 };
 
 /**
- * Constraint → the domain thing that holds the record, for the refusal message.
+ * **A record's DELETED dependents go with it** (R191 — the Owner: «delete
+ * permanently any element in the trash»).
  *
- * Keys are PostgreSQL's own constraint names, so an entry can only ever be
- * reached by an actual violation of that constraint. Anything absent falls back
- * to the generic sentence, which is why this table cannot drift into being
+ * A Level in the Trash may still be referenced by an enrolment that is ALSO in
+ * the Trash. PostgreSQL refuses the Level while that row exists, which used to
+ * mean purging the enrolment first, then the Level — one click per row, in
+ * the right order, or `ops:empty-trash`'s passes. Both rows are deleted and
+ * both are due for destruction within the window, so the purge of the parent
+ * now purges each deleted dependent through ITS OWN Trash entry first
+ * (`purgeTrashedDependents`: the same body, its own audit row, its own
+ * consequences — a deleted class under a deleted Branch still goes with its
+ * occurrences), then the record. A dependent that is LIVE is not here and is
+ * never destroyed: it blocks, and the refusal names it.
+ *
+ * Each row names a referrer that reaches the Trash, its delegate and the
+ * foreign key it points with — the same facts the schema states, listed here
+ * only for the referrers that carry a tombstone.
+ */
+const TRASHED_DEPENDENTS: Record<string, { entity: string; model: PurgeModel; fk: string }[]> = {
+  Branch: [
+    { entity: 'Room', model: 'room', fk: 'branchId' },
+    { entity: 'AdministrativeGroup', model: 'administrativeGroup', fk: 'branchId' },
+    { entity: 'TeachingGroup', model: 'teachingGroup', fk: 'branchId' },
+    { entity: 'Enrollment', model: 'enrollment', fk: 'branchId' },
+    { entity: 'RecurringCourseSchedule', model: 'recurringCourseSchedule', fk: 'branchId' },
+    { entity: 'Exam', model: 'exam', fk: 'branchId' },
+    { entity: 'EducationalContent', model: 'educationalContent', fk: 'branchId' },
+  ],
+  Room: [
+    { entity: 'RecurringCourseSchedule', model: 'recurringCourseSchedule', fk: 'roomId' },
+    { entity: 'Session', model: 'session', fk: 'roomId' },
+    { entity: 'Exam', model: 'exam', fk: 'roomId' },
+  ],
+  Category: [
+    { entity: 'Level', model: 'level', fk: 'categoryId' },
+    { entity: 'CategorySubject', model: 'categorySubject', fk: 'categoryId' },
+  ],
+  Subject: [
+    { entity: 'LevelSubject', model: 'levelSubject', fk: 'subjectId' },
+    { entity: 'CategorySubject', model: 'categorySubject', fk: 'subjectId' },
+    { entity: 'TeachingGroup', model: 'teachingGroup', fk: 'subjectId' },
+    { entity: 'StudentTeachingGroup', model: 'studentTeachingGroup', fk: 'subjectId' },
+    { entity: 'RecurringCourseSchedule', model: 'recurringCourseSchedule', fk: 'subjectId' },
+    { entity: 'Session', model: 'session', fk: 'subjectId' },
+    { entity: 'EducationalContent', model: 'educationalContent', fk: 'subjectId' },
+  ],
+  Level: [
+    { entity: 'LevelSubject', model: 'levelSubject', fk: 'levelId' },
+    { entity: 'LevelSurah', model: 'levelSurah', fk: 'levelId' },
+    { entity: 'AdministrativeGroup', model: 'administrativeGroup', fk: 'levelId' },
+    { entity: 'TeachingGroup', model: 'teachingGroup', fk: 'levelId' },
+    { entity: 'StudentTeachingGroup', model: 'studentTeachingGroup', fk: 'levelId' },
+    { entity: 'Enrollment', model: 'enrollment', fk: 'levelId' },
+    { entity: 'RecurringCourseSchedule', model: 'recurringCourseSchedule', fk: 'levelId' },
+    { entity: 'Exam', model: 'exam', fk: 'levelId' },
+    { entity: 'EducationalContent', model: 'educationalContent', fk: 'levelId' },
+  ],
+  AcademicYear: [
+    { entity: 'RecurringCourseSchedule', model: 'recurringCourseSchedule', fk: 'academicYearId' },
+    { entity: 'Exam', model: 'exam', fk: 'academicYearId' },
+    { entity: 'EducationalContent', model: 'educationalContent', fk: 'academicYearId' },
+  ],
+  AdministrativeGroup: [
+    { entity: 'Enrollment', model: 'enrollment', fk: 'administrativeGroupId' },
+    { entity: 'RecurringCourseSchedule', model: 'recurringCourseSchedule', fk: 'administrativeGroupId' },
+    { entity: 'Exam', model: 'exam', fk: 'administrativeGroupId' },
+  ],
+  TeachingGroup: [
+    { entity: 'StudentTeachingGroup', model: 'studentTeachingGroup', fk: 'teachingGroupId' },
+    { entity: 'RecurringCourseSchedule', model: 'recurringCourseSchedule', fk: 'teachingGroupId' },
+    { entity: 'Exam', model: 'exam', fk: 'teachingGroupId' },
+  ],
+  RecurringCourseSchedule: [{ entity: 'Session', model: 'session', fk: 'scheduleId' }],
+  Session: [
+    { entity: 'SessionContent', model: 'sessionContent', fk: 'sessionId' },
+    { entity: 'Exam', model: 'exam', fk: 'sessionId' },
+    { entity: 'Attendance', model: 'attendance', fk: 'sessionId' },
+  ],
+  Exam: [
+    { entity: 'ExamQuestion', model: 'examQuestion', fk: 'examId' },
+    { entity: 'Attendance', model: 'attendance', fk: 'examId' },
+  ],
+  Event: [{ entity: 'Attendance', model: 'attendance', fk: 'eventId' }],
+  SchedulingType: [
+    { entity: 'Event', model: 'event', fk: 'schedulingTypeId' },
+    { entity: 'Exam', model: 'exam', fk: 'schedulingTypeId' },
+    { entity: 'RecurringCourseSchedule', model: 'recurringCourseSchedule', fk: 'schedulingTypeId' },
+  ],
+  EducationalContent: [{ entity: 'SessionContent', model: 'sessionContent', fk: 'contentId' }],
+};
+
+/**
+ * Table → the domain thing that holds the record, for the refusal message.
+ *
+ * PostgreSQL names every foreign key `<table>_<column>_fkey`, so the holder is
+ * read off the constraint it reports (`blockingEntityOf`): a translation of the
+ * answer the database just gave, never a prediction. A table absent here falls
+ * back to the generic sentence, which is why this map cannot drift into being
  * *wrong* — only into being less helpful, which the next UAT would surface.
+ * Stable codes: the interface renders them.
  */
-const BLOCKING_ENTITY: Record<string, string> = {
-  level_subject_level_id_fkey: 'LevelSubject',
-  level_category_id_fkey: 'Level',
-  recurring_course_schedule_administrative_group_id_fkey: 'RecurringCourseSchedule',
-  recurring_course_schedule_level_id_fkey: 'RecurringCourseSchedule',
-  recurring_course_schedule_branch_id_fkey: 'RecurringCourseSchedule',
-  recurring_course_schedule_room_id_fkey: 'RecurringCourseSchedule',
-  enrollment_level_id_fkey: 'Enrollment',
-  enrollment_administrative_group_id_fkey: 'Enrollment',
-  enrollment_branch_id_fkey: 'Enrollment',
-  administrative_group_level_id_fkey: 'AdministrativeGroup',
-  administrative_group_branch_id_fkey: 'AdministrativeGroup',
-  teaching_group_level_id_fkey: 'TeachingGroup',
-  teaching_group_subject_id_fkey: 'TeachingGroup',
-  exam_level_id_fkey: 'Exam',
-  exam_branch_id_fkey: 'Exam',
-  exam_room_id_fkey: 'Exam',
-  level_surah_level_id_fkey: 'LevelSurah',
-  room_branch_id_fkey: 'Room',
-  event_scheduling_type_id_fkey: 'Event',
+const TABLE_ENTITY: Record<string, string> = {
+  academic_period: 'AcademicPeriod',
+  administrative_group: 'AdministrativeGroup',
+  attendance: 'Attendance',
+  category_subject: 'CategorySubject',
+  child_application: 'ChildApplication',
+  circle_preference: 'CirclePreference',
+  course_schedule_administrative_group: 'RecurringCourseSchedule',
+  course_schedule_branch: 'RecurringCourseSchedule',
+  course_schedule_category: 'RecurringCourseSchedule',
+  course_schedule_level: 'RecurringCourseSchedule',
+  course_schedule_staff: 'RecurringCourseSchedule',
+  course_schedule_surah: 'RecurringCourseSchedule',
+  course_schedule_teaching_group: 'RecurringCourseSchedule',
+  educational_content: 'EducationalContent',
+  educational_content_level: 'EducationalContent',
+  enrollment: 'Enrollment',
+  event: 'Event',
+  event_administrative_group: 'Event',
+  event_branch: 'Event',
+  event_category: 'Event',
+  event_level: 'Event',
+  event_staff: 'EventStaff',
+  exam: 'Exam',
+  exam_question: 'ExamQuestion',
+  exam_question_option: 'ExamQuestion',
+  exam_staff: 'Exam',
+  family_link: 'FamilyLink',
+  framing_preference_branch: 'FramingPreference',
+  grade: 'Grade',
+  grade_question_score: 'Grade',
+  level: 'Level',
+  level_completion_mark: 'LevelCompletionMark',
+  level_subject: 'LevelSubject',
+  level_surah: 'LevelSurah',
+  notification: 'Notification',
+  quran_progress_log: 'QuranProgressLog',
+  recurring_course_schedule: 'RecurringCourseSchedule',
+  room: 'Room',
+  session: 'Session',
+  session_audience_administrative_group: 'Session',
+  session_audience_branch: 'Session',
+  session_audience_category: 'Session',
+  session_audience_level: 'Session',
+  session_audience_teaching_group: 'Session',
+  session_content: 'SessionContent',
+  session_recording: 'SessionRecording',
+  session_staff: 'Session',
+  session_surah: 'Session',
+  student_exam_answer: 'StudentExamSubmission',
+  student_exam_answer_option: 'StudentExamSubmission',
+  student_exam_submission: 'StudentExamSubmission',
+  student_teaching_group: 'StudentTeachingGroup',
+  teacher_category_capability: 'TeacherCapability',
+  teacher_subject_capability: 'TeacherCapability',
+  teaching_group: 'TeachingGroup',
+  user: 'User',
+  user_branch_role: 'UserBranchRole',
 };
 
-/**
- * **Which Trash rows are purgeable only under a condition** (Owner, 2026-09-02).
- *
- * Everything else is decided by the presence of a plan, which is a fact about
- * the TYPE. A schedule is the first entity whose answer is a fact about the
- * ROW — it may be destroyed exactly when it never materialized a Session — so
- * the condition lives here, is asked once per row by `listTrash`, and is asked
- * again inside the purge transaction where it is authoritative.
- */
-const CONDITIONAL_PURGE: Record<
-  string,
-  { reason: string; purgeable: (db: PrismaClient, targetId: string) => Promise<boolean> }
-> = {
-  /**
-   * **R170 §8 (the Owner, 2026-09-21; completed 2026-09-22) supersedes R118 (1)**:
-   * a deleted class leaves the Trash after the same seven days as everything
-   * else, WITH its occurrences — and, at the Owner's word, with their
-   * attendance and their recordings (`purgeScheduleSessions`). What still keeps
-   * a class is an occurrence that a scheduled EXAM was sat in: its answers,
-   * grades and attendance are an exam's evidence (R136, `EXAM_HAS_RECORDED_
-   * EVIDENCE`) and never go with a class. And a LIVE occurrence (one protection
-   * spared) is never destroyed from under the calendar. Said as
-   * `SESSIONS_HAVE_EXAMS`.
-   */
-  RecurringCourseSchedule: {
-    reason: 'SESSIONS_HAVE_EXAMS',
-    purgeable: async (db, targetId) => (await sessionsKeepingSchedule(db, targetId)) === 0,
-  },
-  // (R172 §6 — `Exam` is no longer here. Its papers, marks and attendance go
-  // WITH it when the Trash lets it go, exactly as a class's occurrences do
-  // under R170 §8: `purgeExamEvidence` below. The deletion that put it in the
-  // Trash was acknowledged with those counts in view — `deleteExam`.)
-};
-
-/** Why a type cannot be purged. Stable codes: a screen renders them. */
-const PURGE_BLOCKED_REASON: Record<string, string> = {
-  // Destroying a person takes the audit trail that says what they did — the one
-  // record a safeguarding platform may not lose. R54's decision, not this one's.
-  User: 'ACCOUNTABILITY_RECORD',
-  // Its Sessions are materialized rows other records reference; destroying a
-  // schedule is destroying a timetable's history, which needs its own decision.
-  RecurringCourseSchedule: 'CASCADE_CHILDREN',
-};
+/** The holder named by a `<table>_<column>_fkey` constraint — the longest table
+ *  name the constraint starts with, so `event_staff_event_id_fkey` is
+ *  `EventStaff`, not `Event`. */
+function blockingEntityOf(constraint: string | null): string | null {
+  if (constraint === null || !constraint.endsWith('_fkey')) return null;
+  const body = constraint.slice(0, -'_fkey'.length);
+  let best: string | null = null;
+  for (const table of Object.keys(TABLE_ENTITY)) {
+    if (body.startsWith(`${table}_`) && (best === null || table.length > best.length)) best = table;
+  }
+  return best === null ? null : TABLE_ENTITY[best]!;
+}
 
 /** TD-2: the Trash is Super Admin only. It exposes every entity in the platform
  *  regardless of branch, so a branch-scoped Admin would see other branches'
@@ -706,30 +993,21 @@ export async function listTrash(
     prisma.trash.count({ where }),
   ]);
 
-  // `Promise.all` because purgeability is now a per-row question for the types
-  // that have a condition — one bounded count per such row, on a page of 25.
-  const mapped = await Promise.all(rows.map(async (row) => {
-    const restorePlan = RESTORABLE[row.targetEntity];
-    const completeRestoreSnapshot =
-      restorePlan?.children?.every(
-        (child) =>
-          child.snapshotIdsKey === undefined ||
-          (child.legacyOptional === true && snapshotLacks(row.snapshot, child.snapshotIdsKey)) ||
-          hasValidSnapshotIds(row.snapshot, child.snapshotIdsKey),
-      ) ?? true;
-    const restorable = restorePlan !== undefined && completeRestoreSnapshot;
-    const conditional = CONDITIONAL_PURGE[row.targetEntity];
-    /**
-     * **Purgeability is a fact about the ROW where a condition exists.**
-     *
-     * Offering a purge that can never succeed is what made the Trash
-     * misleading; refusing one that would succeed would be worse. So the
-     * condition is asked here, per row, and the same predicate decides again
-     * inside the purge transaction.
-     */
-    const purgeable =
-      PURGEABLE[row.targetEntity] !== undefined &&
-      (conditional === undefined || (await conditional.purgeable(prisma, row.targetId)));
+  /**
+   * **R191 — every row is restorable and purgeable, and the server still says
+   * so per row.** A type absent from `RESTORABLE` can only be one no deletion
+   * writes any more (`Exam.questions`, a test's invented name): its restore
+   * reads `NOT_YET_SUPPORTED`, which is the honest answer, and its purge
+   * removes the entry. What a restore or a purge cannot do for THIS row — a
+   * parent that is deleted, a live record that still uses it, a slot taken
+   * since — is decided inside the transaction and refused by name, because a
+   * list read earlier could not promise it anyway.
+   */
+  const mapped = rows.map((row) => {
+    const restorable = RESTORABLE[row.targetEntity] !== undefined;
+    // Every entry can be destroyed: a type with a plan, an account (de-identified),
+    // and a type nothing writes any more (the entry alone is removed).
+    const purgeable = true;
     return {
       id: row.id,
       targetEntity: row.targetEntity,
@@ -740,19 +1018,11 @@ export async function listTrash(
       deletedByName: row.deletedBy?.nameArabic ?? null,
       purgeAfter: row.purgeAfter,
       restorable,
-      restoreBlockedReason: restorable
-        ? null
-        : restorePlan !== undefined && !completeRestoreSnapshot
-          ? 'INCOMPLETE_SNAPSHOT'
-          : (BLOCKED_REASON[row.targetEntity] ?? 'NOT_YET_SUPPORTED'),
+      restoreBlockedReason: restorable ? null : 'NOT_YET_SUPPORTED',
       purgeable,
-      purgeBlockedReason: purgeable
-        ? null
-        : PURGEABLE[row.targetEntity] !== undefined && conditional !== undefined
-          ? conditional.reason
-          : (PURGE_BLOCKED_REASON[row.targetEntity] ?? 'NOT_YET_SUPPORTED'),
+      purgeBlockedReason: purgeable ? null : 'NOT_YET_SUPPORTED',
     };
-  }));
+  });
 
   // **Search is applied to the LABEL, after the page is read.** The label lives
   // inside a JSONB snapshot under a key that differs per entity, so a SQL
@@ -908,12 +1178,12 @@ async function restoreScheduleSessions(
   scheduleId: string,
   row: Record<string, unknown>,
   snapshot: unknown,
-): Promise<{ sessions_restored: number; sessions_not_restored: number }> {
+): Promise<{ sessions_restored: number; sessions_not_restored: number; cascade_unknown?: boolean }> {
+  // R191 — a tombstone that never listed what it took (none written since
+  // R43 lacks the key) restores the class alone and SAYS so, rather than
+  // refusing: the Owner's «restore any element».
   if (!hasValidSnapshotIds(snapshot, 'removed_session_ids')) {
-    throw new AppError('STATE_CONFLICT', 'the legacy snapshot does not identify the removed occurrences', {
-      reason: 'INCOMPLETE_SNAPSHOT',
-      target_entity: 'RecurringCourseSchedule',
-    });
+    return { sessions_restored: 0, sessions_not_restored: 0, cascade_unknown: true };
   }
   const removedIds = snapshotIds(snapshot, 'removed_session_ids', 'RecurringCourseSchedule');
   // R170 §8 — the past occurrences that went with the class come straight
@@ -996,11 +1266,189 @@ async function restoreScheduleSessions(
   };
 }
 
-export async function restoreEntry(
-  prisma: PrismaClient,
-  actor: Actor,
-  id: string,
-): Promise<{
+/**
+ * **An activity's audience, re-created from its snapshot** (R191). `deleteEvent`
+ * hard-deletes the four scope joins and records their ids under `scope`; each
+ * comes back for an audience row that is still live, never twice
+ * (`skipDuplicates`). A snapshot without `scope` predates the record and is
+ * said, not guessed.
+ */
+async function restoreEventScope(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  snapshot: unknown,
+): Promise<{ scope_links_restored: number; scope_links_unknown: boolean }> {
+  const scope = ((snapshot ?? {}) as Record<string, unknown>)['scope'];
+  if (typeof scope !== 'object' || scope === null) {
+    return { scope_links_restored: 0, scope_links_unknown: true };
+  }
+  const ids = (key: string): string[] => {
+    const value = (scope as Record<string, unknown>)[key];
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+  };
+  const live = async (model: ModelName, wanted: string[]): Promise<string[]> => {
+    if (wanted.length === 0) return [];
+    const delegate = tx[model] as unknown as { findMany: (a: unknown) => Promise<{ id: string }[]> };
+    const rows = await delegate.findMany({ where: { id: { in: wanted }, deletedAt: null }, select: { id: true } });
+    return rows.map((row) => row.id);
+  };
+  const [branches, categories, levels, groups] = await Promise.all([
+    live('branch', ids('branch_ids')),
+    live('category', ids('category_ids')),
+    live('level', ids('level_ids')),
+    live('administrativeGroup', ids('administrative_group_ids')),
+  ]);
+  const a = await tx.eventBranch.createMany({
+    data: branches.map((branchId) => ({ eventId, branchId })),
+    skipDuplicates: true,
+  });
+  const b = await tx.eventCategory.createMany({
+    data: categories.map((categoryId) => ({ eventId, categoryId })),
+    skipDuplicates: true,
+  });
+  const c = await tx.eventLevel.createMany({
+    data: levels.map((levelId) => ({ eventId, levelId })),
+    skipDuplicates: true,
+  });
+  const d = await tx.eventAdministrativeGroup.createMany({
+    data: groups.map((administrativeGroupId) => ({ eventId, administrativeGroupId })),
+    skipDuplicates: true,
+  });
+  return { scope_links_restored: a.count + b.count + c.count + d.count, scope_links_unknown: false };
+}
+
+/**
+ * **The activities a deleted group was addressed by, re-addressed** (R191 —
+ * `deleteAdministrativeGroup` records `removed_event_ids` since this
+ * revision). Live activities only, never twice; an older tombstone says so.
+ */
+async function restoreGroupEventLinks(
+  tx: Prisma.TransactionClient,
+  administrativeGroupId: string,
+  snapshot: unknown,
+): Promise<{ event_links_restored: number; event_links_unknown: boolean }> {
+  const value = ((snapshot ?? {}) as Record<string, unknown>)['removed_event_ids'];
+  if (!Array.isArray(value)) return { event_links_restored: 0, event_links_unknown: true };
+  const wanted = value.filter((id): id is string => typeof id === 'string');
+  if (wanted.length === 0) return { event_links_restored: 0, event_links_unknown: false };
+  const live = await tx.event.findMany({ where: { id: { in: wanted }, deletedAt: null }, select: { id: true } });
+  const created = await tx.eventAdministrativeGroup.createMany({
+    data: live.map((event) => ({ eventId: event.id, administrativeGroupId })),
+    skipDuplicates: true,
+  });
+  return { event_links_restored: created.count, event_links_unknown: false };
+}
+
+/**
+ * **The circle seats an enrolment's ending released, given back where they
+ * still fit** (R191; the same test `restoreCircleSeats` applies): the seat
+ * row named in the snapshot (`teachingGroupSeats`) is still tombstoned, its
+ * circle is live, and the student holds no other live seat for that Subject
+ * at that Level. Consent is re-evaluated for the student afterwards — her
+ * audience just changed, as it did when the enrolment ended.
+ */
+async function restoreEnrollmentSeats(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  snapshot: unknown,
+): Promise<{ seats_restored: number; seats_not_restored: number }> {
+  const seats = ((snapshot ?? {}) as Record<string, unknown>)['teachingGroupSeats'];
+  const ids = Array.isArray(seats)
+    ? seats
+        .map((seat) => (seat as { id?: unknown }).id)
+        .filter((id): id is string => typeof id === 'string')
+    : [];
+  if (ids.length === 0) {
+    await enqueueConsentReevaluationForStudent(tx, studentId);
+    return { seats_restored: 0, seats_not_restored: 0 };
+  }
+  const released = await tx.studentTeachingGroup.findMany({
+    where: { id: { in: ids }, studentId, deletedAt: { not: null } },
+    select: { id: true, subjectId: true, levelId: true, teachingGroup: { select: { deletedAt: true } } },
+  });
+  const taken = await tx.studentTeachingGroup.findMany({
+    where: { studentId, deletedAt: null, subjectId: { in: released.map((seat) => seat.subjectId) } },
+    select: { subjectId: true, levelId: true },
+  });
+  const occupied = new Set(taken.map((seat) => `${seat.subjectId}:${seat.levelId}`));
+  const returning = released.filter(
+    (seat) => seat.teachingGroup.deletedAt === null && !occupied.has(`${seat.subjectId}:${seat.levelId}`),
+  );
+  await tx.studentTeachingGroup.updateMany({
+    where: { id: { in: returning.map((seat) => seat.id) } },
+    data: { deletedAt: null, deletedById: null },
+  });
+  await enqueueConsentReevaluationForStudent(tx, studentId);
+  return { seats_restored: returning.length, seats_not_restored: ids.length - returning.length };
+}
+
+/**
+ * **A question's place on the paper** (R191). The removal closed the gap
+ * (`removeQuestion`), so its old `display_order` may now be a live question's:
+ * the row keeps its place when the place is free and takes the last otherwise
+ * (`exam_question_order_unique` is partial on live rows). Decided BEFORE the
+ * tombstone is cleared, so the index never refuses.
+ */
+async function placeRestoredQuestion(tx: Prisma.TransactionClient, questionId: string): Promise<void> {
+  const question = await tx.examQuestion.findUniqueOrThrow({
+    where: { id: questionId },
+    select: { examId: true, displayOrder: true },
+  });
+  const taken = await tx.examQuestion.count({
+    where: { examId: question.examId, deletedAt: null, displayOrder: question.displayOrder },
+  });
+  if (taken === 0) return;
+  const last = await tx.examQuestion.aggregate({
+    where: { examId: question.examId, deletedAt: null },
+    _max: { displayOrder: true },
+  });
+  await tx.examQuestion.update({
+    where: { id: questionId },
+    data: { displayOrder: (last._max.displayOrder ?? 0) + 1 },
+  });
+}
+
+/**
+ * **A library item's file, brought back from quarantine** (R191). The same
+ * durable obligation mechanism its deletion used, in the opposite direction:
+ * recorded in the restoring transaction, performed by TD-7's worker, idempotent
+ * (`restoreQuarantinedContentObject`). A row with no canonical coordinate
+ * (fixture rows, R172) cannot carry one; the row itself still returns.
+ */
+async function enqueueContentStorageRestore(
+  tx: Prisma.TransactionClient,
+  row: Record<string, unknown>,
+): Promise<{ file_restore_queued: boolean }> {
+  const contentId = row['id'];
+  const bucket = row['storageBucket'];
+  const storageKey = row['storageKey'];
+  if (typeof contentId !== 'string' || typeof bucket !== 'string' || typeof storageKey !== 'string') {
+    return { file_restore_queued: false };
+  }
+  try {
+    await requireRetirement(tx, { operation: 'restore_quarantined_object', contentId, bucket, storageKey }, true);
+  } catch (error) {
+    if (error instanceof AppError && error.details?.['reason'] === 'NON_CANONICAL_COORDINATE') {
+      return { file_restore_queued: false };
+    }
+    throw error;
+  }
+  return { file_restore_queued: true };
+}
+
+/**
+ * **A `UNIQUE` violation does not arrive as `P2002` either** — the same
+ * driver-adapter shape `isForeignKeyViolation` documents below: SQLSTATE
+ * `23505` under `P2039`. Either form means a LIVE row holds the place the
+ * restored one would take (a partial index `WHERE deleted_at IS NULL`).
+ */
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  if ((error as { code?: unknown }).code === 'P2002') return true;
+  return sqlStateOf(error) === '23505';
+}
+
+export interface RestoreResult {
   targetEntity: string;
   targetId: string;
   seats_restored?: number;
@@ -1009,7 +1457,19 @@ export async function restoreEntry(
   sessions_not_restored?: number;
   event_links_restored?: number;
   event_links_unknown?: boolean;
-}> {
+  /** R191 — an activity's audience re-created from its snapshot. */
+  scope_links_restored?: number;
+  scope_links_unknown?: boolean;
+  /** R191 — a library item's file is being brought back from quarantine. */
+  file_restore_queued?: boolean;
+  /** R191 — a rejected family link came back as a pending request. */
+  reopened_as_pending?: boolean;
+  /** R191 — the tombstone did not name what its deletion took; the record
+   *  alone came back. Said, never guessed. */
+  cascade_unknown?: boolean;
+}
+
+export async function restoreEntry(prisma: PrismaClient, actor: Actor, id: string): Promise<RestoreResult> {
   await assertFreshSuperAdmin(prisma, actor);
 
   const entry = await prisma.trash.findUnique({ where: { id } });
@@ -1017,208 +1477,280 @@ export async function restoreEntry(
 
   const plan = RESTORABLE[entry.targetEntity];
   if (!plan) {
-    throw new AppError('STATE_CONFLICT', 'restoring this entity type is not yet supported', {
-      reason: BLOCKED_REASON[entry.targetEntity] ?? 'NOT_YET_SUPPORTED',
+    throw new AppError('STATE_CONFLICT', 'restoring this entity type is not supported', {
+      reason: 'NOT_YET_SUPPORTED',
       target_entity: entry.targetEntity,
     });
   }
-  return prisma.$transaction(async (tx) => {
-    if (entry.targetEntity === 'User') {
-      // Same governing lock as soft/permanent deletion. Re-read the exact
-      // generation AFTER waiting; a stale restore must not revive a tombstone.
-      await lockUser(tx, entry.targetId);
-      const current = await tx.trash.findFirst({
-        where: { id, targetEntity: 'User', targetId: entry.targetId },
-      });
-      if (!current) throw new AppError('NOT_FOUND', 'no such trash entry');
-      if (current.purgeAfter <= new Date()) {
-        throw new AppError('STATE_CONFLICT', 'the restoration window has expired', {
-          reason: 'RESTORATION_EXPIRED',
+  let recalculateQuran: { studentId: string; surahId: number } | null = null;
+  let result: RestoreResult;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      if (entry.targetEntity === 'User') {
+        // Same governing lock as soft/permanent deletion. Re-read the exact
+        // generation AFTER waiting; a stale restore must not revive a tombstone.
+        await lockUser(tx, entry.targetId);
+        const current = await tx.trash.findFirst({
+          where: { id, targetEntity: 'User', targetId: entry.targetId },
         });
+        if (!current) throw new AppError('NOT_FOUND', 'no such trash entry');
+        if (current.purgeAfter <= new Date()) {
+          throw new AppError('STATE_CONFLICT', 'the restoration window has expired', {
+            reason: 'RESTORATION_EXPIRED',
+          });
+        }
       }
-    }
-    const delegate = tx[plan.model] as unknown as {
-      findUnique: (a: unknown) => Promise<Record<string, unknown> | null>;
-      update: (a: unknown) => Promise<unknown>;
-    };
-
-    const row = await delegate.findUnique({ where: { id: entry.targetId } });
-    // BR-15 has purged the row itself, so there is nothing left to un-delete —
-    // the snapshot alone cannot recreate it safely, because every foreign key it
-    // points at may since have gone too.
-    if (!row) {
-      throw new AppError('STATE_CONFLICT', 'the record itself is gone — BR-15 purged it', {
-        reason: 'ALREADY_PURGED',
-      });
-    }
-    if (row['deletedAt'] === null) {
-      throw new AppError('STATE_CONFLICT', 'that record is not deleted', { reason: 'NOT_DELETED' });
-    }
-    if (
-      plan.children?.some(
-        (child) =>
-          child.snapshotIdsKey !== undefined &&
-          !(child.legacyOptional === true && snapshotLacks(entry.snapshot, child.snapshotIdsKey)) &&
-          !hasValidSnapshotIds(entry.snapshot, child.snapshotIdsKey),
-      )
-    ) {
-      throw new AppError('STATE_CONFLICT', 'the legacy snapshot does not identify cascade children', {
-        reason: 'INCOMPLETE_SNAPSHOT',
-        target_entity: entry.targetEntity,
-      });
-    }
-
-    // **A child cannot be restored into a deleted parent.** Restoring a Room
-    // whose Branch is still in the Trash would produce a room nobody can reach
-    // through any screen — technically alive, practically lost.
-    if (plan.parent) {
-      const parentId = row[plan.parent.field];
-      const parentDelegate = tx[plan.parent.model] as unknown as {
-        findFirst: (a: unknown) => Promise<unknown>;
+      if (entry.targetEntity === 'EducationalContent') {
+        // The same lock every storage transition takes (TD-7): the restore's
+        // obligation and a quarantine job must not interleave on one item.
+        await lockEducationalContent(tx, [entry.targetId]);
+      }
+      const delegate = tx[plan.model] as unknown as {
+        findUnique: (a: unknown) => Promise<Record<string, unknown> | null>;
+        update: (a: unknown) => Promise<unknown>;
       };
-      const parent = await parentDelegate.findFirst({
-        where: { id: parentId, deletedAt: null },
-      });
-      if (!parent) {
-        throw new AppError('STATE_CONFLICT', 'restore its parent first', {
-          reason: 'PARENT_DELETED',
-          parent_entity: String(plan.parent.model),
+
+      const row = await delegate.findUnique({ where: { id: entry.targetId } });
+      // BR-15 has purged the row itself, so there is nothing left to un-delete —
+      // the snapshot alone cannot recreate it safely, because every foreign key it
+      // points at may since have gone too.
+      if (!row) {
+        throw new AppError('STATE_CONFLICT', 'the record itself is gone — BR-15 purged it', {
+          reason: 'ALREADY_PURGED',
         });
       }
-    }
+      if (row['deletedAt'] === null) {
+        throw new AppError('STATE_CONFLICT', 'that record is not deleted', { reason: 'NOT_DELETED' });
+      }
+      // R191 — a tombstone written before its type recorded what the deletion
+      // took brings the record back alone and SAYS so (`cascade_unknown`),
+      // rather than refusing (`INCOMPLETE_SNAPSHOT` withdrawn). A present but
+      // malformed list is corruption and still aborts (`snapshotIds`).
+      const cascadeUnknown =
+        plan.children?.some(
+          (child) =>
+            child.snapshotIdsKey !== undefined &&
+            child.legacyOptional !== true &&
+            snapshotLacks(entry.snapshot, child.snapshotIdsKey),
+        ) ?? false;
 
-    for (const parent of plan.parents ?? []) {
-      const parentId = row[parent.field];
-      if (parentId === null || parentId === undefined) continue;
-      const parentDelegate = tx[parent.model] as unknown as {
-        findFirst: (a: unknown) => Promise<unknown>;
-      };
-      if (!(await parentDelegate.findFirst({ where: { id: parentId, deletedAt: null } }))) {
-        throw new AppError('STATE_CONFLICT', 'restore its parent first', {
-          reason: 'PARENT_DELETED',
-          parent_entity: String(parent.model),
+      // **A child cannot be restored into a deleted parent.** Restoring a Room
+      // whose Branch is still in the Trash would produce a room nobody can reach
+      // through any screen — technically alive, practically lost.
+      for (const parent of [...(plan.parent ? [plan.parent] : []), ...(plan.parents ?? [])]) {
+        const parentId = row[parent.field];
+        if (parentId === null || parentId === undefined) continue;
+        const parentDelegate = tx[parent.model] as unknown as {
+          findFirst: (a: unknown) => Promise<unknown>;
+        };
+        if (!(await parentDelegate.findFirst({ where: { id: parentId, deletedAt: null } }))) {
+          throw new AppError('STATE_CONFLICT', 'restore its parent first', {
+            reason: 'PARENT_DELETED',
+            parent_entity: String(parent.model),
+          });
+        }
+      }
+
+      // R172 §9 — a future occurrence returns into a slot that may have been
+      // given away since (R171 §6's rule for a cancellation's restore): the
+      // room and the staff it would re-occupy are checked, `SCHEDULE_CONFLICT`.
+      if (entry.targetEntity === 'Session' && (row['date'] as Date) >= calendarDay()) {
+        const occurrence = await tx.session.findUniqueOrThrow({
+          where: { id: entry.targetId },
+          select: {
+            id: true,
+            roomId: true,
+            date: true,
+            startTime: true,
+            endTime: true,
+            schedule: { select: { branchId: true } },
+            staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+          },
+        });
+        await assertOccurrenceFree(tx, {
+          id: occurrence.id,
+          branchId: occurrence.schedule.branchId,
+          roomId: occurrence.roomId,
+          date: occurrence.date,
+          startTime: occurrence.startTime,
+          endTime: occurrence.endTime,
+          staff: occurrence.staff,
         });
       }
-    }
 
-    // R172 §9 — a future occurrence returns into a slot that may have been
-    // given away since (R171 §6's rule for a cancellation's restore): the
-    // room and the staff it would re-occupy are checked, `SCHEDULE_CONFLICT`.
-    if (entry.targetEntity === 'Session' && (row['date'] as Date) >= calendarDay()) {
-      const occurrence = await tx.session.findUniqueOrThrow({
+      // R191 — a circle seat returns only to a student still enrolled at the
+      // Level (the rule each seat of a restored circle already meets).
+      if (entry.targetEntity === 'StudentTeachingGroup') {
+        const enrolled = await tx.enrollment.count({
+          where: { studentId: row['studentId'] as string, levelId: row['levelId'] as string, deletedAt: null },
+        });
+        if (enrolled === 0) {
+          throw new AppError('STATE_CONFLICT', 'the student is no longer enrolled at that Level', {
+            reason: 'NOT_ENROLLED',
+          });
+        }
+      }
+      // R191 — a question keeps its place on the paper or takes the last one.
+      if (entry.targetEntity === 'ExamQuestion') await placeRestoredQuestion(tx, entry.targetId);
+
+      // R191 — a REJECTED family link's rejection WAS its deletion: it comes
+      // back as a pending request for the reviewer to decide again, never into
+      // authority (§4.3). A revoked approved link comes back approved.
+      const reopened = entry.targetEntity === 'FamilyLink' && row['status'] === 'rejected';
+      await delegate.update({
         where: { id: entry.targetId },
-        select: {
-          id: true,
-          roomId: true,
-          date: true,
-          startTime: true,
-          endTime: true,
-          schedule: { select: { branchId: true } },
-          staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+        data: {
+          deletedAt: null,
+          deletedById: null,
+          ...(reopened
+            ? { status: 'pending', decidedAt: null, decidedById: null, decisionReason: null }
+            : {}),
         },
       });
-      await assertOccurrenceFree(tx, {
-        id: occurrence.id,
-        branchId: occurrence.schedule.branchId,
-        roomId: occurrence.roomId,
-        date: occurrence.date,
-        startTime: occurrence.startTime,
-        endTime: occurrence.endTime,
-        staff: occurrence.staff,
-      });
-    }
 
-    await delegate.update({
-      where: { id: entry.targetId },
-      data: { deletedAt: null, deletedById: null },
-    });
+      // **The children come back with it, or the restore is the half-restore §7
+      // warns about** (R59.3). Only declared reinstatements run: a type whose
+      // cascade is not written stays out of `RESTORABLE` entirely rather than
+      // being restored partially here.
+      // **The record's OWN tombstone is the reference, not the Trash entry's.**
+      // The service stamps the record and its children from one `new Date()`
+      // inside the transaction; the Trash row is written a few milliseconds later
+      // from a different clock reading. Comparing against the entry therefore
+      // excluded the very children it was meant to include — measured, not
+      // supposed: the staff were 4 ms early and a restored exam came back with
+      // nobody supervising it.
+      const deletedAt = row['deletedAt'] as Date;
 
-    // **The children come back with it, or the restore is the half-restore §7
-    // warns about** (R59.3). Only declared reinstatements run: a type whose
-    // cascade is not written stays out of `RESTORABLE` entirely rather than
-    // being restored partially here.
-    // **The record's OWN tombstone is the reference, not the Trash entry's.**
-    // The service stamps the record and its children from one `new Date()`
-    // inside the transaction; the Trash row is written a few milliseconds later
-    // from a different clock reading. Comparing against the entry therefore
-    // excluded the very children it was meant to include — measured, not
-    // supposed: the staff were 4 ms early and a restored exam came back with
-    // nobody supervising it.
-    const deletedAt = row['deletedAt'] as Date;
-
-    /**
-     * Restoring a FUTURE exam revives an operational obligation, not merely
-     * history. An account may have been deleted after the exam was binned,
-     * because its ExamStaff rows were correctly tombstoned at that moment.
-     * Lock and re-check those people before revival so restore participates in
-     * the same R111 serialization as ordinary staffing writes. Past exam staff
-     * remain historical evidence and may still point at a de-identified User.
-     */
-    if (entry.targetEntity === 'Exam') {
-      const examDate = row['date'];
-      // Morocco's date, not UTC's (codex review, 2026-09-22; R167 §2).
-      const today = calendarDay();
-      if (examDate instanceof Date && examDate >= today) {
-        const staff = await tx.examStaff.findMany({
-          where: { examId: entry.targetId, deletedAt: { gte: deletedAt } },
-          select: { userId: true },
-        });
-        await assertStaffAccountsAvailable(
-          tx,
-          staff.map((person) => person.userId),
-        );
+      /**
+       * Restoring a FUTURE exam revives an operational obligation, not merely
+       * history. An account may have been deleted after the exam was binned,
+       * because its ExamStaff rows were correctly tombstoned at that moment.
+       * Lock and re-check those people before revival so restore participates in
+       * the same R111 serialization as ordinary staffing writes. Past exam staff
+       * remain historical evidence and may still point at a de-identified User.
+       */
+      if (entry.targetEntity === 'Exam') {
+        const examDate = row['date'];
+        // Morocco's date, not UTC's (codex review, 2026-09-22; R167 §2).
+        const today = calendarDay();
+        if (examDate instanceof Date && examDate >= today) {
+          const staff = await tx.examStaff.findMany({
+            where: { examId: entry.targetId, deletedAt: { gte: deletedAt } },
+            select: { userId: true },
+          });
+          await assertStaffAccountsAvailable(
+            tx,
+            staff.map((person) => person.userId),
+          );
+        }
       }
-    }
 
-    for (const child of plan.children ?? []) {
-      const childDelegate = tx[child.model] as unknown as {
-        updateMany: (a: unknown) => Promise<{ count: number }>;
-      };
-      await childDelegate.updateMany({
-        // Scoped to the rows removed BY this deletion: a supervisor taken off
-        // the exam a week earlier stays off it, because that was a different
-        // decision by a different person.
-        where: child.snapshotIdsKey
-          ? {
-              [child.fk]: {
-                in: snapshotIds(entry.snapshot, child.snapshotIdsKey, entry.targetEntity),
-              },
-              deletedAt: { gte: deletedAt },
-            }
-          : { [child.fk]: entry.targetId, deletedAt: { gte: deletedAt } },
-        data: { deletedAt: null, deletedById: null },
+      for (const child of plan.children ?? []) {
+        const childDelegate = tx[child.model] as unknown as {
+          updateMany: (a: unknown) => Promise<{ count: number }>;
+        };
+        await childDelegate.updateMany({
+          // Scoped to the rows removed BY this deletion: a supervisor taken off
+          // the exam a week earlier stays off it, because that was a different
+          // decision by a different person.
+          where: child.snapshotIdsKey
+            ? {
+                [child.fk]: {
+                  in: snapshotIds(entry.snapshot, child.snapshotIdsKey, entry.targetEntity),
+                },
+                deletedAt: { gte: deletedAt },
+              }
+            : { [child.fk]: entry.targetId, deletedAt: { gte: deletedAt } },
+          data: { deletedAt: null, deletedById: null },
+        });
+      }
+
+      // What came back WITH it, per type (R169 §8, R191) — counted, so the
+      // screen can say what could not return.
+      let consequence: Omit<RestoreResult, 'targetEntity' | 'targetId'> = {};
+      switch (entry.targetEntity) {
+        case 'TeachingGroup':
+          consequence = await restoreCircleSeats(tx, entry.targetId, deletedAt);
+          break;
+        case 'RecurringCourseSchedule':
+          consequence = await restoreScheduleSessions(tx, entry.targetId, row, entry.snapshot);
+          break;
+        case 'Level':
+          consequence = await restoreLevelEventLinks(tx, entry.targetId, entry.snapshot);
+          break;
+        case 'Event':
+          consequence = await restoreEventScope(tx, entry.targetId, entry.snapshot);
+          break;
+        case 'AdministrativeGroup':
+          consequence = await restoreGroupEventLinks(tx, entry.targetId, entry.snapshot);
+          break;
+        case 'Enrollment':
+          consequence = await restoreEnrollmentSeats(tx, row['studentId'] as string, entry.snapshot);
+          break;
+        case 'StudentTeachingGroup':
+        case 'FamilyLink':
+          // Her audience — and with it the gate of every recording she appears
+          // in — just changed (TD-4.6), as it did when the row was removed.
+          await enqueueConsentReevaluationForStudent(tx, row['studentId'] as string);
+          if (reopened) consequence = { reopened_as_pending: true };
+          break;
+        case 'SessionContent':
+          await enqueueConsentReevaluationForSessions(tx, [row['sessionId'] as string]);
+          break;
+        case 'EducationalContent':
+          consequence = await enqueueContentStorageRestore(tx, row);
+          break;
+        case 'QuranProgressLog':
+          // §4.5 — coverage is recomputed from the live logs once the row is
+          // back; after the commit, as every log mutation does.
+          recalculateQuran = { studentId: row['studentId'] as string, surahId: row['surahId'] as number };
+          break;
+        default:
+          break;
+      }
+      if (cascadeUnknown) consequence = { ...consequence, cascade_unknown: true };
+
+      // The tombstone goes with the restoration: the record is no longer deleted,
+      // so leaving it listed would make the Trash disagree with the platform. The
+      // audit row below is what keeps the event answerable afterwards.
+      await tx.trash.delete({ where: { id } });
+
+      await audit.write(tx, {
+        actorUserId: actor.userId,
+        activeRole: actor.activeRole,
+        actionType: 'trash.restore',
+        targetEntity: entry.targetEntity,
+        targetId: entry.targetId,
+        detail: {
+          deleted_at: entry.deletedAt.toISOString(),
+          deleted_by: entry.deletedById,
+          // R169 §8 — what came back WITH it, in counts (TD-14: no names).
+          ...consequence,
+        },
+      });
+
+      return { targetEntity: entry.targetEntity, targetId: entry.targetId, ...consequence };
+    });
+  } catch (error) {
+    // R191 — a LIVE row has taken the place the restored one would hold (a
+    // live enrolment of the same student at the Level, a year with that label,
+    // presence already recorded for that student at that occurrence). The
+    // answer, not a failure: the restore is refused and the holder is named.
+    if (isUniqueViolation(error)) {
+      const constraint = constraintOf(error);
+      throw new AppError('STATE_CONFLICT', 'a live record already holds this place', {
+        reason: 'DUPLICATE_LIVE',
+        target_entity: entry.targetEntity,
+        constraint,
       });
     }
-    const consequence =
-      entry.targetEntity === 'TeachingGroup'
-        ? await restoreCircleSeats(tx, entry.targetId, row['deletedAt'] as Date)
-        : entry.targetEntity === 'RecurringCourseSchedule'
-          ? await restoreScheduleSessions(tx, entry.targetId, row, entry.snapshot)
-          : entry.targetEntity === 'Level'
-            ? await restoreLevelEventLinks(tx, entry.targetId, entry.snapshot)
-            : {};
-
-    // The tombstone goes with the restoration: the record is no longer deleted,
-    // so leaving it listed would make the Trash disagree with the platform. The
-    // audit row below is what keeps the event answerable afterwards.
-    await tx.trash.delete({ where: { id } });
-
-    await audit.write(tx, {
-      actorUserId: actor.userId,
-      activeRole: actor.activeRole,
-      actionType: 'trash.restore',
-      targetEntity: entry.targetEntity,
-      targetId: entry.targetId,
-      detail: {
-        deleted_at: entry.deletedAt.toISOString(),
-        deleted_by: entry.deletedById,
-        // R169 §8 — what came back WITH it, in counts (TD-14: no names).
-        ...consequence,
-      },
-    });
-
-    return { targetEntity: entry.targetEntity, targetId: entry.targetId, ...consequence };
-  });
+    throw error;
+  }
+  if (recalculateQuran !== null) {
+    const { studentId, surahId } = recalculateQuran as { studentId: string; surahId: number };
+    await recalculateFor(prisma, studentId, surahId);
+  }
+  return result;
 }
 
 /**
@@ -1243,13 +1775,24 @@ export async function restoreEntry(
  * Children, then the record, then the tombstone, then the audit row — one
  * transaction. A partial destruction is the single outcome that would leave the
  * platform unable to say what was removed, which is worse than either extreme.
+ * R191's deleted dependents are purged BEFORE it, each as the complete act its
+ * own entry describes; a refusal of the record afterwards leaves rows that
+ * were due for destruction anyway destroyed, and the record intact.
  *
  * ## The database decides what still depends on it
  *
- * Every foreign key into these tables is `Restrict`, so a live referrer makes
- * PostgreSQL refuse and that refusal becomes `DEPENDENTS_EXIST`. Enumerating
- * blockers in TypeScript would be a second copy of the schema, and the copy is
- * the one that drifts.
+ * Every foreign key into these tables is `Restrict`, so a LIVE referrer makes
+ * PostgreSQL refuse and that refusal becomes `DEPENDENTS_EXIST`, naming the
+ * holder. Enumerating blockers in TypeScript would be a second copy of the
+ * schema, and the copy is the one that drifts.
+ *
+ * ## An account is de-identified, never deleted (R111, R191)
+ *
+ * «حذف نهائي» on a `User` entry is `purgeUserAccount` — the same act as
+ * `DELETE /admin/users/{id}?permanent=true`, with the same two refusals (the
+ * last active Super Admin, live staffing responsibilities): the personal
+ * fields, credentials and snapshot go, the non-identifying row stays for the
+ * audit trail, and the Trash entry goes with the de-identification.
  */
 export async function purgeEntry(
   prisma: PrismaClient,
@@ -1257,8 +1800,89 @@ export async function purgeEntry(
   id: string,
 ): Promise<{ targetEntity: string; targetId: string; alreadyPurged: boolean }> {
   await assertFreshSuperAdmin(prisma, actor);
+  const entry = await prisma.trash.findUnique({ where: { id }, select: { targetEntity: true, targetId: true } });
+  if (!entry) throw new AppError('NOT_FOUND', 'no such trash entry');
+  if (entry.targetEntity === 'User') {
+    await purgeUserAccount(prisma, actor, entry.targetId);
+    return { targetEntity: 'User', targetId: entry.targetId, alreadyPurged: false };
+  }
   return purgeTrashEntry(prisma, actor, id);
 }
+
+/**
+ * **A record's deleted dependents go first** (R191, `TRASHED_DEPENDENTS`): each
+ * referrer row that is tombstoned AND has a Trash entry of its own is purged
+ * through that entry — the same body, its own consequences, its own audit row
+ * — depth first, so a deleted class under a deleted Branch still goes with its
+ * occurrences. Counted per type for the parent's audit row.
+ */
+async function purgeTrashedDependents(
+  prisma: PrismaClient,
+  actor: Actor | null,
+  targetEntity: string,
+  targetId: string,
+): Promise<{ dependents: Record<string, number>; orphans: Record<string, number> }> {
+  const dependents: Record<string, number> = {};
+  const orphans: Record<string, number> = {};
+  for (const dependent of TRASHED_DEPENDENTS[targetEntity] ?? []) {
+    const delegate = prisma[dependent.model] as unknown as {
+      findMany: (a: unknown) => Promise<{ id: string }[]>;
+      deleteMany: (a: unknown) => Promise<{ count: number }>;
+    };
+    const rows = await delegate.findMany({
+      where: { [dependent.fk]: targetId, deletedAt: { not: null } },
+      select: { id: true },
+    });
+    if (rows.length === 0) continue;
+    const entries = await prisma.trash.findMany({
+      where: { targetEntity: dependent.entity, targetId: { in: rows.map((row) => row.id) } },
+      select: { id: true, targetId: true },
+      orderBy: { deletedAt: 'asc' },
+    });
+    for (const entry of entries) {
+      try {
+        await purgeTrashEntry(prisma, actor, entry.id);
+        dependents[dependent.entity] = (dependents[dependent.entity] ?? 0) + 1;
+      } catch (error) {
+        // Already gone (a concurrent purge won): nothing to count.
+        if (error instanceof AppError && error.code === 'NOT_FOUND') continue;
+        throw error;
+      }
+    }
+    /**
+     * **A tombstone nothing names** — a join row cascade-deleted before its
+     * parent's snapshot listed ids (2026-08, before R59.2/R169), or removed
+     * before its own deletion wrote an entry. It is in no list, restorable by
+     * nobody, and it held «فرصة أمل» and «محو الأمية» in the Localhost Trash
+     * for five weeks. For the LEAF types — rows with nothing beneath them —
+     * it goes with the parent and is counted apart (`orphans_purged`). A
+     * tombstoned dependent WITH consequences of its own and no entry is left
+     * to the refusal, named: destroying it by improvisation is what the plan
+     * registry exists to prevent.
+     */
+    if (LEAF_DEPENDENTS.has(dependent.entity)) {
+      const named = new Set(entries.map((entry) => entry.targetId));
+      const orphanIds = rows.map((row) => row.id).filter((id) => !named.has(id));
+      if (orphanIds.length > 0) {
+        const gone = await delegate.deleteMany({ where: { id: { in: orphanIds }, deletedAt: { not: null } } });
+        if (gone.count > 0) orphans[dependent.entity] = (orphans[dependent.entity] ?? 0) + gone.count;
+      }
+    }
+  }
+  return { dependents, orphans };
+}
+
+/** Dependent types with nothing beneath them: a tombstone of theirs that no
+ *  entry names may go with the parent (`purgeTrashedDependents`). */
+const LEAF_DEPENDENTS = new Set([
+  'LevelSubject',
+  'CategorySubject',
+  'LevelSurah',
+  'StudentTeachingGroup',
+  'SessionContent',
+  'Attendance',
+  'Enrollment',
+]);
 
 /** Owned rows of an occurrence — they exist as part of it (TD-4.6c). */
 const SESSION_OWNED = [
@@ -1273,36 +1897,6 @@ const SESSION_OWNED = [
   'notification',
 ] as const;
 
-/** What keeps an occurrence — and its class — in the Trash: an exam sat in it. */
-function sessionKeepersWhere(): Prisma.SessionWhereInput {
-  return { exams: { some: {} } };
-}
-
-/**
- * How many occurrences still keep a deleted class in the Trash (R170 §8): the
- * live ones, and the tombstoned ones an exam was sat in.
- */
-async function sessionsKeepingSchedule(
-  db: PrismaClient | Prisma.TransactionClient,
-  scheduleId: string,
-): Promise<number> {
-  return db.session.count({
-    where: { scheduleId, OR: [{ deletedAt: null }, sessionKeepersWhere()] },
-  });
-}
-
-/**
- * **Destroys the deleted class's occurrences WITH their attendance and their
- * recordings** (R170 §8 — the Owner, 2026-09-22: *«those records be destroyed
- * with the class after seven days»*). Each occurrence's owned rows go first;
- * its attendance rows are deleted; a recording it produced is soft-deleted
- * into the Trash with its own snapshot and exact-key quarantine obligation, so
- * the file follows the ordinary content lifecycle (seven more days, then
- * `trash.retention-purge` destroys it through the storage retirement the
- * obligation records) rather than being unlinked and left as an orphan in the
- * library. Runs inside the purge transaction; `CONDITIONAL_PURGE` has already
- * refused if an exam was sat in any occurrence.
- */
 /**
  * **R172 §6 — an exam's evidence goes with it.** Answers (and their chosen
  * options), papers, marks (their per-question scores cascade) and attendance
@@ -1321,26 +1915,74 @@ async function purgeExamEvidence(
   return { submissions: submissions.count, grades: grades.count, attendance: attendance.count };
 }
 
+/**
+ * **The whole of an exam, destroyed** — its evidence (above), its options,
+ * then the owned rows `PURGEABLE.Exam` declares, then the row, then any Trash
+ * entries that named it or its questions. One body for the exam's own purge
+ * and for R191's rule that a quick test sat in a destroyed occurrence goes
+ * with the occurrence (`purgeSessions`): the two cannot drift.
+ */
+async function purgeExamWhole(
+  tx: Prisma.TransactionClient,
+  examId: string,
+): Promise<{ submissions: number; grades: number; attendance: number }> {
+  const evidence = await purgeExamEvidence(tx, examId);
+  await tx.examQuestionOption.deleteMany({ where: { question: { examId } } });
+  // Every question, live or tombstoned (no `deletedAt` term): all go with the paper.
+  const questions = await tx.examQuestion.findMany({ where: { examId }, select: { id: true } });
+  await tx.examStaff.deleteMany({ where: { examId } });
+  await tx.examQuestion.deleteMany({ where: { examId } });
+  await tx.notification.deleteMany({ where: { examId } });
+  await tx.exam.delete({ where: { id: examId } });
+  await tx.trash.deleteMany({
+    where: {
+      OR: [
+        { targetEntity: 'Exam', targetId: examId },
+        { targetEntity: 'ExamQuestion', targetId: { in: questions.map((question) => question.id) } },
+      ],
+    },
+  });
+  return evidence;
+}
+
+/**
+ * **Destroys the class's occurrences WITH their attendance, their recordings
+ * and the quick tests sat in them** (R170 §8 — the Owner, 2026-09-22: *«those
+ * records be destroyed with the class after seven days»*; R191 — the Owner,
+ * 2026-10-01: *«any element»*). Every occurrence of the class goes: the past
+ * ones its deletion took, the future ones it took, and the ones protection
+ * kept LIVE under the deleted class — the class row cannot go while any
+ * remains, and a class in the Trash is what the Owner chose to destroy. A
+ * recording an occurrence produced is soft-deleted into the Trash with its own
+ * snapshot and exact-key quarantine obligation, so the file follows the
+ * ordinary content lifecycle rather than being left as an orphan in the
+ * library. Runs inside the purge transaction.
+ */
 async function purgeScheduleSessions(
   tx: Prisma.TransactionClient,
   scheduleId: string,
   deletedById: string | null,
-): Promise<{ sessions: number; attendance: number; recordings: number }> {
-  const gone = await tx.session.findMany({
-    where: { scheduleId, deletedAt: { not: null }, NOT: sessionKeepersWhere() },
-    select: { id: true },
-  });
+): Promise<{ sessions: number; attendance: number; recordings: number; exams: number }> {
+  // Every occurrence, live or tombstoned (no `deletedAt` term — see above).
+  const gone = await tx.session.findMany({ where: { scheduleId }, select: { id: true } });
   return purgeSessions(tx, gone.map((session) => session.id), deletedById);
 }
 
 /** The destruction itself, for a class's occurrences (above) or one deleted
- *  on its own (R172 §9). The caller has already excluded the keepers. */
+ *  on its own (R172 §9). R191 — a quick test sat in one of them is addressed
+ *  to it (`exam_target_check`: a `session` target names its occurrence) and
+ *  cannot outlive it: it goes with the occurrence, whole (`purgeExamWhole`). */
 async function purgeSessions(
   tx: Prisma.TransactionClient,
   ids: string[],
   deletedById: string | null,
-): Promise<{ sessions: number; attendance: number; recordings: number }> {
-  if (ids.length === 0) return { sessions: 0, attendance: 0, recordings: 0 };
+): Promise<{ sessions: number; attendance: number; recordings: number; exams: number }> {
+  if (ids.length === 0) return { sessions: 0, attendance: 0, recordings: 0, exams: 0 };
+
+  // Every quick test addressed to them, live or tombstoned (no `deletedAt`
+  // term): none can outlive its occurrence.
+  const exams = await tx.exam.findMany({ where: { sessionId: { in: ids } }, select: { id: true } });
+  for (const exam of exams) await purgeExamWhole(tx, exam.id);
 
   // The recordings these occurrences produced (R99): each becomes an ordinary
   // deleted library item, with the obligation that moves its object.
@@ -1375,7 +2017,10 @@ async function purgeSessions(
     await delegate.deleteMany({ where: { sessionId: { in: ids } } });
   }
   await tx.session.deleteMany({ where: { id: { in: ids } } });
-  return { sessions: ids.length, attendance: attendance.count, recordings: recordingsDeleted };
+  // The Trash entries of occurrences deleted on their own (R172 §9) that
+  // just went with their class: the row is gone, so the entry goes too.
+  await tx.trash.deleteMany({ where: { targetEntity: 'Session', targetId: { in: ids } } });
+  return { sessions: ids.length, attendance: attendance.count, recordings: recordingsDeleted, exams: exams.length };
 }
 
 /**
@@ -1400,25 +2045,40 @@ async function purgeTrashEntry(
 
   const plan = PURGEABLE[entry.targetEntity];
   if (!plan) {
-    throw new AppError('STATE_CONFLICT', 'destroying this entity type is not supported', {
-      reason: PURGE_BLOCKED_REASON[entry.targetEntity] ?? 'NOT_YET_SUPPORTED',
-      target_entity: entry.targetEntity,
+    /**
+     * **A type no deletion writes any more** (R191). One such entry exists:
+     * `Exam.questions`, written by R124's migration for the paper blob it
+     * replaced, for a type nothing can read. There is no row to destroy — the
+     * entry IS the whole artefact — so «حذف نهائي» removes it, says so in the
+     * audit row, and the Trash stops listing a thing no button could act on.
+     * Restoring it stays refused: nothing knows what it would restore.
+     */
+    await prisma.$transaction(async (tx) => {
+      await tx.trash.delete({ where: { id } });
+      await audit.write(tx, {
+        actorUserId: actor?.userId ?? null,
+        activeRole: actor?.activeRole,
+        actionType: 'trash.permanent_delete',
+        targetEntity: entry.targetEntity,
+        targetId: entry.targetId,
+        detail: {
+          already_purged: true,
+          unknown_entity: true,
+          deleted_at: entry.deletedAt.toISOString(),
+          system: actor === null,
+        },
+      });
     });
+    return { targetEntity: entry.targetEntity, targetId: entry.targetId, alreadyPurged: true };
   }
 
-  /**
-   * **Re-asserted here, where it is authoritative.** The list's answer is a
-   * read taken earlier; between the two, a materialization job may have given
-   * this schedule its first occurrence. R59 keeps that coordinate, so the purge
-   * must see it.
-   */
-  const conditional = CONDITIONAL_PURGE[entry.targetEntity];
-  if (conditional !== undefined && !(await conditional.purgeable(prisma, entry.targetId))) {
-    throw new AppError('STATE_CONFLICT', 'this record carries history that must be kept', {
-      reason: conditional.reason,
-      target_entity: entry.targetEntity,
-    });
-  }
+  // R191 — its deleted dependents go first, each through its own entry.
+  const { dependents: dependentsPurged, orphans: orphansPurged } = await purgeTrashedDependents(
+    prisma,
+    actor,
+    entry.targetEntity,
+    entry.targetId,
+  );
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -1467,10 +2127,10 @@ async function purgeTrashEntry(
        * **R136 (Codex H2) — `ExamQuestionOption` is a GRANDCHILD, one hop past
        * what the flat `{ [fk]: targetId }` children mechanism below can
        * express** (its FK is to `ExamQuestion.id`, not to `examId` directly).
-       * `CONDITIONAL_PURGE.Exam` already guarantees no submission answers any
-       * of these questions by the time this runs, so removing every option
-       * first is exactly what makes `ExamQuestion.deleteMany` below succeed
-       * rather than hit the same RESTRICT this fix exists to stop hitting.
+       * `purgeExamEvidence` has removed every answer to these questions by
+       * the time this runs, so removing every option first is exactly what
+       * makes `ExamQuestion.deleteMany` below succeed rather than hit the same
+       * RESTRICT this fix exists to stop hitting.
        */
       let purgedWithExam = { submissions: 0, grades: 0, attendance: 0 };
       if (entry.targetEntity === 'Exam') {
@@ -1479,22 +2139,15 @@ async function purgeTrashEntry(
         purgedWithExam = await purgeExamEvidence(tx, entry.targetId);
         await tx.examQuestionOption.deleteMany({ where: { question: { examId: entry.targetId } } });
       }
-      // R170 §8 — a class goes with its occurrences, their attendance and
-      // their recordings; only an exam sat in one keeps it.
-      let purgedWithClass = { sessions: 0, attendance: 0, recordings: 0 };
+      // R170 §8 / R191 — a class goes with its occurrences, their attendance,
+      // their recordings and the quick tests sat in them.
+      let purgedWithClass = { sessions: 0, attendance: 0, recordings: 0, exams: 0 };
       if (entry.targetEntity === 'Session') {
         // R172 §9 — what one occurrence carries goes with it (R170 §8's rule);
-        // an exam sat in it keeps it.
-        if ((await tx.session.count({ where: { id: entry.targetId, ...sessionKeepersWhere() } })) > 0) {
-          throw new AppError('STATE_CONFLICT', 'an exam was sat in this occurrence', {
-            reason: 'SESSION_HAS_EXAM',
-            target_entity: entry.targetEntity,
-          });
-        }
+        // R191 — a quick test sat in it too (`purgeSessions`).
         purgedWithClass = await purgeSessions(tx, [entry.targetId], actor?.userId ?? null);
-        // The row itself is gone with them; the generic delete below would
-        // find nothing, so the entry is closed here.
-        await tx.trash.delete({ where: { id } });
+        // The row itself is gone with them (and its entry, by `purgeSessions`);
+        // the generic delete below would find nothing, so the act is closed here.
         await audit.write(tx, {
           actorUserId: actor?.userId ?? null,
           activeRole: actor?.activeRole,
@@ -1508,19 +2161,25 @@ async function purgeTrashEntry(
             system: actor === null,
             attendance_purged: purgedWithClass.attendance,
             recordings_deleted: purgedWithClass.recordings,
+            ...(purgedWithClass.exams > 0 ? { exams_purged: purgedWithClass.exams } : {}),
+            ...(Object.keys(dependentsPurged).length > 0 ? { dependents_purged: dependentsPurged } : {}),
+            ...(Object.keys(orphansPurged).length > 0 ? { orphans_purged: orphansPurged } : {}),
           },
         });
         return { targetEntity: entry.targetEntity, targetId: entry.targetId, alreadyPurged: false };
       }
       if (entry.targetEntity === 'RecurringCourseSchedule') {
-        // Re-asserted INSIDE the transaction, before anything is destroyed.
-        if ((await sessionsKeepingSchedule(tx, entry.targetId)) > 0) {
-          throw new AppError('STATE_CONFLICT', 'this class has occurrences an exam was sat in', {
-            reason: 'SESSIONS_HAVE_EXAMS',
-            target_entity: entry.targetEntity,
-          });
-        }
+        // R170 §8 / R191 — every occurrence it still holds goes with it.
         purgedWithClass = await purgeScheduleSessions(tx, entry.targetId, actor?.userId ?? null);
+      }
+      if (entry.targetEntity === 'EducationalContent') {
+        // R191 — the occurrence's recording row (R99) keeps saying it was
+        // recorded; the file it pointed at is what is being destroyed, so the
+        // pointer is cleared rather than the row kept hostage to a deleted item.
+        await tx.sessionRecording.updateMany({
+          where: { educationalContentId: entry.targetId },
+          data: { educationalContentId: null },
+        });
       }
 
       for (const child of plan.children ?? []) {
@@ -1571,8 +2230,13 @@ async function purgeTrashEntry(
                 sessions_purged: purgedWithClass.sessions,
                 attendance_purged: purgedWithClass.attendance,
                 recordings_deleted: purgedWithClass.recordings,
+                ...(purgedWithClass.exams > 0 ? { exams_purged: purgedWithClass.exams } : {}),
               }
             : {}),
+          // R191 — the deleted dependents that went first, per type, in counts;
+          // and the tombstones no entry named (leaf rows), likewise.
+          ...(Object.keys(dependentsPurged).length > 0 ? { dependents_purged: dependentsPurged } : {}),
+          ...(Object.keys(orphansPurged).length > 0 ? { orphans_purged: orphansPurged } : {}),
         },
       });
 
@@ -1603,7 +2267,7 @@ async function purgeTrashEntry(
          * rather than to a wrong one. The raw `constraint` stays for engineers;
          * the interface renders this.
          */
-        blocking_entity: constraint === null ? null : (BLOCKING_ENTITY[constraint] ?? null),
+        blocking_entity: blockingEntityOf(constraint),
       });
     }
     throw error;
@@ -1801,9 +2465,13 @@ function isForeignKeyViolation(error: unknown): boolean {
 }
 
 function sqlStateOf(error: unknown): string | null {
-  const cause = (error as { meta?: { driverAdapterError?: { cause?: { code?: unknown } } } }).meta
-    ?.driverAdapterError?.cause;
-  return typeof cause?.code === 'string' ? cause.code : null;
+  const cause = (
+    error as { meta?: { driverAdapterError?: { cause?: { code?: unknown; originalCode?: unknown } } } }
+  ).meta?.driverAdapterError?.cause;
+  // `code` on a RESTRICT refusal (P2039); `originalCode` on a typed violation
+  // the adapter classified itself (R191 — `UniqueConstraintViolation`).
+  for (const value of [cause?.code, cause?.originalCode]) if (typeof value === 'string') return value;
+  return null;
 }
 
 /** The constraint that held the row — the useful half of the message, so an
@@ -1813,16 +2481,19 @@ function constraintOf(error: unknown): string | null {
     meta?: {
       field_name?: unknown;
       constraint?: unknown;
-      driverAdapterError?: { cause?: { message?: unknown } };
+      driverAdapterError?: { cause?: { message?: unknown; originalMessage?: unknown } };
     };
   }).meta;
 
   for (const value of [meta?.constraint, meta?.field_name]) {
     if (typeof value === 'string') return value;
   }
-  const message = meta?.driverAdapterError?.cause?.message;
-  if (typeof message === 'string') {
-    return /foreign key constraint "([^"]+)"/.exec(message)?.[1] ?? null;
+  for (const message of [meta?.driverAdapterError?.cause?.message, meta?.driverAdapterError?.cause?.originalMessage]) {
+    if (typeof message !== 'string') continue;
+    // `violates foreign key constraint "…"` and, since R191, `duplicate key
+    // value violates unique constraint "…"` — both name the holder.
+    const named = /(?:foreign key|unique) constraint "([^"]+)"/.exec(message)?.[1];
+    if (named) return named;
   }
   return null;
 }

@@ -31,16 +31,20 @@ export const TRASH_ENTITY_TYPES = [
   'Session',
   'Event',
   'Exam',
+  'ExamQuestion',
+  'Attendance',
   'EducationalContent',
   'Enrollment',
   'StudentTeachingGroup',
   'LevelSubject',
+  'CategorySubject',
   'LevelSurah',
   'SessionContent',
   'FamilyLink',
   'QuranProgressLog',
   'HijriMonthStart',
   'SchedulingType',
+  'AcademicYear',
   'Partner',
   'User',
 ] as const;
@@ -71,11 +75,14 @@ export const TRASH_ENTITY_TYPES = [
  * whom, and when*.
  */
 /**
- * **«تمت الاستعادة» — and what came back with it** (R169 §8). A circle's seats, a
- * class schedule's occurrences and a Level's activities return only where they
- * still fit, so the sentence carries the counts: a seat that could not return
- * (she has since been seated elsewhere) or an occurrence whose date has passed
- * is SAID, never hidden behind a plain success.
+ * **«تمت الاستعادة» — and what came back with it** (R169 §8, R191). A circle's
+ * or an enrolment's seats, a class schedule's occurrences, a Level's or a
+ * group's activities and an activity's audience return only where they still
+ * fit, so the sentence carries the counts: a seat that could not return (she
+ * has since been seated elsewhere) or an occurrence whose date has passed is
+ * SAID, never hidden behind a plain success — as is a file on its way back
+ * from quarantine, a rejected link re-opened as a request, and a tombstone
+ * too old to name what it took.
  */
 export function restoredNotice(result: RestoreResult): string {
   const parts = [t('admin.trash.restored')];
@@ -96,7 +103,36 @@ export function restoredNotice(result: RestoreResult): string {
   else if ((result.event_links_restored ?? 0) > 0) {
     parts.push(count('admin.trash.eventLinksRestored', result.event_links_restored!));
   }
+  if (result.scope_links_unknown === true) parts.push(t('admin.trash.scopeLinksUnknown'));
+  else if (result.scope_links_restored !== undefined) {
+    parts.push(count('admin.trash.scopeLinksRestored', result.scope_links_restored));
+  }
+  if (result.file_restore_queued === true) parts.push(t('admin.trash.fileRestoreQueued'));
+  if (result.reopened_as_pending === true) parts.push(t('admin.trash.reopenedAsPending'));
+  if (result.cascade_unknown === true) parts.push(t('admin.trash.cascadeUnknown'));
   return parts.join(' ');
+}
+
+/**
+ * **What a purge takes with the record, said before the click** (R191). The
+ * generic sentence covers every type; a class, an occurrence and an activity
+ * carry records of their own — their occurrences, attendance, recordings and
+ * the quick tests sat in them; who answered for an activity, the presence
+ * recorded at it — and the confirmation names them.
+ */
+export function purgeNotice(entry: TrashEntry): string {
+  const body = t('admin.trash.purgeBody').replace('{record}', entry.label ?? entry.target_id.slice(0, 8));
+  const extra =
+    entry.target_entity === 'RecurringCourseSchedule'
+      ? t('admin.trash.purgeTakesClass')
+      : entry.target_entity === 'Session'
+        ? t('admin.trash.purgeTakesSession')
+        : entry.target_entity === 'Event'
+          ? t('admin.trash.purgeTakesEvent')
+          : entry.target_entity === 'User'
+            ? t('admin.trash.purgeTakesUser')
+            : null;
+  return extra ? `${body} ${extra}` : body;
 }
 
 export function TrashPage(): ReactNode {
@@ -110,14 +146,8 @@ export function TrashPage(): ReactNode {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [query, setQuery] = useState('');
-  /**
-   * **Which side of the Trash** (Owner, 2026-09-02). `actionable` is the
-   * default because that is what a Trash is for: rows a restore or a purge can
-   * actually be performed on. History kept because a Session or an audit row
-   * references it is reachable under `retained` — shown rather than hidden, and
-   * never offering two buttons that cannot work.
-   */
-  const [view, setView] = useState<'actionable' | 'retained' | 'all'>('actionable');
+  // (The «actionable / retained» lens of 2026-09-02 is withdrawn by R191:
+  // every row is both restorable and purgeable, so there is one side.)
   const [restoring, setRestoring] = useState<TrashEntry | null>(null);
   const [purging, setPurging] = useState<TrashEntry | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -133,7 +163,6 @@ export function TrashPage(): ReactNode {
           ...(from ? { from } : {}),
           ...(to ? { to } : {}),
           ...(query.trim() ? { q: query.trim() } : {}),
-          view,
         },
         page,
       );
@@ -143,7 +172,7 @@ export function TrashPage(): ReactNode {
     } catch {
       setStatus('error');
     }
-  }, [accessToken, entity, from, to, query, view, page]);
+  }, [accessToken, entity, from, to, query, page]);
 
   useEffect(() => {
     void load();
@@ -166,7 +195,12 @@ export function TrashPage(): ReactNode {
     {
       key: 'entity',
       header: t('admin.trash.colEntity'),
-      cell: (r) => t(`admin.trash.entity.${r.target_entity}`),
+      // A type nothing writes any more (R191 — the legacy «Exam.questions»
+      // entry) has no word in the catalogue: its raw name, never a raw key.
+      cell: (r) => {
+        const word = t(`admin.trash.entity.${r.target_entity}`);
+        return word.startsWith('admin.trash.entity.') ? r.target_entity : word;
+      },
     },
     {
       key: 'deletedAt',
@@ -271,7 +305,11 @@ export function TrashPage(): ReactNode {
             : t('admin.trash.dependentsExist')
           : reason === 'NOT_DELETED'
             ? t('admin.trash.notDeleted')
-            : t('admin.trash.purgeFailed'),
+            : // R191 — an account's purge is R111's de-identification, with its
+              // two refusals: the last active Super Admin, live responsibilities.
+              reason === 'LAST_SUPER_ADMIN' || reason === 'RESPONSIBILITIES_ASSIGNED'
+              ? t(`admin.trash.purgeRefused.${reason}`)
+              : t('admin.trash.purgeFailed'),
       );
     } finally {
       setBusy(false);
@@ -304,7 +342,15 @@ export function TrashPage(): ReactNode {
                   ? 'admin.trash.scheduleConflict'
                   : reason === 'INCOMPLETE_SNAPSHOT'
                     ? 'admin.trash.incompleteSnapshot'
-                    : 'admin.trash.restoreFailed',
+                    : // R191 — a live row holds the place; the student has left
+                      // the Level; an account's window has closed.
+                      reason === 'DUPLICATE_LIVE'
+                      ? 'admin.trash.duplicateLive'
+                      : reason === 'NOT_ENROLLED'
+                        ? 'admin.trash.notEnrolled'
+                        : reason === 'RESTORATION_EXPIRED'
+                          ? 'admin.trash.restorationExpired'
+                          : 'admin.trash.restoreFailed',
         ),
       );
     } finally {
@@ -347,17 +393,6 @@ export function TrashPage(): ReactNode {
               placeholder={t('admin.trash.searchPlaceholder')}
             />
             <SelectField
-              label={t('admin.trash.viewLabel')}
-              value={view}
-              onChange={(v) => refilter(() => setView(v as 'actionable' | 'retained' | 'all'))}
-              options={[
-                { value: 'actionable', label: t('admin.trash.view.actionable') },
-                { value: 'retained', label: t('admin.trash.view.retained') },
-                { value: 'all', label: t('admin.trash.view.all') },
-              ]}
-              hint={t('admin.trash.viewHint')}
-            />
-            <SelectField
               label={t('admin.trash.colEntity')}
               value={entity}
               onChange={(v) => refilter(() => setEntity(v))}
@@ -392,10 +427,7 @@ export function TrashPage(): ReactNode {
         open={purging !== null}
         danger
         title={t('admin.trash.purgeTitle')}
-        body={t('admin.trash.purgeBody').replace(
-          '{record}',
-          purging?.label ?? purging?.target_id.slice(0, 8) ?? '',
-        )}
+        body={purging ? purgeNotice(purging) : ''}
         confirmLabel={t('admin.trash.purge')}
         busy={busy}
         onConfirm={() => void confirmPurge()}

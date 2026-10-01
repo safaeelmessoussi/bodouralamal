@@ -3,6 +3,7 @@ import { DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { afterAll, describe, expect, it } from 'vitest';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import { quarantineKeyFor } from '../lib/file-types.js';
 import { createStorageClients, deleteObject, statObjectStrict, type StorageClients } from '../lib/storage.js';
 import { createWorkerCatalog } from '../jobs/runner.js';
 import { requireRetirement, reconcileRetirements, importLegacyRetirements, wakeRetirement } from '../repositories/storage-retirement.repository.js';
@@ -159,6 +160,43 @@ describe('B5 durable retirement authority against real PostgreSQL/MinIO/pg-boss'
     expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: record.id } })).completedAt).toBeNull();
     await executeRetirement(prisma, storage, record.id);
     expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: record.id } })).completedAt).not.toBeNull();
+  });
+
+  it('R191 — `restore_quarantined_object` brings a restored item\'s bytes back to the canonical key, once the row is live', async () => {
+    const contentId = randomUUID();
+    const storageKey = `content/${contentId}/${randomUUID()}/restored.pdf`;
+    const quarantineKey = quarantineKeyFor(contentId, storageKey);
+    owned.push({ contentId, storageKey });
+    const category = await prisma.category.create({ data: { name: '[retirement-test] فئة' } });
+    const level = await prisma.level.create({ data: { name: '[retirement-test] مستوى', categoryId: category.id } });
+    const subject = await prisma.subject.create({ data: { name: '[retirement-test] مادة' } });
+    const year = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
+    try {
+      await prisma.educationalContent.create({
+        data: {
+          id: contentId, title: '[retirement-test] ملف', levelId: level.id, subjectId: subject.id, academicYearId: year.id,
+          storageBucket: 'private', storageKey, originalFilename: 'restored.pdf', mimeType: 'application/pdf', sizeBytes: BigInt(8),
+        },
+      });
+      // The quarantine job had moved the bytes; the row is live again (restored).
+      await storage.internal.send(new PutObjectCommand({ Bucket: 'private', Key: quarantineKey, Body: 'restored' }));
+      const record = await prisma.$transaction((tx) =>
+        requireRetirement(tx, { contentId, bucket: 'private', storageKey, operation: 'restore_quarantined_object' }));
+      await prisma.$executeRaw`UPDATE pgboss.job SET start_after = now() + interval '1 hour'
+        WHERE name = 'content.quarantine-purge' AND data->>'retirement_id' = ${record.id}`;
+
+      await executeRetirement(prisma, storage, record.id);
+      expect(await statObjectStrict(storage, 'private', storageKey)).not.toBeNull();
+      expect(await statObjectStrict(storage, 'private', quarantineKey)).toBeNull();
+      expect((await prisma.storageRetirement.findUniqueOrThrow({ where: { id: record.id } })).completedAt).not.toBeNull();
+    } finally {
+      await prisma.storageRetirement.deleteMany({ where: { contentId } });
+      await prisma.educationalContent.deleteMany({ where: { id: contentId } });
+      await prisma.level.delete({ where: { id: level.id } });
+      await prisma.category.delete({ where: { id: category.id } });
+      await prisma.subject.delete({ where: { id: subject.id } });
+      await deleteObject(storage, 'private', quarantineKey);
+    }
   });
 
   it('imports an exact legacy failed job before history disappears; repeated import is harmless', async () => {

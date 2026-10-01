@@ -49,13 +49,6 @@ export interface TrashQuery {
   from?: string;
   to?: string;
   q?: string;
-  /**
-   * Which side of the Trash to read (Owner, 2026-09-02). `actionable` — the
-   * server's default — lists rows a restore or purge can actually be performed
-   * on; `retained` lists history kept because something references it. The
-   * stored rows are the same either way; this is a lens, not a move.
-   */
-  view?: 'actionable' | 'retained' | 'all';
 }
 
 export async function listTrash(
@@ -70,11 +63,12 @@ export async function listTrash(
   return api<Page<TrashEntry>>(`/admin/trash?${params.toString()}`, { token });
 }
 
-/** Refused loudly for an entity type whose restoration is not yet complete —
- *  the screen does not offer it, and the server refuses it anyway. */
-/** What came back WITH the record (R169 §8) — present only for the types that
- *  take something with them: a circle's seats, a class schedule's occurrences,
- *  the activities re-addressed to a Level. */
+/** What came back WITH the record (R169 §8, R191) — present only for the
+ *  types that take something with them: a circle's or an enrolment's seats, a
+ *  class schedule's occurrences, the activities re-addressed to a Level or a
+ *  group, an activity's audience, a library item's file, a rejected family
+ *  link re-opened as a request; and whether the tombstone could name what it
+ *  took at all. */
 export interface RestoreResult {
   target_entity: string;
   target_id: string;
@@ -84,6 +78,11 @@ export interface RestoreResult {
   sessions_not_restored?: number;
   event_links_restored?: number;
   event_links_unknown?: boolean;
+  scope_links_restored?: number;
+  scope_links_unknown?: boolean;
+  file_restore_queued?: boolean;
+  reopened_as_pending?: boolean;
+  cascade_unknown?: boolean;
 }
 
 export async function restoreTrashEntry(id: string, token: string | null): Promise<RestoreResult> {

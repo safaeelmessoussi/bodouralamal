@@ -521,7 +521,7 @@ describe("a REJECTION is recorded and then soft-deleted (Owner decision, 2026-09
     ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
   });
 
-  it("TRASH RESTORE CANNOT RESURRECT IT into a live relationship", async () => {
+  it("TRASH RESTORE CANNOT RESURRECT IT into authority — it re-opens it as a request (R191)", async () => {
     const parent = await makeUser("ولي");
     const student = await makeUser("طفلة");
     const admin = await makeStaff("admin");
@@ -535,20 +535,18 @@ describe("a REJECTION is recorded and then soft-deleted (Owner decision, 2026-09
     });
 
     /**
-     * **The safeguarding property, proved rather than assumed.** `FamilyLink` is
-     * absent from `RESTORABLE` and carries `CASCADE_RELATIONSHIPS` in
-     * `BLOCKED_REASON`, so a generic restore is refused by name — a rejected
-     * link can never come back as a live row, whatever a Super Admin clicks.
+     * **The safeguarding property, proved rather than assumed.** The rejection
+     * WAS the deletion, so what a restore gives back is the request — PENDING,
+     * undecided, conferring nothing — never the approved relationship. The
+     * reviewer decides it again (§4.3; R191).
      */
-    await expect(
-      restoreEntry(prisma, await actorFor(prisma, superAdmin), entry.id),
-    ).rejects.toMatchObject({
-      code: "STATE_CONFLICT",
-      details: expect.objectContaining({ reason: "CASCADE_RELATIONSHIPS" }),
-    });
-    const still = await prisma.familyLink.findUniqueOrThrow({ where: { id: linkId } });
-    expect(still.deletedAt).not.toBeNull();
-    expect(still.status).toBe("rejected");
+    const result = await restoreEntry(prisma, await actorFor(prisma, superAdmin), entry.id);
+    expect(result.reopened_as_pending).toBe(true);
+    const back = await prisma.familyLink.findUniqueOrThrow({ where: { id: linkId } });
+    expect(back.deletedAt).toBeNull();
+    expect(back.status).toBe("pending");
+    expect(back.decidedAt).toBeNull();
+    expect(back.decidedById).toBeNull();
   });
 
   it("an APPROVAL still leaves a live, authority-bearing row", async () => {

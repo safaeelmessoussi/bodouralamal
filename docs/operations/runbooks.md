@@ -16,28 +16,32 @@ The executable procedure, timers, key escrow, disk floor, operator checks, snaps
 
 ## Restoring a soft-deleted record
 
-- **Never run restoration SQL in `psql`**: a raw session enforces no authority, parent-first ordering or audit. Restore through `/admin/trash` as a live Super Admin; the service clears the tombstone, reinstates only the child rows declared safe for that type, removes the Trash entry and writes `trash.restore` in one transaction.
-- **R111 account deletion is a special case:** the recoverable phase removes no family link, enrolment, Teaching Group membership, course staffing, role or Google identity — only the User tombstone and credential revocation — so restoring within the three-day window is complete (revoked sessions stay revoked). Permanent de-identification removes the Trash entry in the same transaction.
-- Every other entity: clearing `deleted_at` is insufficient when owned relationships were removed; the service refuses those types until reinstatement is implemented and tested. No general `db:restore` CLI exists.
-- Trash UI shipped (R52), permanent deletion with it (R59.1); the snapshot and 90-day window are non-negotiable ([`BR-15`](../reference/business-rules.md#br-15)).
+- **Never run restoration SQL in `psql`**: a raw session enforces no authority, parent-first ordering or audit. Restore through `/admin/trash` as a live Super Admin; the service clears the tombstone, reinstates what that type's deletion took, removes the Trash entry and writes `trash.restore` (with the counts) in one transaction.
+- **R111 account deletion is a special case:** the recoverable phase removes no family link, enrolment, Teaching Group membership, course staffing, role or Google identity — only the User tombstone and credential revocation — so restoring within the seven-day window is complete (revoked sessions stay revoked). Permanent de-identification removes the Trash entry in the same transaction.
+- Trash UI shipped (R52), permanent deletion with it (R59.1); the snapshot and the seven-day window are non-negotiable ([`BR-15`](../reference/business-rules.md#br-15)). No general `db:restore` CLI exists.
 
-### What the screen can restore
+### What the screen can restore — every type (R191)
 
-`User` (R111), `Branch`, `Category`, `Subject`, `Room`, `Partner`, `Exam` (R59.3), `HijriMonthStart` (R59.5). A current Subject snapshot names the exact `LevelSubject` rows deleted with it and restores only those; a legacy snapshot without those ids is labelled `INCOMPLETE_SNAPSHOT` and not offered. Everything else is refused loudly.
+Every type that reaches the Trash. What comes back WITH the record, and what is refused by name: `Level` — curriculum, «مقرر الحفظ», groups, the activities that named it (`event_links_*`); `AdministrativeGroup` — the activities that named it (`removed_event_ids`, recorded since R191); `TeachingGroup` — the seats it released where they still fit (`seats_*`); `RecurringCourseSchedule` — the occurrences its deletion removed (`sessions_*`; `SCHEDULE_CONFLICT` if the room or staff were booked since); `Session` — one occurrence, a future one checked against its slot; `Exam` — its supervisors (a future one revalidated); `Event` — its audience from the snapshot (`scope_links_*`); `Enrollment` — the circle seats its ending released; `StudentTeachingGroup` — if still enrolled at the Level (`NOT_ENROLLED`); `FamilyLink` — approved returns approved, REJECTED returns as a PENDING request (`reopened_as_pending`), never into authority (§4.3); `EducationalContent` — the row now, the file back from `quarantine/` by the `restore_quarantined_object` obligation (`file_restore_queued`); `ExamQuestion` — with its options, keeping its place on the paper or taking the last; `QuranProgressLog` — coverage recomputed; the reference and join types alone. A tombstone older than its type's snapshot keys restores the record alone and says so (`cascade_unknown`). Refusals: `PARENT_DELETED` (restore the parent first), `DUPLICATE_LIVE` (a live row holds the place — a live enrolment, a year's label, presence for that student and occurrence), `ALREADY_PURGED`.
 
 ### Permanent deletion, and what it will not do
 
-- `DELETE /admin/trash/{id}` (Super Admin) destroys the record, its **declared** cascade children and tombstone in one transaction and writes `trash.permanent_delete`, retained indefinitely (absent from the `audit.purge` allowlist).
-- Refuses when a live row still references it (`DEPENDENTS_EXIST`, naming the constraint); no force flag by design — clear dependants deliberately.
+- `DELETE /admin/trash/{id}` (Super Admin) destroys the record, its **declared** consequences and tombstone in one transaction and writes `trash.permanent_delete`, retained indefinitely (absent from the `audit.purge` allowlist). **Every entry is purgeable (R191)**: a `User` is DE-IDENTIFIED (R111 — `purgeUserAccount`, same refusals as `DELETE /admin/users/{id}?permanent=true`: `LAST_SUPER_ADMIN`, `RESPONSIBILITIES_ASSIGNED`); an entry of a type nothing writes any more (`Exam.questions`, R124's migration) is removed alone (`unknown_entity`).
+- **Its DELETED dependents go first, each through its own entry** (`dependents_purged`, per type); a tombstoned LEAF row no entry names (a 2026-08 cascade: `LevelSubject`, `CategorySubject`, `LevelSurah`, `StudentTeachingGroup`, `SessionContent`, `Attendance`, `Enrollment`) goes with the parent (`orphans_purged`).
+- Refuses only when a **LIVE** row still references it (`DEPENDENTS_EXIST`, naming the constraint and the holder — `blocking_entity`, read off `<table>_<column>_fkey`); no force flag by design — move or delete that record deliberately.
 
-| Type | Reason | Instead |
-|---|---|---|
-| `User` | `ACCOUNTABILITY_RECORD` — referenced by `AuditLog` and institutional records | R111 permanent de-identification: non-identifying tombstone stays; personal fields, credentials, planning data, snapshot go |
-| `RecurringCourseSchedule` | **Purged WITH its occurrences, their attendance and their recordings after the seven days (R170 §8, superseding R118 (1); Owner, 2026-09-22)** — a recording becomes an ordinary deleted library item with its quarantine obligation. `SESSIONS_HAVE_EXAMS` refuses while any occurrence is LIVE or an exam was sat in it (R136) | Keep it; never delete a Session by SQL |
+| Type | What goes with it |
+|---|---|
+| `Event` | its four scope joins, who answered for it (`EventStaff`), the presence recorded at it, the notices sent about it |
+| `RecurringCourseSchedule` | its staffing and **every occurrence it still holds** — the past and future ones its deletion took AND the ones protection kept live under it — with their attendance, their recordings (each becomes a deleted library item with its own window and quarantine obligation) and the quick tests sat in them, whole (R172 §6's rule; `exams_purged`) |
+| `Session` | its owned rows, attendance, recordings, and a quick test sat in it, whole |
+| `Exam` | supervisors, paper, notices, and its evidence — answers, papers, marks, attendance (R172 §6) |
+| `ExamQuestion` | its options (a question removed from an unanswered paper only) |
+| `EducationalContent` | its session links; the occurrence's `SessionRecording` row keeps saying it was recorded, pointing at nothing; the object (canonical and quarantine keys) through the exact `StorageRetirement` obligation |
 
-- `QuranProgressLog`: account deletion retains every progress row, but a teacher's tombstoned correction may be permanently purged; its `quranlog.delete` and `trash.permanent_delete` audits remain. `LevelSurah`, `Partner` and an unused `SchedulingType` are explicit leaf plans. Parent Level/Subject purges use only child ids in the parent's snapshot, never a broad FK delete.
+- `QuranProgressLog`: account deletion retains every progress row, but a teacher's tombstoned correction may be permanently purged; its `quranlog.delete` and `trash.permanent_delete` audits remain. Parent Level/Subject purges use the child ids in the parent's snapshot, never a broad FK delete.
 - `EducationalContent`: the transaction inserts an exact `StorageRetirement` record and `content.quarantine-purge` wakeup before deleting the row and Trash locator; absent queue → whole transaction rolls back; storage outage retries under TD-7. After B5, pg-boss history is execution evidence, not the sole locator. Never delete an unresolved retirement row to make a dashboard green.
-- The B5 reconciliation cron authorises **no additional destruction**; age-based Trash selection belongs to `trash.retention-purge`, unchanged.
+- The B5 reconciliation cron authorises **no additional destruction**; age-based Trash selection belongs to `trash.retention-purge`, unchanged (it uses the same body, so a `User` is de-identified and an unknown type's entry removed on expiry too).
 
 ## Reading the audit log
 

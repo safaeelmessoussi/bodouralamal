@@ -267,7 +267,13 @@ export async function deleteAdministrativeGroup(
 
     // `EventAdministrativeGroup` is an owned join row — *«this activity is
     // addressed to that group»* — so it follows the deletion rather than
-    // refusing it. The Event and its other scopes are untouched.
+    // refusing it. The Event and its other scopes are untouched. R191 — WHICH
+    // activities named the group is written into the snapshot (ids only,
+    // TD-14), so a restore can re-address them (`restoreGroupEventLinks`).
+    const eventLinks = await tx.eventAdministrativeGroup.findMany({
+      where: { administrativeGroupId: id },
+      select: { eventId: true },
+    });
     await tx.eventAdministrativeGroup.deleteMany({ where: { administrativeGroupId: id } });
 
     /**
@@ -291,7 +297,9 @@ export async function deleteAdministrativeGroup(
     await trash.snapshot(tx, {
       targetEntity: 'AdministrativeGroup',
       targetId: id,
-      snapshot: JSON.parse(JSON.stringify(group)) as object,
+      snapshot: JSON.parse(
+        JSON.stringify({ ...group, removed_event_ids: eventLinks.map((link) => link.eventId) }),
+      ) as object,
       deletedById: actor.userId,
     });
     await audit.write(tx, {

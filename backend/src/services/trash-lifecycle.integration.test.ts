@@ -73,6 +73,10 @@ async function cleanup(): Promise<void> {
     const ids = mySchedules.map((s) => s.id);
     await prisma.attendance.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
     await prisma.sessionRecording.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
+    // R191's fixtures give the quick test a paper and presence of its own.
+    await prisma.attendance.deleteMany({ where: { exam: { session: { scheduleId: { in: ids } } } } });
+    await prisma.examQuestionOption.deleteMany({ where: { question: { exam: { session: { scheduleId: { in: ids } } } } } });
+    await prisma.examQuestion.deleteMany({ where: { exam: { session: { scheduleId: { in: ids } } } } });
     await prisma.exam.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
     await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
 
@@ -270,7 +274,10 @@ describe('exact owned-child lifecycle plans', () => {
     expect(await prisma.event.count({ where: { id: event.id } })).toBe(1);
   });
 
-  it('does not sweep a LevelSubject deleted in an earlier independent act', async () => {
+  it('a LevelSubject deleted in an earlier independent act goes through ITS OWN entry, never swept as a child (R191)', async () => {
+    // The Level's plan still names only the rows ITS deletion took; the
+    // earlier, independent removal is destroyed as what it is — a deleted
+    // dependent with a Trash entry of its own, purged first by name.
     const { levelId, subjectId } = await curriculum();
     const branch = await prisma.branch.create({ data: { name: `${TAG} فرع` } });
     await prisma.administrativeGroup.create({
@@ -287,13 +294,14 @@ describe('exact owned-child lifecycle plans', () => {
     const levelTrash = await prisma.trash.findFirstOrThrow({
       where: { targetEntity: 'Level', targetId: levelId },
     });
-    await expect(purgeEntry(prisma, superAdmin(), levelTrash.id)).rejects.toMatchObject({
-      code: 'STATE_CONFLICT',
-      details: { reason: 'DEPENDENTS_EXIST', constraint: 'level_subject_level_id_fkey' },
-    });
-    expect(await prisma.levelSubject.count({ where: { id: link.id } })).toBe(1);
-    expect(await prisma.trash.count({ where: { id: linkTrash.id } })).toBe(1);
-    expect(await prisma.level.count({ where: { id: levelId } })).toBe(1);
+    await purgeEntry(prisma, superAdmin(), levelTrash.id);
+    expect(await prisma.levelSubject.count({ where: { id: link.id } })).toBe(0);
+    expect(await prisma.trash.count({ where: { id: { in: [linkTrash.id, levelTrash.id] } } })).toBe(0);
+    expect(await prisma.level.count({ where: { id: levelId } })).toBe(0);
+    // Two acts, two rows: the link's own, and the Level's naming it in counts.
+    expect(await prisma.auditLog.count({ where: { actionType: 'trash.permanent_delete', targetId: link.id } })).toBe(1);
+    const trail = await prisma.auditLog.findFirst({ where: { actionType: 'trash.permanent_delete', targetId: levelId } });
+    expect(trail?.detail).toMatchObject({ dependents_purged: { LevelSubject: 1 } });
   });
 });
 
@@ -750,20 +758,22 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
     expect(trail?.detail).toMatchObject({ sessions_purged: 1, attendance_purged: 1, recordings_deleted: 1 });
   });
 
-  it('R170 §8 — a LIVE occurrence still keeps its class: nothing is destroyed from under the calendar', async () => {
+  it('R191 — a LIVE occurrence protection kept under the deleted class goes WITH the class', async () => {
+    // Until R191 a live occurrence kept its class (`SESSIONS_HAVE_EXAMS`);
+    // the class row cannot go while any occurrence remains, and a class in
+    // the Trash is what the Owner chose to destroy — «any element».
     const { scheduleId, entryId } = await deletedSchedule(true);
     const listed = (
       await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'all' })
     ).data.find((r) => r.targetId === scheduleId)!;
-    expect(listed.purgeable).toBe(false);
-    expect(listed.purgeBlockedReason).toBe('SESSIONS_HAVE_EXAMS');
-    await expect(purgeEntry(prisma, superAdmin(), entryId)).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: 'SESSIONS_HAVE_EXAMS' }),
-    });
-    expect(await prisma.session.count({ where: { scheduleId } })).toBe(1);
+    expect(listed.purgeable).toBe(true);
+    expect(listed.purgeBlockedReason).toBeNull();
+    await purgeEntry(prisma, superAdmin(), entryId);
+    expect(await prisma.session.count({ where: { scheduleId } })).toBe(0);
+    expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(0);
   });
 
-  it('R170 §8 — an occurrence an EXAM was sat in keeps its class: an exam’s evidence never goes with a class', async () => {
+  it('R191 — a quick test sat in a destroyed occurrence goes with it, whole: paper, evidence, entries', async () => {
     const { scheduleId, entryId } = await deletedSchedule(true);
     const session = await prisma.session.findFirstOrThrow({ where: { scheduleId }, select: { id: true } });
     const { levelId, subjectId } = await curriculum();
@@ -779,22 +789,38 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
         status: 'published',
       },
     });
-    await prisma.session.updateMany({ where: { scheduleId }, data: { deletedAt: new Date(), deletedById: actorUserId } });
-    await expect(purgeEntry(prisma, superAdmin(), entryId)).rejects.toMatchObject({
-      details: expect.objectContaining({ reason: 'SESSIONS_HAVE_EXAMS' }),
+    const question = await prisma.examQuestion.create({
+      data: { examId: exam.id, displayOrder: 1, kind: 'single_choice', prompt: 'س' },
     });
-    expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(1);
-    expect(await prisma.session.count({ where: { scheduleId } })).toBe(1);
-    await prisma.exam.delete({ where: { id: exam.id } });
+    await prisma.examQuestionOption.create({ data: { questionId: question.id, displayOrder: 1, label: 'أ' } });
+    const student = await prisma.user.create({
+      data: { nameArabic: `${TAG} ممتحَنة`, sex: 'female', accountStatus: 'active', isBeneficiary: true },
+    });
+    await prisma.attendance.create({
+      data: { examId: exam.id, occurrenceDate: new Date('2026-09-07'), studentId: student.id, markedById: actorUserId },
+    });
+    await prisma.session.updateMany({ where: { scheduleId }, data: { deletedAt: new Date(), deletedById: actorUserId } });
+
+    await purgeEntry(prisma, superAdmin(), entryId);
+    expect(await prisma.recurringCourseSchedule.count({ where: { id: scheduleId } })).toBe(0);
+    expect(await prisma.session.count({ where: { scheduleId } })).toBe(0);
+    expect(await prisma.exam.count({ where: { id: exam.id } })).toBe(0);
+    expect(await prisma.examQuestion.count({ where: { examId: exam.id } })).toBe(0);
+    expect(await prisma.attendance.count({ where: { studentId: student.id } })).toBe(0);
+    const trail = await prisma.auditLog.findFirst({
+      where: { actionType: 'trash.permanent_delete', targetId: scheduleId },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(trail?.detail).toMatchObject({ sessions_purged: 1, exams_purged: 1 });
   });
 
-  it('unblocks its AdministrativeGroup once the empty schedule is purged (ordered)', async () => {
+  it('R191 — a deleted group takes the deleted schedule under it with it, through that schedule’s own entry', async () => {
     /**
-     * The UAT blocker, in miniature: a deleted group refused because a deleted
-     * schedule still named it. Neither was destroyable before, so the pair was
-     * stuck. Decision A makes the schedule disposable when it never
-     * materialized, and ordered purge then reaches the group — **child first,
-     * then parent**, with PostgreSQL refusing until the order is right.
+     * The UAT blocker of 2026-09-02, in miniature: a deleted group refused
+     * because a deleted schedule still named it, so the pair had to be purged
+     * child first. Both are in the Trash and both are due for destruction, so
+     * the group's purge now purges the schedule's entry FIRST — the same body,
+     * its own audit row — and then the group. Nothing live is touched.
      */
     const { levelId } = await curriculum();
     const branch = await prisma.branch.create({
@@ -838,34 +864,72 @@ describe('Owner lifecycle decisions of 2026-09-02', () => {
     const groupEntry = await mk('AdministrativeGroup', group.id);
     const scheduleEntry = await mk('RecurringCourseSchedule', schedule.id);
 
-    // Parent first is refused — by the database, which is the authority on what
-    // still points at the row.
-    await expect(purgeEntry(prisma, superAdmin(), groupEntry)).rejects.toMatchObject({
+    await purgeEntry(prisma, superAdmin(), groupEntry);
+
+    expect(await prisma.recurringCourseSchedule.count({ where: { id: schedule.id } })).toBe(0);
+    expect(await prisma.administrativeGroup.count({ where: { id: group.id } })).toBe(0);
+    expect(await prisma.trash.count({ where: { id: { in: [groupEntry, scheduleEntry] } } })).toBe(0);
+    // Two acts, two audit rows: the schedule's own, and the group's naming it.
+    expect(await prisma.auditLog.count({ where: { actionType: 'trash.permanent_delete', targetId: schedule.id } })).toBe(1);
+    const trail = await prisma.auditLog.findFirst({
+      where: { actionType: 'trash.permanent_delete', targetId: group.id },
+    });
+    expect(trail?.detail).toMatchObject({ dependents_purged: { RecurringCourseSchedule: 1 } });
+  });
+
+  it('R191 — a LIVE schedule under a deleted group still keeps it, and is named', async () => {
+    // The limit of «any element»: a purge never destroys a record that was
+    // never deleted. The database refuses; the holder is named in domain terms.
+    const { levelId } = await curriculum();
+    const branch = await prisma.branch.create({ data: { name: `${TAG} مقر حي`, updatedAt: new Date() } });
+    const group = await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة حية`, levelId, branchId: branch.id, deletedAt: new Date() },
+    });
+    const year = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
+    const subject = await prisma.subject.findFirstOrThrow({ select: { id: true } });
+    await prisma.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة حية`,
+        subjectId: subject.id,
+        administrativeGroupId: group.id,
+        branchId: branch.id,
+        academicYearId: year.id,
+        teachingMode: 'administrative_group',
+        recurrence: 'weekly',
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T10:00:00.000Z'),
+      },
+    });
+    const entry = await prisma.trash.create({
+      data: {
+        targetEntity: 'AdministrativeGroup',
+        targetId: group.id,
+        snapshot: { id: group.id },
+        deletedById: actorUserId,
+        purgeAfter: new Date(Date.now() + 86_400_000),
+      },
+    });
+    await expect(purgeEntry(prisma, superAdmin(), entry.id)).rejects.toMatchObject({
       details: expect.objectContaining({
         reason: 'DEPENDENTS_EXIST',
         blocking_entity: 'RecurringCourseSchedule',
       }),
     });
-
-    await purgeEntry(prisma, superAdmin(), scheduleEntry);
-    await purgeEntry(prisma, superAdmin(), groupEntry);
-
-    expect(await prisma.recurringCourseSchedule.count({ where: { id: schedule.id } })).toBe(0);
-    expect(await prisma.administrativeGroup.count({ where: { id: group.id } })).toBe(0);
+    expect(await prisma.administrativeGroup.count({ where: { id: group.id } })).toBe(1);
   });
 
-  it('a history-protected schedule is ACTIONABLE again — by restoring it, never by destroying it (R169 §8)', async () => {
+  it('a schedule with occurrences is ACTIONABLE on both sides (R169 §8 wrote the restore; R191 the purge)', async () => {
     /**
      * Decision B (2026-09-02) kept such a row out of the default view because
-     * NEITHER button could work: its Sessions are history, so it cannot be
-     * purged, and no restore was written. R169 §8 wrote the restore — so one
-     * button works, and the row belongs where an action exists for it. What is
-     * unchanged is the half that protects history: it is still not purgeable.
+     * NEITHER button could work. R169 §8 wrote the restore; R191 lets the
+     * purge take the occurrences with the class. The «retained» lens is now
+     * empty by construction and is still answered, so an old client is not
+     * refused.
      */
     const { scheduleId } = await deletedSchedule(true);
     const actionable = (await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule' })).data;
     const row = actionable.find((r) => r.targetId === scheduleId);
-    expect(row).toMatchObject({ restorable: true, purgeable: false });
+    expect(row).toMatchObject({ restorable: true, purgeable: true });
 
     const retained = (
       await listTrash(prisma, superAdmin(), { entity: 'RecurringCourseSchedule', view: 'retained' })
@@ -1006,11 +1070,13 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
     expect(await prisma.trash.count({ where: { id: trashId } })).toBe(1);
   });
 
-  it('FAILS CLOSED on an entity with no purge plan, and keeps sweeping', async () => {
+  it('R191 — an entry of a type nothing writes any more is removed ALONE, said so, and the sweep goes on', async () => {
     /**
-     * Destroying an unplanned entity by improvisation is exactly what the plan
-     * registry exists to prevent — and one unsupported row must not stop the
-     * others being destroyed, or a single stuck entry freezes the whole policy.
+     * Destroying an unplanned entity by improvisation is still what the plan
+     * registry prevents: nothing is looked up, nothing is deleted but the entry
+     * itself — the whole artefact, for a type no code can read (R124's
+     * `Exam.questions`). Until R191 such a row counted `unsupported` and stayed
+     * for ever, offering a button that could never work.
      */
     const { trashId, linkId } = await expiredLeaf();
     const orphan = await prisma.trash.create({
@@ -1025,12 +1091,15 @@ describe("BR-15's ninety days, enforced automatically (R59.4 closed 2026-09-04)"
 
     const counts = await purgeExpiredEntries(prisma, LATER);
 
-    expect(counts.unsupported).toBe(1);
-    expect(counts.purged).toBeGreaterThanOrEqual(1);
-    expect(await prisma.trash.count({ where: { id: orphan.id } })).toBe(1);
+    expect(counts.unsupported).toBe(0);
+    expect(counts.purged).toBeGreaterThanOrEqual(2);
+    expect(await prisma.trash.count({ where: { id: orphan.id } })).toBe(0);
     expect(await prisma.trash.count({ where: { id: trashId } })).toBe(0);
-
-    await prisma.trash.delete({ where: { id: orphan.id } });
+    const trail = await prisma.auditLog.findFirst({
+      where: { actionType: 'trash.permanent_delete', targetEntity: 'NoSuchEntityForThisTest', targetId: linkId },
+    });
+    expect(trail?.detail).toMatchObject({ unknown_entity: true, system: true });
+    await prisma.auditLog.deleteMany({ where: { targetEntity: 'NoSuchEntityForThisTest' } });
   });
 
   it('records the destruction as SYSTEM-initiated, with no actor invented', async () => {

@@ -59,7 +59,7 @@ sudo bash /opt/bodour/scripts/backup/run-scheduled.sh monitor
 
 ## Emptying «سلة المحذوفات» on the Owner's word (R190 §6)
 
-`docker compose exec -T api npm run --silent ops:empty-trash </dev/null` purges every Trash entry through the page's own door (`purgeEntry`: Super Admin freshness, the declared TD-5 cascade, an audit row), acting as the platform owner, in up to four passes so a parent held only by a trashed child goes once the child has. An entry the service refuses (`DEPENDENTS_EXIST`, `NOT_YET_SUPPORTED`) is left and named — never forced. `DRY_RUN=1` lists without purging. Owner authorization each time; never on a schedule.
+`docker compose exec -T api npm run --silent ops:empty-trash </dev/null` purges every Trash entry through the page's own door (`purgeEntry`: Super Admin freshness, the declared consequences, the deleted dependents first, an audit row; a `User` de-identified), acting as the platform owner, in up to four passes. An entry the service refuses (`DEPENDENTS_EXIST` — a LIVE record still uses it) is left and named — never forced. `DRY_RUN=1` lists without purging. Owner authorization each time; never on a schedule.
 
 ## Restore and fresh-host recovery
 

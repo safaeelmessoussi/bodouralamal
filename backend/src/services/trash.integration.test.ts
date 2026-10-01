@@ -118,11 +118,11 @@ describe("what the list says about each row", () => {
     expect(row.label).toBe(`${TAG} حفظ القرآن`);
     expect(row.deletedByName).toBe(`${TAG} مديرة`);
     expect(row.purgeAfter).toBeInstanceOf(Date);
-    // Legacy Subject snapshots predate exact consequence coordinates. They may
-    // still be purged if PostgreSQL proves no child remains, but cannot be
-    // restored by guessing which LevelSubject rows followed this deletion.
-    expect(row.restorable).toBe(false);
-    expect(row.restoreBlockedReason).toBe('INCOMPLETE_SNAPSHOT');
+    // R191 — a legacy Subject snapshot (no consequence coordinates) is still
+    // restorable: the row comes back alone and the result SAYS what it could
+    // not name (`cascade_unknown`), rather than refusing.
+    expect(row.restorable).toBe(true);
+    expect(row.restoreBlockedReason).toBeNull();
   });
 
   it("marks R111 accounts RESTORABLE and a cascading entity not, with a reason", async () => {
@@ -192,25 +192,25 @@ describe("restore is offered only where it is COMPLETE (§7)", () => {
     ).toBe(1);
   });
 
-  it("REFUSES a type whose reinstatement is not written, loudly, rather than half-restoring it", async () => {
-    // An activity's audience joins are hard-deleted with it, so the row alone
-    // would come back addressed to nobody. (A Level used to be the example here;
-    // R169 §8 wrote and tested its reinstatement.)
-    const entryId = await bin("Event", randomUUID(), { title: `${TAG} نشاط` });
+  it("REFUSES a type no deletion writes, loudly, rather than guessing a plan for it", async () => {
+    // R191 — every type that reaches the Trash is restorable (an activity's
+    // audience, once the example here, is re-created from its snapshot). What
+    // is left is an invented name, which is refused by name.
+    const entryId = await bin("NoSuchEntityForThisTest", randomUUID(), { title: `${TAG} شيء` });
     const e = await failure(() => restoreEntry(prisma, superAdmin(), entryId));
     expect(e.code).toBe("STATE_CONFLICT");
-    expect(e.details?.["reason"]).toBe("CASCADE_RELATIONSHIPS");
+    expect(e.details?.["reason"]).toBe("NOT_YET_SUPPORTED");
   });
 
-  it("R169 §8 — refuses a Level whose OLD tombstone does not name what it took", async () => {
+  it("R191 — restores a Level whose OLD tombstone does not name what it took, and SAYS so", async () => {
     const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
     const level = await prisma.level.create({
       data: { name: `${TAG} مستوى`, categoryId: category.id, deletedAt: new Date() },
     });
     const entryId = await bin("Level", level.id, { name: level.name });
-    const e = await failure(() => restoreEntry(prisma, superAdmin(), entryId));
-    expect(e.code).toBe("STATE_CONFLICT");
-    expect(e.details?.["reason"]).toBe("INCOMPLETE_SNAPSHOT");
+    const result = await restoreEntry(prisma, superAdmin(), entryId);
+    expect(result.cascade_unknown).toBe(true);
+    expect((await prisma.level.findUniqueOrThrow({ where: { id: level.id } })).deletedAt).toBeNull();
   });
 
   it("will not restore a child into a deleted parent", async () => {
@@ -328,12 +328,44 @@ describe("permanent deletion is Super Admin only and irreversible (R59.1)", () =
     expect(await prisma.trash.count({ where: { id: entry } })).toBe(1);
   });
 
-  it("refuses a type with no destruction plan, with the reason", async () => {
-    const entry = await bin("User", actorUserId, { nameArabic: `${TAG} شخص` });
-    const err = await failure(() => purgeEntry(prisma, superAdmin(), entry));
-    expect(err.code).toBe("STATE_CONFLICT");
-    // Destroying a person takes the audit trail that says what they did.
-    expect(err.details?.["reason"]).toBe("ACCOUNTABILITY_RECORD");
+  it("R191 — a type nothing writes any more: the entry is the whole artefact, and it is removed", async () => {
+    const targetId = randomUUID();
+    const entry = await bin("NoSuchEntityForThisTest", targetId, { name: `${TAG} شيء` });
+    const result = await purgeEntry(prisma, superAdmin(), entry);
+    expect(result.alreadyPurged).toBe(true);
+    expect(await prisma.trash.count({ where: { id: entry } })).toBe(0);
+    const log = await prisma.auditLog.findFirst({
+      where: { actionType: "trash.permanent_delete", targetId },
+    });
+    expect(log?.detail).toMatchObject({ unknown_entity: true });
+  });
+
+  it("R191 — «حذف نهائي» on an account is R111's de-identification: the row stays, the person goes", async () => {
+    const person = await prisma.user.create({
+      data: {
+        sex: 'female',
+        nameArabic: `${TAG} شخص يُمحى`,
+        phone: '0600000000',
+        accountStatus: 'active',
+        deletedAt: new Date(),
+        deletedById: actorUserId,
+      },
+    });
+    const entry = await bin("User", person.id, { nameArabic: `${TAG} شخص يُمحى` });
+
+    const result = await purgeEntry(prisma, superAdmin(), entry);
+    expect(result).toMatchObject({ targetEntity: 'User', targetId: person.id });
+
+    // Destroying a person would take the audit trail that says what they did:
+    // the row is kept, non-identifying; the Trash entry goes with the act.
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: person.id } });
+    expect(after.nameArabic).not.toContain('شخص يُمحى');
+    expect(after.phone).toBeNull();
+    expect(after.deletedAt).not.toBeNull();
+    expect(await prisma.trash.count({ where: { id: entry } })).toBe(0);
+    // No longer carries the tag `clear()` sweeps by.
+    await prisma.auditLog.deleteMany({ where: { targetId: person.id } });
+    await prisma.user.delete({ where: { id: person.id } });
   });
 
   it("will not destroy a record somebody restored since — the tombstone is stale", async () => {
@@ -376,8 +408,8 @@ describe("restore reinstates the children it declares (R59.3)", () => {
 
     expect(branchRow?.purgeable).toBe(true);
     expect(branchRow?.purgeBlockedReason).toBeNull();
-    // A client cannot know this, which is why the server says it.
-    expect(userRow?.purgeable).toBe(false);
-    expect(userRow?.purgeBlockedReason).toBe("ACCOUNTABILITY_RECORD");
+    // R191 — an account is purgeable too: de-identified, never deleted.
+    expect(userRow?.purgeable).toBe(true);
+    expect(userRow?.purgeBlockedReason).toBeNull();
   });
 });

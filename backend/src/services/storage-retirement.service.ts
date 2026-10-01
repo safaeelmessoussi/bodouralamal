@@ -3,7 +3,11 @@ import { deleteObject, statObjectStrict, type StorageClients } from '../lib/stor
 import { lockEducationalContent } from '../repositories/consent-safeguarding.repository.js';
 import * as retirements from '../repositories/storage-retirement.repository.js';
 import { retireConsentPublicObject } from './consent-reevaluation.service.js';
-import { quarantineRetiredContentObject, retirePurgedContentObjects } from './storage-lifecycle.service.js';
+import {
+  quarantineRetiredContentObject,
+  restoreQuarantinedContentObject,
+  retirePurgedContentObjects,
+} from './storage-lifecycle.service.js';
 
 /** Only the original caller may supply its positive settlement evidence: its
  * callback finished without dispatching COPY, or that COPY returned success. */
@@ -60,7 +64,17 @@ export async function executeRetirement(prisma: PrismaClient, storage: StorageCl
       const current = await retirements.currentContent(tx, record.contentId);
       const canonical = current?.deletedAt === null && current.storageKey === record.storageKey &&
         (current.storageBucket === record.bucket || record.operation === 'manual_permanent_delete');
-      if (!canonical) {
+      if (record.operation === 'restore_quarantined_object') {
+        // R191 — the one obligation that acts WHEN the row is canonical: the
+        // item is live again and its bytes are owed at the canonical key. A
+        // row deleted again since owes nothing here (its quarantine obligation
+        // speaks), so the work completes without moving anything.
+        if (canonical) {
+          await restoreQuarantinedContentObject(storage, {
+            contentId: record.contentId, bucket: record.bucket, storageKey: record.storageKey,
+          });
+        }
+      } else if (!canonical) {
         const coordinate = { contentId: record.contentId, bucket: record.bucket, storageKey: record.storageKey };
         if (record.operation === 'discard_unreferenced' || record.operation === 'placement_attempt') {
           await deleteObject(storage, record.bucket, record.storageKey);

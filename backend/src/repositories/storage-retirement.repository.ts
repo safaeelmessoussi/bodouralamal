@@ -4,7 +4,10 @@ import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { assertQueueRegistered, enqueue, JOB_QUEUES, legacyStorageJobs } from './jobs.repository.js';
 
 export type RetirementOperation = 'quarantine_retired_object' | 'manual_permanent_delete' |
-  'discard_unreferenced' | 'placement_attempt' | 'retire_public' | 'consent_migrate';
+  'discard_unreferenced' | 'placement_attempt' | 'retire_public' | 'consent_migrate' |
+  // R191 — a restored library item's object, back from `quarantine/` to its
+  // canonical key (the reverse of `quarantine_retired_object`).
+  'restore_quarantined_object';
 export interface RetirementInput {
   contentId: string;
   bucket: string;
@@ -147,7 +150,8 @@ export async function importLegacyRetirement(tx: Prisma.TransactionClient, data:
   const contentId = data['content_id'];
   const storageKey = data['storage_key'] ?? data['source_key'];
   const bucket = data['bucket'] ?? 'public';
-  if (!['quarantine_retired_object', 'manual_permanent_delete', 'retire_public', 'consent_migrate'].includes(String(operation)) ||
+  if (!['quarantine_retired_object', 'manual_permanent_delete', 'retire_public', 'consent_migrate',
+        'restore_quarantined_object'].includes(String(operation)) ||
       typeof contentId !== 'string' || typeof bucket !== 'string' || typeof storageKey !== 'string') {
     throw new Error('invalid legacy retirement obligation');
   }
