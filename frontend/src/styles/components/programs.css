@@ -282,9 +282,10 @@
 .stage__cell--prize {
   width: 10rem;
 }
-/* R189 — the last Category's graduation is a card like a Level's. */
+/* R189 — the last Category's graduation stood a Level card wide; R192 §4 —
+   wider, so the attire can stand clearly as the road's end. */
 .stage__cell--summit {
-  width: var(--journey-card-w, 16rem);
+  width: calc(var(--journey-card-w, 16rem) * 1.25);
 }
 .stage__cell--entrances {
   margin-inline-end: var(--space-3);
@@ -643,10 +644,17 @@
   border-radius: var(--radius-md);
 }
 /* R190 §1 — the last milestone reads like every other («إتمام الفئة», the
-   line), and under the words the whole outfit, unframed, standing about as
-   tall as a Level card. */
+   line), and under the words the whole outfit, unframed. R192 §4 — the outfit
+   is the road's end and the biggest thing on it: half again a Level card's
+   height, its words a size up. */
 .journey__milestone--summit {
   gap: var(--space-2);
+}
+.journey__milestone--summit .journey__milestoneTitle {
+  font-size: var(--font-size-lg);
+}
+.journey__milestone--summit .journey__milestoneText {
+  font-size: var(--font-size-sm);
 }
 .journey__milestone--summit .journey__summit {
   display: block;
@@ -660,7 +668,8 @@
 }
 .journey__milestone--summit .journey__attire img {
   width: auto;
-  height: 15rem;
+  max-width: 100%;
+  height: 24rem;
   margin-inline: auto;
   border-radius: var(--radius-sm);
 }
@@ -807,6 +816,6 @@
     margin-inline-start: auto;
   }
   .journey__milestone--summit .journey__attire img {
-    height: 12rem;
+    height: 18rem;
   }
 }

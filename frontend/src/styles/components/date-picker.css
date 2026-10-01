@@ -66,6 +66,11 @@
   color: var(--color-text-muted);
   text-align: center;
 }
+/* R192 §2 — the letter is the whole header; no dotted underline, no cursor hint. */
+.date-picker__weekday abbr {
+  text-decoration: none;
+  cursor: default;
+}
 .date-picker__cell {
   padding: 2px;
   text-align: center;

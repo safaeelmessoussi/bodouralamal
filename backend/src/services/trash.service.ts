@@ -528,23 +528,30 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
   // No owned children: a Branch's rooms, groups and schedules are all records of
   // their own, so a Branch with any of them left LIVE is refused rather than emptied.
   Branch: { model: 'branch', children: [{ model: 'eventBranch', fk: 'branchId' }] },
-  Category: { model: 'category', children: [{ model: 'eventCategory', fk: 'categoryId' }] },
+  /**
+   * **A curriculum link is PART of what it links** (R192 §1). `LevelSubject`,
+   * `LevelSurah` and `CategorySubject` say «this Level teaches that Subject /
+   * memorises that Surah»; none is a record of something that happened, and
+   * none can be in use once its Level, Category or Subject is destroyed. They
+   * go with the parent WHOLESALE — live or tombstoned, named by the snapshot
+   * or not — once the dependents pass has purged the ones with entries of
+   * their own. Scoping them to the snapshot's ids (R59) left the Owner's
+   * Level in the Production Trash held by `level_surah_level_id_fkey`: a link
+   * tombstoned before the Level's deletion listed ids, or still live under a
+   * deleted Level, blocked a purge nothing else could ever perform.
+   */
+  Category: {
+    model: 'category',
+    children: [
+      { model: 'eventCategory', fk: 'categoryId' },
+      { model: 'categorySubject', fk: 'categoryId' },
+    ],
+  },
   Subject: {
     model: 'subject',
     children: [
-      {
-        model: 'levelSubject',
-        fk: 'id',
-        snapshotIdsKey: 'cascaded_level_subject_ids',
-      },
-      // R172 §1 — the whole-Category link, owned the same way. Optional in a
-      // snapshot older than the link itself.
-      {
-        model: 'categorySubject',
-        fk: 'id',
-        snapshotIdsKey: 'cascaded_category_subject_ids',
-        legacyOptional: true,
-      },
+      { model: 'levelSubject', fk: 'subjectId' },
+      { model: 'categorySubject', fk: 'subjectId' },
     ],
   },
   Room: { model: 'room' },
@@ -577,16 +584,9 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] 
         fk: 'administrativeGroupId',
         snapshotIdsKey: 'cascaded_administrative_group_ids',
       },
-      {
-        model: 'levelSubject',
-        fk: 'id',
-        snapshotIdsKey: 'cascaded_level_subject_ids',
-      },
-      {
-        model: 'levelSurah',
-        fk: 'id',
-        snapshotIdsKey: 'cascaded_level_surah_ids',
-      },
+      // R192 §1 — the curriculum links go wholesale (see `Category` above).
+      { model: 'levelSubject', fk: 'levelId' },
+      { model: 'levelSurah', fk: 'levelId' },
       {
         model: 'administrativeGroup',
         fk: 'id',

@@ -715,3 +715,29 @@ describe('R191 §8 — a deleted parent takes its deleted dependents, and names 
     expect(await prisma.level.count({ where: { id: levelId } })).toBe(1);
   });
 });
+
+describe('R192 §1 — a curriculum link is part of what it links', () => {
+  it('a LIVE «مقرر الحفظ» row under a deleted Level goes with the Level (the Owner met level_surah_level_id_fkey)', async () => {
+    const { levelId, subjectId } = await curriculum();
+    // Tombstoned before the Level's deletion listed ids (no entry), and one
+    // still LIVE under the deleted Level: neither is named by the snapshot.
+    const orphan = await prisma.levelSurah.create({
+      data: { levelId, surahId: 1, deletedAt: new Date('2026-08-27T13:08:56.000Z') },
+    });
+    const live = await prisma.levelSurah.create({ data: { levelId, surahId: 2 } });
+    const link = await prisma.levelSubject.create({ data: { levelId, subjectId } });
+    await prisma.level.update({
+      where: { id: levelId },
+      data: { deletedAt: new Date(), deletedById: actorUserId },
+    });
+    const entry = await bin('Level', levelId, {
+      name: `${TAG} مستوى`,
+      cascaded_level_surah_ids: [],
+    });
+
+    await purgeEntry(prisma, superAdmin(), entry);
+    expect(await prisma.level.count({ where: { id: levelId } })).toBe(0);
+    expect(await prisma.levelSurah.count({ where: { id: { in: [orphan.id, live.id] } } })).toBe(0);
+    expect(await prisma.levelSubject.count({ where: { id: link.id } })).toBe(0);
+  });
+});

@@ -107,30 +107,9 @@ export function ProgramsJourney({
     root.scrollLeft += target.getBoundingClientRect().right - root.getBoundingClientRect().right;
   }, [journey]);
 
-  // R183 §3 — the landing page OPENS on the journey: on a fresh arrival at
-  // «/» (no hash, nothing scrolled yet, not a back/forward return) the page
-  // is brought to the road so the first thing seen is المرأة's first step
-  // under the chips. Once per mount; a visitor who has already scrolled, or
-  // who came for another anchor, is never moved.
-  const opened = useRef(false);
-  useEffect(() => {
-    const root = scroller.current;
-    if (!root || opened.current || journey.categories.length === 0) return;
-    if (window.location.hash !== '' || window.scrollY > 8) return;
-    const navigation = performance.getEntriesByType('navigation')[0] as
-      PerformanceNavigationTiming | undefined;
-    if (navigation?.type === 'back_forward') return;
-    opened.current = true;
-    const journeyRoot = root.closest<HTMLElement>('.journey');
-    if (!journeyRoot) return;
-    const header =
-      parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-height')) ||
-      0;
-    const headerPx =
-      header * parseFloat(getComputedStyle(document.documentElement).fontSize || '16');
-    const top = window.scrollY + journeyRoot.getBoundingClientRect().top - headerPx - 12;
-    window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
-  }, [journey]);
+  // R192 §3 — the landing page opens at its TOP (R183 §3's scroll to the road
+  // on a fresh arrival is withdrawn): the page is never moved on arrival; the
+  // road itself still opens on the adult Category's first step (above).
 
   function scrollBy(direction: 1 | -1): void {
     const root = scroller.current;
@@ -319,10 +298,14 @@ function Stage({
           <Walk rise={rise} />
         </li>
         {/* R185 §3 — on the last Category the road ends: «إتمام الفئة» and
-            the attire itself, in place of the trophy. */}
+            the attire itself, in place of the trophy. R192 §4 — the attire
+            stands on the stage's floor, taller than the climb beside it: its
+            head reaches the last Level's card, and the road is not made
+            taller by it (a taller road is a smaller road on a laptop,
+            R187 §2). */}
         <li
           className={`stage__cell stage__cell--prize${category.last ? ' stage__cell--summit' : ''}`}
-          style={{ ['--step' as string]: category.steps.length }}
+          style={{ ['--step' as string]: category.last ? 0 : category.steps.length }}
         >
           <Prize category={category} />
         </li>
@@ -553,8 +536,8 @@ function useFit(
       const headerPx =
         (parseFloat(rootStyle.getPropertyValue('--header-height')) || 0) *
         parseFloat(rootStyle.fontSize || '16');
-      // What the landing scroll (R183 §3) leaves: the header, 12 px, the chips
-      // and their gap, then the panel to 16 px above the viewport's foot.
+      // What a viewport scrolled to the road holds: the header, 12 px, the
+      // chips and their gap, then the panel to 16 px above the viewport's foot.
       const chips = scroller.getBoundingClientRect().top - nav.getBoundingClientRect().top;
       const available = Math.max(420, window.innerHeight - headerPx - 12 - chips - 16);
       scroller.style.height = `${Math.round(available)}px`;

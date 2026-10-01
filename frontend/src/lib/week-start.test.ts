@@ -33,6 +33,14 @@ describe('the platform calendar starts on Monday', () => {
     expect(ar.calendar.weekdaysShort).toHaveLength(7);
   });
 
+  it('R192 §2 — the picker’s one-letter headers follow the same Monday-first order', () => {
+    // «ن» for الاثنين through «ح» for الأحد: seven, one letter each, so the
+    // narrow panel never overlaps full names again; the full name is the
+    // column's accessible name (`date-picker.tsx`).
+    expect(ar.calendar.weekdayLetters).toEqual(['ن', 'ث', 'ر', 'خ', 'ج', 'س', 'ح']);
+    expect(ar.calendar.weekdayLetters.every((letter) => letter.length === 1)).toBe(true);
+  });
+
   it('puts a month beginning on Monday in column one, with no blanks', () => {
     // 2026-06-01 is a Monday.
     expect(leadingBlanks(new Date(2026, 5, 1))).toBe(0);

@@ -289,13 +289,11 @@ describe('ProgramsJourney', () => {
     expect(html).toContain('data-journey-category="women"');
   });
 
-  it('brings the landing page to the road on a fresh arrival only (R183 §3)', () => {
-    // No DOM here (the real-browser proof is `scripts/dev/browser/`); the
-    // guards are pinned: never with a hash, never once scrolled, never on a
-    // back/forward return, and once per mount.
-    expect(JOURNEY_SOURCE).toContain("window.location.hash !== '' || window.scrollY > 8");
-    expect(JOURNEY_SOURCE).toContain("navigation?.type === 'back_forward'");
-    expect(JOURNEY_SOURCE).toContain('opened.current = true');
+  it('never moves the page on arrival — the landing page opens at its top (R192 §3)', () => {
+    // R183 §3's scroll to the road on a fresh arrival is withdrawn; the road
+    // itself still opens on the adult Category (R182 §7), inside its panel.
+    expect(JOURNEY_SOURCE).not.toContain('window.scrollTo(');
+    expect(JOURNEY_SOURCE).not.toContain("navigation?.type === 'back_forward'");
   });
 
   it('animates only once the browser has said it can, and never under reduced motion', () => {

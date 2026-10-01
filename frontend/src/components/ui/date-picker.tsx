@@ -406,6 +406,10 @@ export function DatePicker({
   }
 
   const weekdays = tList('calendar.weekdaysShort');
+  // R192 §2 — one letter per column: seven full names did not fit the panel's
+  // width and overlapped. The full name stays as the column's accessible name
+  // and as the letter's tooltip.
+  const weekdayLetters = tList('calendar.weekdayLetters');
   const months = tList('calendar.months');
   const monthStart = new Date(viewYear, viewMonth, 1);
   const grid = monthGrid(monthStart);
@@ -483,9 +487,11 @@ export function DatePicker({
               >
                 <thead>
                   <tr>
-                    {weekdays.map((day) => (
-                      <th key={day} scope="col" className="date-picker__weekday">
-                        {day}
+                    {weekdays.map((day, index) => (
+                      <th key={day} scope="col" className="date-picker__weekday" aria-label={day}>
+                        <abbr title={day} aria-hidden="true">
+                          {weekdayLetters[index] ?? day}
+                        </abbr>
                       </th>
                     ))}
                   </tr>

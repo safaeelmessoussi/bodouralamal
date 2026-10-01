@@ -27,7 +27,7 @@ Every type that reaches the Trash. What comes back WITH the record, and what is 
 ### Permanent deletion, and what it will not do
 
 - `DELETE /admin/trash/{id}` (Super Admin) destroys the record, its **declared** consequences and tombstone in one transaction and writes `trash.permanent_delete`, retained indefinitely (absent from the `audit.purge` allowlist). **Every entry is purgeable (R191)**: a `User` is DE-IDENTIFIED (R111 — `purgeUserAccount`, same refusals as `DELETE /admin/users/{id}?permanent=true`: `LAST_SUPER_ADMIN`, `RESPONSIBILITIES_ASSIGNED`); an entry of a type nothing writes any more (`Exam.questions`, R124's migration) is removed alone (`unknown_entity`).
-- **Its DELETED dependents go first, each through its own entry** (`dependents_purged`, per type); a tombstoned LEAF row no entry names (a 2026-08 cascade: `LevelSubject`, `CategorySubject`, `LevelSurah`, `StudentTeachingGroup`, `SessionContent`, `Attendance`, `Enrollment`) goes with the parent (`orphans_purged`).
+- **Its DELETED dependents go first, each through its own entry** (`dependents_purged`, per type); a tombstoned LEAF row no entry names (a 2026-08 cascade: `LevelSubject`, `CategorySubject`, `LevelSurah`, `StudentTeachingGroup`, `SessionContent`, `Attendance`, `Enrollment`) goes with the parent (`orphans_purged`); a curriculum link (`LevelSubject`, `LevelSurah`, `CategorySubject`) goes with its Level, Category or Subject wholesale, live or not (R192 §1).
 - Refuses only when a **LIVE** row still references it (`DEPENDENTS_EXIST`, naming the constraint and the holder — `blocking_entity`, read off `<table>_<column>_fkey`); no force flag by design — move or delete that record deliberately.
 
 | Type | What goes with it |

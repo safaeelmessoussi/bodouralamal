@@ -493,11 +493,12 @@ describe('a blocked purge names what still depends on the record', () => {
    * The translation is consulted only after PostgreSQL has actually refused, so
    * it predicts nothing and cannot disagree with the schema.
    */
-  it('reports the blocking entity for a Level held by a Subject assignment', async () => {
+  it('reports the blocking entity for a Level held by a LIVE circle', async () => {
     const { levelId, subjectId } = await curriculum();
-    await assignSubjectToLevel(prisma, superAdmin(), levelId, subjectId);
-    // Delete the Level while its assignment row is still live: the assignment
-    // is a record in its own right and the FK is RESTRICT.
+    // (R192 §1 — a Subject assignment no longer holds its Level: a curriculum
+    // link is part of the Level and goes with it. A circle is a record of
+    // its own, and a live one keeps the Level, named.)
+    await prisma.teachingGroup.create({ data: { name: `${TAG} حلقة حية`, levelId, subjectId } });
     await prisma.level.update({ where: { id: levelId }, data: { deletedAt: new Date() } });
     await prisma.trash.create({
       data: {
@@ -516,7 +517,7 @@ describe('a blocked purge names what still depends on the record', () => {
       code: 'STATE_CONFLICT',
       details: expect.objectContaining({
         reason: 'DEPENDENTS_EXIST',
-        blocking_entity: 'LevelSubject',
+        blocking_entity: 'TeachingGroup',
       }),
     });
 
