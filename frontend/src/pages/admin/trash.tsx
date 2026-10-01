@@ -50,25 +50,20 @@ export const TRASH_ENTITY_TYPES = [
 ] as const;
 
 /**
- * `/admin/trash` — سلة المحذوفات (§7, TD-5, BR-15, Revision 52).
+ * `/admin/trash` — سلة المحذوفات (§7, TD-5, BR-15, Revision 52, Revision 191).
  *
- * **Restore is offered per entity type, never universally**, and the decision is
- * the server's. §7 states why: the TD-5 cascade removes `FamilyLink`,
- * `Enrollment`, `StudentTeachingGroup`, `CourseScheduleStaff`, `UserBranchRole`
- * and `UserIdentity` rows, and *"a User restored without their links,
- * enrollments and roles is a half-restored, silently broken account."* Clearing
- * `deleted_at` is the easy tenth of that problem and every failure of the rest is
- * silent — the row returns, the screen looks right, and the person is enrolled
- * in nothing.
- *
- * So a row that cannot be restored **says so, with the reason**, rather than
- * showing a disabled button or none at all. §14.2 hides an inapplicable action
- * because a dead control teaches nothing — but here the *absence* is the
- * surprising part, and an administrator who cannot restore their own data
- * deserves to know it is a known limitation rather than a bug.
- *
- * **Permanent delete is server-declared per entity type.** The client renders
- * the capability and reason it receives; it never infers destruction safety.
+ * **Restore and permanent delete are offered per row as the SERVER says**, never
+ * by the client's guess. §7 states why: the TD-5 cascade removes relationship
+ * rows, and *"a User restored without their links, enrollments and roles is a
+ * half-restored, silently broken account."* Since R191 every type that reaches
+ * the Trash is restorable and purgeable, so the flags read «متاحة»/«متاح» on
+ * every row; what a restore or a purge cannot do for THIS row — a deleted
+ * parent, a live record that still uses it, a slot taken since — is refused by
+ * name when attempted, and the notice says which (`restoredNotice`,
+ * `purgeNotice`, the refusal sentences below). A row of a type the catalogue
+ * does not know still **says so, with the reason**, rather than showing a dead
+ * control: an administrator who cannot act on their own data deserves to know
+ * it is a known limit rather than a bug.
  *
  * **The snapshot is never shown.** It is the whole row as it was, including
  * columns no screen is entitled to. This page answers *what was deleted, by
