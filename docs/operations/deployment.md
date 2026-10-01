@@ -141,18 +141,18 @@ test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontain
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml exec -T api npm run --silent ops:active-recordings
 
-# 5  Existing deployment: stop the legacy cookie issuer (R101's migration
-#    invalidates every refresh session), then start data services.
-docker compose -f docker-compose.yml -f docker-compose.release.yml \
-  -f docker-compose.production.yml stop nginx api
+# 5  Existing deployment: do NOT stop nginx or the API (R191 — stopping them
+#    before steps 6–8 was the minute of «unreachable» the Owner met on every
+#    deploy; R101's one-time reason is long past). Data services are already up:
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml up --no-build -d --wait db minio
 #    Bucket bootstrap: refuses unexpected policies/versioning/lifecycle/retention.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml run --rm --no-deps minio-init
 
-# 6  Migrate. EXISTING DEPLOYMENT: pg_dump IMMEDIATELY BEFORE this line — it is
-#    the rollback point. The normalized-email migration aborts if one address
+# 6  Migrate — UNDER THE RUNNING RELEASE: migrations are expand-only (TD-6b), so
+#    the old code keeps serving while the new columns arrive. EXISTING
+#    DEPLOYMENT: pg_dump IMMEDIATELY BEFORE this line — it is the rollback point. The normalized-email migration aborts if one address
 #    maps to two Users: follow the migration runbook; never clear/merge an identity.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml \
@@ -163,10 +163,15 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml \
   run --rm api npm run seed:production
 
-# 8  Start the rest
+# 8  Recreate the API with --wait (the site keeps answering; API calls fail for
+#    the ~10 s the new container boots — nginx resolves `api` by name per request),
+#    then start whatever else the profile holds without recreating anything;
+#    nginx is recreated ONCE by enable-tls.sh below (~2 s), with this release's web image.
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml up --no-build -d --no-deps --wait api
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml \
-  --profile production up --no-build -d      # api, nginx, certbot
+  --profile production up --no-build -d --no-recreate      # certbot
 #    FIRST DEPLOYMENT ONLY: live ACME certificate.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml \
