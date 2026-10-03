@@ -527,6 +527,10 @@
 .admin-notice {
   padding: var(--space-3) var(--space-4);
   margin-block-end: var(--space-4);
+  /* R193 — `Feedback` scrolls itself into view (`nearest`): from below, that
+     lands it at the viewport's top edge, UNDER the sticky header. The margin
+     keeps a refusal readable after an action taken far down a long list. */
+  scroll-margin-block-start: calc(var(--header-height) + var(--space-3));
   border: 1px solid var(--color-primary-line);
   border-inline-start: 4px solid var(--color-primary-emphasis);
   border-radius: var(--radius-md);

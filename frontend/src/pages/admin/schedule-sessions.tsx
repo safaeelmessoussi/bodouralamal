@@ -212,6 +212,15 @@ export function ScheduleSessionsPage({
   /** R172 §9 — one occurrence to the Trash; `deleteBlocked` names an exam sat in it. */
   const [deleting, setDeleting] = useState<ScheduleSession | null>(null);
   const [deleteBlocked, setDeleteBlocked] = useState<string | null>(null);
+  /**
+   * R193 — «إعادة البرمجة» asks first and, when the server refuses (the date
+   * has passed, the room or a مؤطِّرة was booked since), the dialog STAYS OPEN
+   * with the reason (rule AH). Until now the refusal went to the notice at
+   * the top of the page, which a long list had scrolled out of sight — under
+   * the sticky header — so the click read as «nothing happened».
+   */
+  const [restoring, setRestoring] = useState<ScheduleSession | null>(null);
+  const [restoreBlocked, setRestoreBlocked] = useState<string | null>(null);
   /** R91 §11 — the occurrence whose own staffing is being set. */
   const [teachers, setTeachers] = useState<DirectoryEntry[]>([]);
   /** R92 — the occurrence whose audience branches are being set. */
@@ -483,12 +492,49 @@ export function ScheduleSessionsPage({
     },
     {
       label: t('admin.sessions.restore'),
-      onSelect: (r) => void run(() => restoreSession(r.id, r.version, accessToken), 'admin.sessions.restored'),
+      onSelect: (r) => {
+        setRestoreBlocked(null);
+        setRestoring(r);
+      },
       // TD-1 allows this only from `cancelled`, and the server additionally
       // refuses it once the date has passed.
       available: (r) => r.status === 'cancelled',
     },
   ];
+
+  /** The sentence for a refused mutation — the same mapping `run` reports. */
+  function refusalOf(error: unknown): string {
+    const reason =
+      error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
+    if (error instanceof ApiError && error.code === 'SCHEDULE_CONFLICT') {
+      return describeScheduleConflict(error.details);
+    }
+    return t(
+      reason === 'SESSION_IN_PAST'
+        ? 'admin.sessions.pastRestore'
+        : reason === 'ALREADY_HELD'
+          ? 'admin.sessions.alreadyHeld'
+          : error instanceof ApiError && error.status === 409
+            ? 'common.conflict'
+            : 'common.saveFailed',
+    );
+  }
+
+  async function confirmRestore(): Promise<void> {
+    if (!restoring) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await restoreSession(restoring.id, restoring.version, accessToken);
+      setRestoring(null);
+      await load();
+      setNotice(t('admin.sessions.restored'));
+    } catch (error) {
+      setRestoreBlocked(refusalOf(error));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   /**
    * Runs a mutation and, when it changed something people are waiting on,
@@ -521,22 +567,9 @@ export function ScheduleSessionsPage({
         setDeleteBlocked(t('admin.sessions.deleteBlockedExam'));
         return;
       }
-      if (error instanceof ApiError && error.code === 'SCHEDULE_CONFLICT') {
-        // R179 §11 — named: which room or person, on which occurrence, when.
-        setNotice(describeScheduleConflict(error.details));
-        return;
-      }
-      setNotice(
-        t(
-          reason === 'SESSION_IN_PAST'
-            ? 'admin.sessions.pastRestore'
-            : reason === 'ALREADY_HELD'
-              ? 'admin.sessions.alreadyHeld'
-              : error instanceof ApiError && error.status === 409
-                ? 'common.conflict'
-                : 'common.saveFailed',
-        ),
-      );
+      // R179 §11 — a conflict is named: which room or person, on which
+      // occurrence, when.
+      setNotice(refusalOf(error));
     } finally {
       setBusy(false);
     }
@@ -822,6 +855,19 @@ export function ScheduleSessionsPage({
         onCancel={() => {
           setDeleting(null);
           setDeleteBlocked(null);
+        }}
+      />
+      <ConfirmDialog
+        open={restoring !== null}
+        {...(restoreBlocked ? { blocked: restoreBlocked } : {})}
+        title={t('admin.sessions.restoreTitle').replace('{date}', restoring ? formatDate(restoring.date) : '')}
+        body={t('admin.sessions.restoreBody')}
+        confirmLabel={t('admin.sessions.restore')}
+        busy={busy}
+        onConfirm={() => void confirmRestore()}
+        onCancel={() => {
+          setRestoring(null);
+          setRestoreBlocked(null);
         }}
       />
       {cancelling ? (

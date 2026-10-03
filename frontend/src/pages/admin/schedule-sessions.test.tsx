@@ -130,6 +130,13 @@ describe('the three scopes are all stated, and each says what it changes', () =>
     expect(ar.admin.sessions.pastRestore).toBeTruthy();
     expect(ar.admin.sessions.alreadyHeld).toBeTruthy();
   });
+
+  it('R193 — «إعادة البرمجة» asks first, naming the day, and keeps its refusal in the dialog', () => {
+    // The refusal used to go to the notice at the top of a long list, under
+    // the sticky header: the click read as «nothing happened».
+    expect(ar.admin.sessions.restoreTitle).toContain('{date}');
+    expect(ar.admin.sessions.restoreBody).toBeTruthy();
+  });
 });
 
 describe('R138 §4.4 item 2 — the Session editor reuses the series form vocabulary', () => {
