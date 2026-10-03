@@ -24,7 +24,9 @@ export interface UploadMeta {
    *  exactly one of the two travels to `/uploads/initiate`. */
   level_id?: string;
   category_id?: string;
-  subject_id: string;
+  /** R195 — `null` is «عام» (TD-5's General): material of a class of all its
+   *  Level's Subjects. Required and explicitly nullable, like `branch_id`. */
+  subject_id: string | null;
   academic_year_id: string;
   /** `null` is the Global / بدون فرع scope (§4.9) — a real value only an Admin
    *  may choose, never a stand-in for "not set". */

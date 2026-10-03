@@ -1717,3 +1717,20 @@ describe("R178 §6(a) — the academic year is derived from the start date, neve
     }
   });
 });
+
+describe("R195 — a class of all the Level's Subjects at the boundary", () => {
+  it("accepts `subject_id: null` for a group, answers `subject_id: null`, and refuses it for a circle", async () => {
+    // One slot for both calls: the allocator walks toward the pinned 15:00
+    // fixture, and every extra slot taken brings a later test onto it.
+    const body = scheduleBody({ subject_id: null });
+    const res = await call("POST", "/admin/course-schedules", superAdmin, body);
+    expect(res.status).toBe(201);
+    expect((res.body.schedule as Record<string, unknown>)["subject_id"]).toBeNull();
+    expect((res.body.schedule as Record<string, unknown>)["subject_name"]).toBeNull();
+
+    // Absent is still refused: the choice is made, never skipped.
+    const absent = { ...body } as Record<string, unknown>;
+    delete absent["subject_id"];
+    expect((await call("POST", "/admin/course-schedules", superAdmin, absent)).status).toBe(400);
+  });
+});

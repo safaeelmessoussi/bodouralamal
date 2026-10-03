@@ -55,6 +55,10 @@ const CIRCLE_WORD = 'الحلقة';
  * Subject already implies. A circle wins when both are named — it is the
  * narrower answer.
  */
+/** R195 — what a class of ALL a Level's Subjects is called where a Subject's
+ *  name would stand alone (a calendar chip with no group or type to name it). */
+export const ALL_SUBJECTS = 'كل المواد';
+
 export function audienceTitle(circleName: string | null | undefined, groupName: string | null | undefined): string | null {
   const circle = clean(circleName);
   if (circle !== '') return `${CIRCLE_WORD} ${circle}`;

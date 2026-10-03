@@ -233,7 +233,8 @@ export interface InitiateInput {
   size: number;
   mime: string;
   meta: ({ levelId: string; categoryId?: undefined } | { categoryId: string; levelId?: undefined }) & {
-    subjectId: string;
+    /** R195 — `null` is «عام»: material of a class of all its Level's Subjects. */
+    subjectId: string | null;
     academicYearId: string;
     branchId: string | null;
     visibility?: string;
@@ -330,7 +331,10 @@ export async function initiateUpload(
   // the pair still has to be one that exists, or the library would group an item
   // under a heading no Level ever offers. The curriculum policy answers from
   // `LevelSubject` and, since R172 §1, `CategorySubject` (not restated here).
-  await assertSubjectTaughtAtLevel(prisma, levelId, input.meta.subjectId);
+  // R195 — «عام» (no Subject) has no pair to check.
+  if (input.meta.subjectId !== null) {
+    await assertSubjectTaughtAtLevel(prisma, levelId, input.meta.subjectId);
+  }
 
   // R177 §7 — a Surah is admissible only when the Subject works by Surah and
   // it is in the syllabus of a Level the item is filed under: the one policy
@@ -1335,6 +1339,9 @@ export async function updateContentMetadata(
     },
   });
   const homeLevelId = patch.levelId ?? placed.levelId;
+  // R195 — `null` on what a class of ALL the Level's Subjects produced
+  // («عام»); an edit may give it a Subject, and the curriculum checks below
+  // then apply. With none there is nothing to check against a Level.
   const subjectId = patch.subjectId ?? placed.subjectId;
   // R177 §7 — the Surah the row WILL carry, re-checked whenever it, the
   // Subject or the home Level moves: a فقه lesson cannot keep a Surah, and a
@@ -1356,7 +1363,7 @@ export async function updateContentMetadata(
   // item KEEPS, not only at the ones this very request names. Without this a
   // Level change and a Subject change sent separately could leave an item
   // placed where the curriculum says that Subject is not taught at all.
-  if (patch.levelId !== undefined || patch.subjectId !== undefined) {
+  if (subjectId !== null && (patch.levelId !== undefined || patch.subjectId !== undefined)) {
     await assertSubjectTaughtAtLevel(prisma, homeLevelId, subjectId);
   }
   let additionalLevelIds: string[] | null = null;
@@ -1372,15 +1379,17 @@ export async function updateContentMetadata(
     if (live !== patch.additionalLevelIds.length) {
       throw new AppError('VALIDATION_FAILED', 'no such level', { reason: 'UNKNOWN_LEVEL' });
     }
-    for (const levelId of patch.additionalLevelIds) {
-      await assertSubjectTaughtAtLevel(prisma, levelId, subjectId);
+    if (subjectId !== null) {
+      for (const levelId of patch.additionalLevelIds) {
+        await assertSubjectTaughtAtLevel(prisma, levelId, subjectId);
+      }
     }
     additionalLevelIds = patch.additionalLevelIds;
   } else {
     const retained = placed.additionalLevels
       .map((row) => row.levelId)
       .filter((id) => id !== homeLevelId);
-    if (patch.subjectId !== undefined) {
+    if (patch.subjectId !== undefined && subjectId !== null) {
       for (const levelId of retained) await assertSubjectTaughtAtLevel(prisma, levelId, subjectId);
     }
     if (patch.levelId !== undefined && retained.length !== placed.additionalLevels.length) {

@@ -1717,8 +1717,15 @@ model RecurringCourseSchedule {
   /// with `overridden` set, exactly as room and delivery mode already are.
   attendanceMarking AttendanceMarking @default(staff_only) @map("attendance_marking")
 
-  subjectId String  @map("subject_id") @db.Uuid
-  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  /// **R195 — a class addressed to a whole Level or to an Administrative
+  /// Group may have NO Subject**: it teaches all the Level's Subjects at once
+  /// (a child's or a teen's group sits one session for everything), and the
+  /// Owner asked that «اختاري المادة» not stand in the way. `NULL` reads
+  /// «كل المواد». A circle (`teaching_group`) always names one
+  /// (`course_schedule_subject_check`); a filter-built class may leave it
+  /// only when it names a Level or a group and no circle (the service).
+  subjectId String?  @map("subject_id") @db.Uuid
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Restrict)
 
   teachingMode TeachingMode @map("teaching_mode")
 
@@ -3834,9 +3841,12 @@ model EducationalContent {
   branchId String? @map("branch_id") @db.Uuid
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
-  /// Required (Revision 43): content belongs to a Subject as well as a Level.
-  subjectId String  @map("subject_id") @db.Uuid
-  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  /// Required at the upload boundary (Revision 43): content belongs to a
+  /// Subject as well as a Level. `NULL` since R195 — «عام», TD-5's «General»
+  /// — for what a class of ALL the Level's Subjects produces: its recordings
+  /// and the materials attached to its occurrences.
+  subjectId String?  @map("subject_id") @db.Uuid
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Restrict)
 
   academicYearId String       @map("academic_year_id") @db.Uuid
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)

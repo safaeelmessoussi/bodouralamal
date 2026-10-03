@@ -65,7 +65,8 @@ export interface UploadTicketClaims {
   mime: string;
   size: number;
   level_id: string;
-  subject_id: string;
+  /** R195 — `null` is «عام». */
+  subject_id: string | null;
   academic_year_id: string;
   /** `null` is the Global scope (§4.9), which is a value, not an absence. */
   branch_id: string | null;

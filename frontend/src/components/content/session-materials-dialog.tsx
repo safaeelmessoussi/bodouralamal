@@ -43,7 +43,7 @@ export interface SessionMaterialsProps {
    */
   canRecord?: boolean;
   /** The session's teaching scope, so an upload lands where the class is. */
-  scope: { levelId: string; subjectId: string; academicYearId: string; branchId: string | null };
+  scope: { levelId: string; subjectId: string | null; academicYearId: string; branchId: string | null };
   token: string | null;
   onClose: () => void;
 }
@@ -105,10 +105,11 @@ export function SessionMaterialsDialog({
     // The candidates are the library items in this session's own Level and
     // Subject — the ones a teacher would plausibly attach. A full library list
     // would make the picker a search problem the dialog is not.
+    // R195 — a class of all the Level's Subjects offers the whole Level's shelf.
     const body = await api<{ data: LibraryOption[] }>(
-      `/library?level_id=${encodeURIComponent(scope.levelId)}&subject_id=${encodeURIComponent(
-        scope.subjectId,
-      )}&page_size=100`,
+      `/library?level_id=${encodeURIComponent(scope.levelId)}${
+        scope.subjectId === null ? '' : `&subject_id=${encodeURIComponent(scope.subjectId)}`
+      }&page_size=100`,
       { token },
     );
     setOptions(body.data);

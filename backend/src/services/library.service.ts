@@ -158,7 +158,8 @@ export interface LibraryItem {
   /** R169 §10 — the item's OTHER Levels, in the Levels' own order. `levelId`
    *  stays its home; an item with none here belongs to that Level alone. */
   additionalLevels: { id: string; name: string }[];
-  subjectId: string;
+  /** R195 — `null` («عام») for what a class of all a Level's Subjects produced. */
+  subjectId: string | null;
   academicYearId: string;
   branchId: string | null;
   mimeType: string;
@@ -187,7 +188,7 @@ export interface LibraryItem {
   levelName: string;
   categoryId: string;
   categoryName: string;
-  subjectName: string;
+  subjectName: string | null;
   academicYearLabel: string;
   /** `null` is **Global / بدون فرع** (§4.9, BR-20), not unknown. */
   branchName: string | null;
@@ -461,10 +462,12 @@ export async function listLibrary(
              c."mime_type"               AS "mimeType",
              c."size_bytes"              AS "sizeBytes",
              c."created_at"              AS "createdAt",
-             -- §5.2's headings. INNER joins on level/subject/year because each
-             -- FK is NOT NULL and Restrict, so a row without them cannot exist;
-             -- the branch is LEFT because NULL there means Global (§4.9), which
-             -- is a value rather than a missing one.
+             -- §5.2's headings. INNER joins on level/year because each FK is
+             -- NOT NULL and Restrict, so a row without them cannot exist; the
+             -- branch is LEFT because NULL there means Global (§4.9), which is
+             -- a value rather than a missing one — and so is the subject since
+             -- R195: NULL is «عام», what a class of all a Level's Subjects
+             -- produced.
              l."name"                    AS "levelName",
              l."category_id"             AS "categoryId",
              cat."name"                  AS "categoryName",
@@ -477,7 +480,7 @@ export async function listLibrary(
       LEFT JOIN "quran_surah" q ON q."surah_id" = c."surah_id"
       JOIN "level" l          ON l."id"  = c."level_id"
       JOIN "category" cat     ON cat."id" = l."category_id"
-      JOIN "subject" s        ON s."id"  = c."subject_id"
+      LEFT JOIN "subject" s   ON s."id"  = c."subject_id"
       JOIN "academic_year" y  ON y."id"  = c."academic_year_id"
       LEFT JOIN "branch" b    ON b."id"  = c."branch_id"
       ${where}

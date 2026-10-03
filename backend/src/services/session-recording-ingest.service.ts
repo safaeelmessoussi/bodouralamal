@@ -14,7 +14,7 @@ import { segmentsPrefixFor } from "../policies/online-class.js";
 import { scheduleLevelIds } from "../policies/roster-resolution.js";
 import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
 import { publicDisplayName } from "../lib/display-name.js";
-import { audienceTitle } from "../lib/item-title.js";
+import { ALL_SUBJECTS, audienceTitle } from "../lib/item-title.js";
 import {
   nextRecordingName,
   recordingBaseName,
@@ -308,7 +308,9 @@ export async function ingestRecording(
   const contentId = recording.id;
   const extension = extensionOf(`x.${mimeEssence(stagingMime).split("/")[1] ?? "bin"}`);
   const baseName = recordingBaseName({
-    title: recording.session.schedule.subject.name,
+    // R195 — a class of all the Level's Subjects: the file is named for the
+    // group or the Level rather than a Subject.
+    title: recording.session.schedule.subject?.name ?? classAudienceName(recording.session.schedule) ?? ALL_SUBJECTS,
     description: null,
     date: isoDate(recording.session.date),
   });
@@ -375,7 +377,7 @@ export async function ingestRecording(
     const title = nextRecordingName(
       sessionRecordingBaseName({
         typeName: session.schedule.schedulingType?.name ?? null,
-        subjectName: (session.subject ?? session.schedule.subject).name,
+        subjectName: (session.subject ?? session.schedule.subject)?.name ?? null,
         surahNames: (session.surahs.length > 0 ? session.surahs : session.schedule.surahs).map(
           (row) => row.surah.nameArabic,
         ),

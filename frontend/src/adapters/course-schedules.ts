@@ -46,7 +46,9 @@ export interface CourseSchedule {
    * fell back to a default would re-publish a hidden class on an unrelated edit.
    */
   visibility: string;
-  subject_id: string;
+  /** R195 — `null` for a class of ALL the Level's Subjects («كل المواد»);
+   *  `entire_level` and `administrative_group` only. */
+  subject_id: string | null;
   /**
    * **Labels, never identifiers** — resolved server-side so a timetable can be
    * read. `null` on a write response, whose caller already knows them.
@@ -225,7 +227,8 @@ export interface CourseScheduleInput {
    * column default, `public`.
    */
   visibility?: string;
-  subject_id: string;
+  /** R195 — `null` for a Level-wide class of all its Subjects. */
+  subject_id: string | null;
   teaching_mode: string;
   /**
    * **R110 (Owner, 2026-09-02) — which catalogue row this is.**

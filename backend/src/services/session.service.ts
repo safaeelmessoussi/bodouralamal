@@ -113,7 +113,7 @@ export async function loadForWrite(
   Session & {
     schedule: {
       branchId: string;
-      subjectId: string;
+      subjectId: string | null;
       teachingMode: string;
       levelId: string | null;
       administrativeGroupId: string | null;
@@ -341,7 +341,9 @@ export async function overrideSession(
     surahsBefore = own.map((row) => row.surahId).sort((a, b) => a - b);
     const teaches = taughtAfter;
     const named = data.surahIds ?? surahsBefore;
-    if (!(await subjectRequiresSurahs(prisma, teaches))) {
+    // R195 — an occurrence of a class of all the Level's Subjects, retaught
+    // as none in particular, carries no Surah (`resolveSurahs` says so).
+    if (teaches === null || !(await subjectRequiresSurahs(prisma, teaches))) {
       // Refuses a Surah NAMED on a Subject that has none; one merely left over
       // from a previous Subject override is cleared instead.
       await resolveSurahs(prisma, { subjectId: teaches, levelIds: [], surahIds: data.surahIds ?? [] });

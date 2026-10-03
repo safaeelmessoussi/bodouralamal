@@ -113,6 +113,13 @@ export interface ClassSectionProps {
    * from the row rather than from the scope hook's clearable copy.
    */
   frozenSubject?: { value: string; label: string } | null;
+  /**
+   * **R195 — «كل المواد» on offer.** A class addressed to a whole Level or
+   * to an Administrative Group may be about all the Level's Subjects at once
+   * (a child's or a teen's group sits one session for everything); the choice
+   * is offered as its own option, with a line saying when to take it.
+   */
+  subjectAllOption?: { value: string; label: string } | null;
 }
 
 export function ClassSection({
@@ -136,6 +143,7 @@ export function ClassSection({
   staffLocked,
   audience,
   frozenSubject,
+  subjectAllOption,
 }: ClassSectionProps): ReactNode {
   return (
     <>
@@ -182,10 +190,15 @@ export function ClassSection({
         fields={['subjectId']}
         mode="form"
         locked={locked ? ['subjectId'] : []}
+        // R195 — «كل المواد», first in the list, where the audience allows it.
+        {...(subjectAllOption && !locked ? { extraOptions: { subjectId: [subjectAllOption] } } : {})}
         // R179 §3 — on edit the Subject is the ROW's, shown from the row: the
         // hook may clear its own copy while the class's circles load.
         {...(locked && frozenSubject ? { pinned: { subjectId: frozenSubject } } : {})}
       />
+      {subjectAllOption && !locked ? (
+        <p className="muted class-section__subjectHint">{t('scheduling.subjectAllHint')}</p>
+      ) : null}
       {surahs ?? null}
 
       {/* **R97 — delivery, and the room that only an in-person class has.**

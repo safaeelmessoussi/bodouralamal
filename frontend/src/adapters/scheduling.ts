@@ -668,8 +668,9 @@ export interface SchedulingInput {
    *  absent (or `examMode: 'physical'`) means no gate beyond `visibility`. */
   examAvailability?: ExamAvailabilityPolicy;
 
-  /** Class only (§4.4c). */
-  subjectId?: string;
+  /** Class only (§4.4c). R195 — `null` is «كل المواد» (a class of all its
+   *  Level's Subjects), sent as `subject_id: null`. */
+  subjectId?: string | null;
   teachingMode?: string;
   /** Every mode except `multi_dimension`, which sends `dimensions` below
    *  instead and omits this entirely (SRS Revision 155). */
@@ -847,7 +848,8 @@ export async function saveSchedulingItem(
     await createCourseSchedule(
       {
         description: input.description,
-        subject_id: input.subjectId!,
+        // R195 — `null` travels as itself: «كل المواد» is a choice, never a gap.
+        subject_id: input.subjectId ?? null,
         teaching_mode: input.teachingMode!,
         // **SRS Revision 155 — exactly one of the two travels.**
         // `multi_dimension` sends `dimensions` and no `target_id`; every

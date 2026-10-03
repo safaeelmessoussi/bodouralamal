@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
-import { wallClockHHMM } from '../lib/item-title.js';
+import { ALL_SUBJECTS, wallClockHHMM } from '../lib/item-title.js';
 import { moroccoDateIso } from '../lib/morocco-clock.js';
 
 /**
@@ -158,7 +158,8 @@ export async function offeredCircleSlots(
         meetings: meetingsOf.get(circle.id)!,
       })),
     fixed: wholeLevel.map((row) => ({
-      subject_name: row.subject.name,
+      // R195 — a whole-Level class of all its Subjects says so.
+      subject_name: row.subject?.name ?? ALL_SUBJECTS,
       weekdays: row.weekdays.map(String),
       start_time: wallClockHHMM(row.startTime) ?? '',
       end_time: wallClockHHMM(row.endTime) ?? '',

@@ -63,6 +63,7 @@ import {
   updateContentMetadata,
   UPLOAD_QUOTA,
 } from "./content.service.js";
+import { listLibrary } from "./library.service.js";
 
 /**
  * TD-3.5 end to end, against **real MinIO through the real Nginx proxy**.
@@ -778,6 +779,29 @@ describe("completion verification (§4.9 Revision 8)", () => {
     );
     expect(e.code).toBe("NOT_FOUND");
     expect(e.details?.["reason"]).toBe("BAD_SIGNATURE");
+  });
+});
+
+describe("R195 — material of a class of all the Level's Subjects (no Subject: «عام»)", () => {
+  it("uploads with subjectId null, is listed by the library under the Level with no Subject, and may later be given one", async () => {
+    const { id } = await uploadPdf(admin(), "لكل المواد", { subjectId: null, visibility: "public" });
+    const stored = await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { subjectId: true } });
+    expect(stored.subjectId).toBeNull();
+
+    // The library's LEFT JOIN: the item is on the Level's shelf, with no Subject.
+    const reader = { ...admin(), accountStatus: "active" as const };
+    const page = await listLibrary(prisma, reader, { levelId, pageSize: 100 });
+    const listed = page.data.find((row) => row.id === id);
+    expect(listed).toBeDefined();
+    expect(listed!.subjectId).toBeNull();
+    expect(listed!.subjectName).toBeNull();
+    // Narrowed to a Subject, it is not there — it belongs to none.
+    const narrowed = await listLibrary(prisma, reader, { levelId, subjectId, pageSize: 100 });
+    expect(narrowed.data.some((row) => row.id === id)).toBe(false);
+
+    // An edit may file it under a Subject the Level teaches; the pair is checked.
+    await updateContentMetadata(prisma, clients, admin(), id, { subjectId });
+    expect((await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { subjectId: true } })).subjectId).toBe(subjectId);
   });
 });
 

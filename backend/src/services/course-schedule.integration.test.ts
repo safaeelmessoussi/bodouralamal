@@ -133,7 +133,10 @@ const datesOf = async (scheduleId: string): Promise<string[]> =>
 async function cleanup(): Promise<void> {
   const tagged = { name: { startsWith: TAG } };
   const taggedPerson = { nameArabic: { startsWith: TAG } };
-  const scheduleWhere = { schedule: { subject: tagged } };
+  // R195 — a class of all Subjects has no Subject to be found by: the
+  // suite's own branch names it too.
+  const ownSchedule = { OR: [{ subject: tagged }, { branch: tagged }] };
+  const scheduleWhere = { schedule: ownSchedule };
 
   await prisma.sessionContent.deleteMany({ where: { session: scheduleWhere } });
   // Revision 43.4: sessions carry their own staffing snapshot, RESTRICT against
@@ -155,10 +158,10 @@ async function cleanup(): Promise<void> {
   await prisma.attendance.deleteMany({ where: { session: scheduleWhere } });
   await prisma.session.deleteMany({ where: scheduleWhere });
   await prisma.courseScheduleStaff.deleteMany({
-    where: { schedule: { subject: tagged } },
+    where: { schedule: ownSchedule },
   });
   await prisma.recurringCourseSchedule.deleteMany({
-    where: { subject: tagged },
+    where: ownSchedule,
   });
   await prisma.enrollment.deleteMany({ where: { student: taggedPerson } });
   await prisma.teachingGroup.deleteMany({ where: { level: tagged } });
@@ -2694,5 +2697,78 @@ describe("a schedule carries its own note — and is CALLED what it is (R57, R16
         data: { title: "   " },
       }),
     ).rejects.toThrow();
+  });
+});
+
+/**
+ * **SRS Revision 195 (the Owner, 2026-10-03) — a class of ALL the Level's
+ * Subjects.** A child's or a teen's group sits one session for everything, so
+ * «اختاري المادة» no longer stands in the way of scheduling it: `subjectId`
+ * is `null`, the title names the group instead, and the curriculum and
+ * capability checks that need a Subject are not asked. A circle, and a
+ * filter-built class addressed to «الكل», still name one.
+ */
+describe("R195 — a class with no Subject teaches all the Level's Subjects", () => {
+  it("is created for a group with subjectId null, titled by the group, and listed with subject_id null", async () => {
+    const lead = await person("مؤطِّرة الكل");
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ subjectId: null, staff: [{ userId: lead, position: "teacher" }] }),
+      NOW,
+    );
+    const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id } });
+    expect(row.subjectId).toBeNull();
+
+    const listed = await listCourseSchedules(prisma, superAdmin(), {});
+    const mine = listed.data.find((r) => r.id === id)!;
+    expect(mine.subjectId).toBeNull();
+    // No Subject part: the group, the teacher, the weekday and time.
+    expect(mine.title).toBe(`${TAG} المجموعة 1 — ${TEACHER_HONORIFIC} ${TAG} مؤطِّرة الكل — الثلاثاء 15:00`);
+
+    const sessions = await listScheduleSessions(prisma, superAdmin(), id, {});
+    expect(sessions.data.length).toBeGreaterThan(0);
+    const first = sessions.data[0]!;
+    expect(first.title).toContain(`${TAG} المجموعة 1 —`);
+    expect(first.title).not.toContain("undefined");
+  });
+
+  it("is created by filters naming the group, and refused by filters naming nothing or a circle", async () => {
+    // A filter-built class names no single target (`exactOptionalPropertyTypes`).
+    const { targetId: _single, ...filterBuilt } = baseInput({ subjectId: null, teachingMode: "multi_dimension" });
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      { ...filterBuilt, dimensions: { branchIds: [branchId], administrativeGroupIds: [groupId] } },
+      NOW,
+    );
+    expect((await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id } })).subjectId).toBeNull();
+
+    // «الكل» is resolved against a Subject (R169 §7): none to resolve against.
+    const everybody = await failure(() =>
+      createCourseSchedule(
+        prisma,
+        superAdmin(),
+        { ...filterBuilt, dimensions: { branchIds: [branchId] } },
+        NOW,
+      ),
+    );
+    expect(everybody.code).toBe("VALIDATION_FAILED");
+    expect(everybody.details?.["reason"]).toBe("SUBJECT_REQUIRED_FOR_AUDIENCE");
+
+    // A circle IS a Subject's split.
+    const circle = await prisma.teachingGroup.create({
+      data: { name: `${TAG} حلقة`, levelId, subjectId, branchId },
+    });
+    const forCircle = await failure(() =>
+      createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ subjectId: null, teachingMode: "teaching_group", targetId: circle.id }),
+        NOW,
+      ),
+    );
+    expect(forCircle.details?.["reason"]).toBe("SUBJECT_REQUIRED_FOR_AUDIENCE");
+    await prisma.teachingGroup.delete({ where: { id: circle.id } });
   });
 });

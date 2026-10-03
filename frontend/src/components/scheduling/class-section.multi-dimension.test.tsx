@@ -347,9 +347,24 @@ describe('R179 §3 — the frozen Subject is the row\'s, not the hook\'s', () =>
     expect(SCHEDULING_SOURCE).toContain(
       "? { value: item.ids.subjectId, label: item.subjectName ?? '' }",
     );
-    expect(SCHEDULING_SOURCE).toContain("if (surahSubjectId === '') return t('scheduling.invalid.subject');");
+    expect(SCHEDULING_SOURCE).toContain(
+      "if (surahSubjectId === '' || surahSubjectId === ALL_SUBJECTS) return t('scheduling.invalid.subject');",
+    );
     expect(SCHEDULING_SOURCE).toContain("if (!editing && scope.levelTeachesNothing) return t('scope.assignSubjectsHint');");
     expect(SCHEDULING_SOURCE).not.toContain("if (scope.value.subjectId === '') return t('scheduling.invalid.subject');\n      // R178 §6(a)");
+  });
+
+  it('R195 — «كل المواد» is offered where the audience is a Level or a group and no circle, sent as null, and pinned on edit', () => {
+    // The rule the server holds (`SUBJECT_REQUIRED_FOR_AUDIENCE`), stated once here.
+    expect(SCHEDULING_SOURCE).toContain(
+      "(mode === 'multi_dimension' &&\n        (levelIds.length > 0 || groupIds.length > 0) &&\n        teachingGroupIds.length === 0)",
+    );
+    expect(SCHEDULING_SOURCE).toContain('subjectId: classOfAllSubjects ? null : scope.value.subjectId,');
+    expect(SCHEDULING_SOURCE).toContain(": { value: ALL_SUBJECTS, label: t('scheduling.subjectAll') }");
+    // The hook keeps the sentinel: rule 2 would otherwise clear it as a stale id.
+    expect(SCHEDULING_SOURCE).toContain('sentinels: { subjectId: [ALL_SUBJECTS] },');
+    expect(t('scheduling.subjectAll')).toBe('كل المواد');
+    expect(t('scheduling.subjectAllHint')).not.toBe('scheduling.subjectAllHint');
   });
 });
 

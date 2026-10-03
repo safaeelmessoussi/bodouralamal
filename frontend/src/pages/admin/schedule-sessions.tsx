@@ -251,7 +251,8 @@ export function ScheduleSessionsPage({
    *  session carries none of them itself (it references a schedule). */
   const [scope, setScope] = useState<{
     levelId: string;
-    subjectId: string;
+    /** R195 — `null` for a class of all its Level's Subjects. */
+    subjectId: string | null;
     academicYearId: string;
     branchId: string | null;
     /** Owner-reported, 2026-09-15 — the schedule's own current group,
@@ -957,7 +958,9 @@ function ScopeDialog({
   identity: {
     branchId: string | null;
     levelId: string;
-    subjectId: string;
+    /** R195 — `null` for a class of all its Level's Subjects; a
+     *  `this_and_future` successor (always `multi_dimension`) must then name one. */
+    subjectId: string | null;
     academicYearId: string;
     targetId: string;
     teachingMode: string;
@@ -1090,7 +1093,7 @@ function ScopeDialog({
       ? {
           branchId: identity.branchId ?? '',
           levelId: identity.levelId,
-          subjectId: identity.subjectId,
+          subjectId: identity.subjectId ?? '',
           academicYearId: identity.academicYearId,
         }
       : {},

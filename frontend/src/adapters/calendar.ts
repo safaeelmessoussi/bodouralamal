@@ -423,7 +423,8 @@ export async function fetchCalendarBootstrap(query: BootstrapQuery): Promise<Cal
 export interface SessionContentRef {
   id: string;
   title: string;
-  subject_id: string;
+  /** R195 — `null` is «عام». */
+  subject_id: string | null;
   level_id: string;
 }
 

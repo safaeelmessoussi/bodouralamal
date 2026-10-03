@@ -515,7 +515,9 @@ export interface CourseScheduleDto {
    *  and no part of scheduling logic. `subject_id` remains the identifier. */
   title: string;
   description: string | null;
-  subject_id: string;
+  /** R195 — `null` for a class of ALL the Level's Subjects («كل المواد»);
+   *  `entire_level` and `administrative_group` only. */
+  subject_id: string | null;
   /**
    * **Labels, never identifiers** — the ids remain what a client filters and
    * links by. Resolved server-side for the same reason `libraryItemDto` resolves
@@ -657,7 +659,7 @@ export function courseScheduleDto(row: {
   id: string;
   title: string;
   description: string | null;
-  subjectId: string;
+  subjectId: string | null;
   attendanceMarking: string;
   teachingMode: string;
   levelId: string | null;
@@ -1087,7 +1089,8 @@ export interface LibraryItemDto {
   /** R169 §10 — the item's OTHER Levels, in the Levels' own order; `level_id`
    *  is its home. `[]` for an item that belongs to one Level. */
   additional_levels: { id: string; name: string }[];
-  subject_id: string;
+  /** R195 — `null` («عام») for what a class of all a Level's Subjects produced. */
+  subject_id: string | null;
   academic_year_id: string;
   /** `null` is **Global**, not unknown (§7) — it renders as its own container. */
   branch_id: string | null;
@@ -1107,7 +1110,8 @@ export interface LibraryItemDto {
   category_id: string;
   category_name: string;
   level_name: string;
-  subject_name: string;
+  /** R195 — `null` reads «عام». */
+  subject_name: string | null;
   academic_year_label: string;
   /** `null` is **Global / بدون فرع**, not unknown — it renders as its own
    *  container (§4.9, BR-20). */
@@ -1141,7 +1145,7 @@ export function libraryItemDto(row: {
   levelId: string;
   wholeCategory: boolean;
   additionalLevels: { id: string; name: string }[];
-  subjectId: string;
+  subjectId: string | null;
   academicYearId: string;
   branchId: string | null;
   mimeType: string;
@@ -1150,7 +1154,7 @@ export function libraryItemDto(row: {
   categoryId: string;
   categoryName: string;
   levelName: string;
-  subjectName: string;
+  subjectName: string | null;
   academicYearLabel: string;
   branchName: string | null;
   surahId: number | null;

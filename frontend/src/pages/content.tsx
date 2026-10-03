@@ -117,7 +117,9 @@ function ContentEditDialog({
   const pristine = {
     title: row.title,
     levelId: row.level_id,
-    subjectId: row.subject_id,
+    // R195 — an item of no Subject opens with none chosen; choosing one
+    // files it (the server checks the pair); leaving it keeps none.
+    subjectId: row.subject_id ?? '',
     visibility: row.visibility,
     isRecording: row.origin === 'session_recording',
     wholeCategory: row.whole_category,
@@ -263,14 +265,16 @@ interface LibraryRow {
   whole_category: boolean;
   /** R169 §10 — the item's OTHER Levels; `level_id` is its home. */
   additional_levels?: { id: string; name: string }[];
-  subject_id: string;
+  /** R195 — `null` for what a class of all its Level's Subjects produced. */
+  subject_id: string | null;
   academic_year_id: string;
   branch_id: string | null;
   mime_type: string;
   size_bytes: number;
   created_at: string;
   level_name: string;
-  subject_name: string;
+  /** R195 — `null` for what a class of all its Level's Subjects produced. */
+  subject_name: string | null;
   academic_year_label: string;
   branch_name: string | null;
   /** R177 §7 — the one Surah the item is about, or none. */
@@ -513,7 +517,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         {
           ...(patch.title !== editing.title ? { title: patch.title } : {}),
           ...(patch.levelId !== editing.level_id ? { level_id: patch.levelId } : {}),
-          ...(patch.subjectId !== editing.subject_id ? { subject_id: patch.subjectId } : {}),
+          ...(patch.subjectId !== (editing.subject_id ?? '') && patch.subjectId !== ''
+            ? { subject_id: patch.subjectId }
+            : {}),
           ...(patch.visibility !== editing.visibility
             ? { visibility: patch.visibility as 'public' | 'private' | 'hidden' }
             : {}),

@@ -69,7 +69,8 @@ export async function scheduleTitles(
         row.id,
         composeItemTitle({
           typeName: row.schedulingType?.name ?? null,
-          subjectName: row.subject.name,
+          // R195 — a class of all the Level's Subjects names none.
+          subjectName: row.subject?.name ?? null,
           surahNames: row.surahs.map((s) => s.surah.nameArabic),
           audienceName: scheduleAudience(row),
           leadName: lead === null ? null : publicDisplayName(lead),
@@ -128,14 +129,15 @@ export async function sessionTitles(
         row.id,
         composeItemTitle({
           typeName: row.schedule.schedulingType?.name ?? null,
-          subjectName: (row.subject ?? row.schedule.subject).name,
+          // R195 — a class of all the Level's Subjects names none.
+          subjectName: (row.subject ?? row.schedule.subject)?.name ?? null,
           audienceName: scheduleAudience(row.schedule),
           // Codex review, 2026-09-22 — inherited only while the Subject taught
           // works by Surah (the same rule as `calendar.service.ts`).
           surahNames: (
             row.surahs.length > 0
               ? row.surahs
-              : (row.subject ?? row.schedule.subject).requiresSurahs
+              : (row.subject ?? row.schedule.subject)?.requiresSurahs
                 ? row.schedule.surahs
                 : []
           ).map((s) => s.surah.nameArabic),

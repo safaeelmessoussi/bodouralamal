@@ -84,6 +84,7 @@ Canonical catalogue; every service uses exactly these identifiers; extensible on
 | `CIRCLE_NOT_OFFERED` | `POST /registrations`, `POST /profile/role-requests` | Ranked حلقة no longer offered (rescheduled); `details.teaching_group_id`; choose again |
 | `LEVEL_IS_HOME` | `PATCH /content/{id}` (R169 §10) | `additional_level_ids` named the home Level; OTHER Levels only |
 | `NO_LEVEL_TEACHES_SUBJECT` | `POST`/`PATCH /admin/course-schedules` (R169 §7) | «الكل» on Level, group, circle = every Level teaching the Subject, and none does; replaces `MULTI_DIMENSION_NEEDS_A_LEVEL` |
+| `SUBJECT_REQUIRED_FOR_AUDIENCE` | `POST`/`PATCH /admin/course-schedules` (R195) | `subject_id: null` («كل المواد») is for a class addressed to a Level or a group; a circle, or «الكل», names its Subject |
 | `BIRTH_DATE_REQUIRED` | `POST /profile/role-requests` | Beneficiary request without a recorded birth date must bring one (R130) |
 | `NOT_IN_BUNDLE` | Approval | Placement named somebody this approval does not admit |
 | `SURAH_NOT_IN_SYLLABUS` | Class, occurrence, exam or content writes (R165 §2; a Surah is optional everywhere since R179 §2 — `SURAHS_REQUIRED` retired) | `details.surah_ids` outside every addressed Level's «مقرر الحفظ» |

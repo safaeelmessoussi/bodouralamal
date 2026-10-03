@@ -173,6 +173,13 @@ export interface UseScopeOptionsInput {
    */
   offerWholeCategory?: boolean;
   /**
+   * **R195 — values a field may hold that are not rows of its table**, and
+   * that rule 2 must therefore not clear: the scheduling form's «كل المواد»
+   * on the Subject (`'*'`). The matching option is the caller's to render
+   * (`ScopeSelectors`'s `extraOptions`); this only says the value is legal.
+   */
+  sentinels?: Partial<Record<ScopeField, readonly string[]>>;
+  /**
    * **Whether these selectors narrow a list or fill a form** (2026-08-18).
    *
    * This replaced a `subjectsUnscoped` boolean, and the reason is the defect that
@@ -234,6 +241,7 @@ export function useScopeOptions({
   restrictToOwnCapability = false,
   subjectsTaughtAnywhere = false,
   offerWholeCategory = false,
+  sentinels = {},
 }: UseScopeOptionsInput): ScopeOptions {
   const subjectsUnscoped = mode === 'filter';
   /**
@@ -557,6 +565,8 @@ export function useScopeOptions({
   // deliberately (an edit form opening on an existing row).
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  const sentinelsRef = useRef(sentinels);
+  sentinelsRef.current = sentinels;
 
   useEffect(() => {
     if (!ready) return;
@@ -567,6 +577,8 @@ export function useScopeOptions({
         if (blocked) return;
         const chosen = current[field];
         if (chosen === '') return;
+        // R195 — a sentinel the caller declared is a legal value, not a stale id.
+        if (sentinelsRef.current[field]?.includes(chosen)) return;
         if (!optionsRef.current[field].some((o) => o.value === chosen)) {
           next[field] = '';
           changed = true;

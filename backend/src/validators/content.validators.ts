@@ -41,7 +41,11 @@ export const initiateUploadSchema = z
          */
         level_id: uuid.optional(),
         category_id: uuid.optional(),
-        subject_id: uuid,
+        /** R195 — `null` is «عام» (TD-5's General): material of a class that
+         *  teaches ALL its Level's Subjects. Required and explicitly nullable,
+         *  for the same reason `branch_id` is: the choice is made, never
+         *  skipped. */
+        subject_id: uuid.nullable(),
         academic_year_id: uuid,
         branch_id: uuid.nullable(),
         visibility: z.enum(['public', 'private', 'hidden']).optional(),

@@ -204,7 +204,17 @@ export const createCourseScheduleSchema = z
     // (R166 §3 — no `title`: a class is called what it is, composed at read
     // time. `.strict()` refuses the key rather than dropping it unseen.)
     description: scheduleDescription,
-    subject_id: uuid,
+    /**
+     * **R195 — `null` for a class of ALL the Level's Subjects** («كل المواد»):
+     * a child's or a teen's group sits one session for everything, so the
+     * Owner asked that «اختاري المادة» not stand in the way. Accepted where
+     * the class is addressed to a Level or a group — `entire_level`,
+     * `administrative_group`, or `multi_dimension` naming a Level or a group
+     * and no circle (the service decides; the shape is checked below). A
+     * circle names its Subject. Absent is refused as before: the choice is
+     * made, not skipped.
+     */
+    subject_id: uuid.nullable(),
     teaching_mode: teachingMode,
     /** Required for every mode except `multi_dimension`, which uses
      *  `dimensions` instead (checked below — the two are named exclusively,
@@ -272,6 +282,15 @@ export const createCourseScheduleSchema = z
   .strict()
   .superRefine(checkDelivery)
   .superRefine((v, ctx) => {
+    // R195 — no Subject only where the class teaches all of a Level's: never
+    // for a circle (the audience half is the service's).
+    if (v.subject_id === null && v.teaching_mode === "teaching_group") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["subject_id"],
+        message: "a circle names its subject",
+      });
+    }
     // Revision 155 — `target_id` and `dimensions` are exclusive: exactly the
     // one `teaching_mode` names, never both, never neither.
     if (v.teaching_mode === "multi_dimension") {
@@ -414,7 +433,8 @@ export const updateCourseScheduleSchema = z
      * has, through the one mechanism §4.4 already trusts for it — not a
      * second, competing propagation design.
      */
-    subject_id: uuid.optional(),
+    // R195 — `null` takes the Subject off a Level-wide successor («كل المواد»).
+    subject_id: uuid.nullable().optional(),
     branch_id: uuid.optional(),
     academic_year_id: uuid.optional(),
     teaching_mode: teachingMode.optional(),

@@ -122,7 +122,8 @@ export function localDateIso(now: Date = new Date()): string {
 export interface SessionRecordingNameSource {
   /** The catalogue type's name («حصة», «درس»…); `null` for a pre-catalogue row. */
   typeName: string | null;
-  subjectName: string;
+  /** R195 — `null` for a class of all the Level's Subjects. */
+  subjectName: string | null;
   /** In Mushaf order; empty wherever the Subject is not taught by Surah. */
   surahNames: readonly string[];
   /** Her public display name (§20 rule 12) — never her civil name. */

@@ -167,6 +167,9 @@ const STAFFING_REFUSALS: Record<string, string> = {
   SUBJECT_NOT_IN_LEVEL: 'admin.schedules.subjectNotInLevel',
 };
 
+/** R195 — the Subject selector's «كل المواد» choice: a value no Subject row
+ *  can have, sent to the server as `subject_id: null`. */
+const ALL_SUBJECTS = '*';
 const SCOPE_FIELDS = ['branchId', 'levelId', 'groupId', 'subjectId', 'academicYearId'] as const;
 /** What the LIST filters by. A module constant like every other caller's —
  *  the hook no longer depends on identity, but a stable list is still the
@@ -1529,6 +1532,8 @@ export function SchedulingDialog({
     // that teaches its Subject. So its Subject can be chosen with no Level in
     // play — from the Subjects SOME Level teaches, never the whole catalogue.
     subjectsTaughtAnywhere: type === 'class' && mode === 'multi_dimension' && !editing,
+    // R195 — «كل المواد» is a legal Subject value here, not a stale id.
+    sentinels: { subjectId: [ALL_SUBJECTS] },
   });
 
   /**
@@ -1751,6 +1756,26 @@ export function SchedulingDialog({
   // `dimensions` and sent back only when the reader changed them.
   const filtering = type === 'class' && mode === 'multi_dimension';
   const audienceSelection = { branchIds, categoryIds, levelIds, groupIds, teachingGroupIds };
+  /**
+   * **R195 — «كل المواد».** A class addressed to a whole Level or to an
+   * Administrative Group may be about all the Level's Subjects at once (a
+   * child's or a teen's group sits one session for everything): the option is
+   * offered where the audience allows it — a single Level or group, or
+   * filters naming a Level or a group and no circle — and sent as `null`. A
+   * circle, and «الكل» (filters naming nothing), name a Subject. The same
+   * rule the server holds (`SUBJECT_REQUIRED_FOR_AUDIENCE`).
+   */
+  const subjectMayBeAll =
+    type === 'class' &&
+    (mode === 'entire_level' ||
+      mode === 'administrative_group' ||
+      (mode === 'multi_dimension' &&
+        (levelIds.length > 0 || groupIds.length > 0) &&
+        teachingGroupIds.length === 0));
+  const allSubjectsChosen =
+    type === 'class' &&
+    (editing ? (item?.ids.subjectId ?? null) === null : scope.value.subjectId === ALL_SUBJECTS);
+  const classOfAllSubjects = allSubjectsChosen && (editing || subjectMayBeAll);
   const audienceChoices = useAudienceFilters({
     active: filtering,
     token,
@@ -1895,7 +1920,9 @@ export function SchedulingDialog({
           startTime,
           endTime,
           deliveryMode: delivery,
-          ...(scope.value.subjectId ? { subjectId: scope.value.subjectId } : {}),
+          ...(scope.value.subjectId && scope.value.subjectId !== ALL_SUBJECTS
+            ? { subjectId: scope.value.subjectId }
+            : {}),
           ...(scope.value.levelId ? { levelId: scope.value.levelId } : {}),
           ...(item?.id ? { excludeScheduleId: item.id } : {}),
           ...(recurrence.type === 'none' ? { date: recurrence.startDate } : {}),
@@ -2122,8 +2149,11 @@ export function SchedulingDialog({
       // R179 §3 — neither question on EDIT: the Subject is the row's, frozen
       // and never sent (`surahSubjectId` reads it from the row), and the hook's
       // own copy may have been cleared while the class's circles loaded.
-      if (!editing && scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
-      if (surahSubjectId === '') return t('scheduling.invalid.subject');
+      // R195 — none of this for a class of all the Level's Subjects.
+      if (!classOfAllSubjects) {
+        if (!editing && scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
+        if (surahSubjectId === '' || surahSubjectId === ALL_SUBJECTS) return t('scheduling.invalid.subject');
+      }
       // R178 §6(a) — «السنة الدراسية» is no longer asked: the server derives it
       // from the start date (a period covering it, else the current year).
       // R179 §2 — the Surahs are optional: none chosen is sent as none.
@@ -2217,7 +2247,9 @@ export function SchedulingDialog({
                       ...(levelIds.length > 0 ? { levelIds } : {}),
                       ...(groupIds.length > 0 ? { groupIds } : {}),
                     },
-          subjectId: scope.value.subjectId,
+          // R195 — `null` says «كل المواد»; the server refuses it where the
+          // audience is a circle or «الكل».
+          subjectId: classOfAllSubjects ? null : scope.value.subjectId,
           levelId: scope.value.levelId,
           // `null` is the whole Level sitting together (R58), not a gap.
           //
@@ -2497,11 +2529,17 @@ export function SchedulingDialog({
           <ClassSection
             scope={scope}
             locked={editing}
-            // R179 §3 — the row's Subject, shown from the row on edit.
+            // R179 §3 — the row's Subject, shown from the row on edit; R195 —
+            // a class of all Subjects reads «كل المواد».
             frozenSubject={
-              editing && item?.ids.subjectId
-                ? { value: item.ids.subjectId, label: item.subjectName ?? '' }
+              editing && item
+                ? item.ids.subjectId
+                  ? { value: item.ids.subjectId, label: item.subjectName ?? '' }
+                  : { value: ALL_SUBJECTS, label: t('scheduling.subjectAll') }
                 : null
+            }
+            subjectAllOption={
+              subjectMayBeAll ? { value: ALL_SUBJECTS, label: t('scheduling.subjectAll') } : null
             }
             mode={mode}
             rooms={rooms}

@@ -8,7 +8,7 @@ import { subjectsTaughtAt } from "../policies/curriculum.js";
 import { inProgressEnrolmentWhere } from "../policies/level-completion.js";
 import { nextRecordingName, RECORDING_PREFIX, RECORDING_TITLE_LIMIT } from "../lib/recording-name.js";
 import { publicDisplayName } from "../lib/display-name.js";
-import { audienceTitle, composeItemTitle } from "../lib/item-title.js";
+import { ALL_SUBJECTS, audienceTitle, composeItemTitle } from "../lib/item-title.js";
 import { baseHijri, sortMonthStarts, type MonthStart } from "../lib/hijri.js";
 import * as scope from "../policies/branch-scope.js";
 import { effectiveOn } from "../policies/effective-staffing.js";
@@ -674,11 +674,12 @@ function sessionOccurrence(
   // per-occurrence override already does (room, delivery, visibility). A
   // session with no override carries `subject: null` and falls back to the
   // schedule's, unchanged.
+  // R195 — `null` for a class of ALL the Level's Subjects («كل المواد»).
   const subject = session.subject ?? sch.subject;
   // Codex review, 2026-09-22 — the class's Surahs are inherited ONLY while
   // the Subject taught works by Surah: an occurrence retaught as فقه must not
   // wear the class's Quran Surahs. Its own rows, when it has any, still win.
-  const shownSurahs = session.surahs.length > 0 ? session.surahs : subject.requiresSurahs ? sch.surahs : [];
+  const shownSurahs = session.surahs.length > 0 ? session.surahs : subject?.requiresSurahs ? sch.surahs : [];
   const surahNames = shownSurahs.map((row) => row.surah.nameArabic);
   const surahIds = shownSurahs.map((row) => row.surah.surahId);
   const lead = session.staff.find((person) => person.position === "teacher");
@@ -698,14 +699,20 @@ function sessionOccurrence(
     attendanceMarking: sch.attendanceMarking,
     viewerMayMarkAttendance: false,
     id: session.id,
-    title: audienceWord === null ? subject.name : `${subject.name} — ${audienceWord}`,
+    // R195 — with no Subject the group or circle names it, else the type.
+    title:
+      subject === null
+        ? (audienceWord ?? sch.schedulingType?.name ?? ALL_SUBJECTS)
+        : audienceWord === null
+          ? subject.name
+          : `${subject.name} — ${audienceWord}`,
     // **R166 §3 — COMPOSED, never a stored name**: this occurrence's own
     // Subject, Surahs and main teacher where it has its own, and its own date.
     // A cover teacher or a Surah changed for one date is therefore in the
     // title the moment it is saved, with nothing to keep in step.
     itemTitle: composeItemTitle({
       typeName: sch.schedulingType?.name ?? null,
-      subjectName: subject.name,
+      subjectName: subject?.name ?? null,
       surahNames,
       audienceName: audienceWord,
       leadName: lead === undefined ? null : publicDisplayName(lead.user),
@@ -728,8 +735,8 @@ function sessionOccurrence(
     // reasoning that *a Session has no description of its own* — true until
     // R138 gave every occurrence one, and never revisited.
     description: session.description,
-    subjectId: subject.id,
-    subjectName: subject.name,
+    subjectId: subject?.id ?? null,
+    subjectName: subject?.name ?? null,
     audienceName: audienceWord,
     leadName: lead === undefined ? null : publicDisplayName(lead.user),
     teachingMode: sch.teachingMode,
@@ -2308,7 +2315,8 @@ export async function prefilledFilters(
 export interface SessionPageContent {
   id: string;
   title: string;
-  subjectId: string;
+  /** R195 — `null` for what a class of all the Level's Subjects produced. */
+  subjectId: string | null;
   levelId: string;
   mimeType: string;
   /** R99.10 — what this item IS. «التسجيلات» is decided here; the MIME type

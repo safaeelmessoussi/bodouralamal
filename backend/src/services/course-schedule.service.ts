@@ -147,7 +147,7 @@ async function assertTeacherDeclaredCapability(
   tx: Prisma.TransactionClient,
   userId: string,
   effectiveLevelId: string,
-  subjectId: string,
+  subjectId: string | null,
 ): Promise<void> {
   const level = await tx.level.findUniqueOrThrow({
     where: { id: effectiveLevelId },
@@ -157,9 +157,13 @@ async function assertTeacherDeclaredCapability(
     tx.teacherCategoryCapability.findUnique({
       where: { userId_categoryId: { userId, categoryId: level.categoryId } },
     }),
-    tx.teacherSubjectCapability.findUnique({
-      where: { userId_subjectId: { userId, subjectId } },
-    }),
+    // R195 — a class of all the Level's Subjects names none: the Category
+    // capability alone can answer for it.
+    subjectId === null
+      ? null
+      : tx.teacherSubjectCapability.findUnique({
+          where: { userId_subjectId: { userId, subjectId } },
+        }),
   ]);
   if (!categoryCap && !subjectCap) {
     throw new AppError(
@@ -177,6 +181,40 @@ async function assertTeacherDeclaredCapability(
  * accepted, and a مؤطِّرة creating a class nobody can then say she teaches is
  * authority with no accountability attached to it.
  */
+/**
+ * **R195 — which classes may have no Subject.** A class addressed to a whole
+ * Level or to an Administrative Group teaches ALL the Level's Subjects at
+ * once (a child's or a teen's group sits one session for everything): `null`
+ * reads «كل المواد». A circle IS a Subject's split and always names it; a
+ * filter-built class (`multi_dimension`) may leave it only when it names a
+ * Level or a group — «الكل» is resolved against a Subject (R169 §7), and a
+ * circle implies one. The database holds the circle half
+ * (`course_schedule_subject_check`); the audience half is rows in other
+ * tables, so it is decided here.
+ */
+function assertSubjectForMode(
+  mode: TeachingMode,
+  subjectId: string | null,
+  dimensions: CourseScheduleInput["dimensions"] | undefined,
+): void {
+  if (subjectId !== null) return;
+  const allowed =
+    mode === "entire_level" ||
+    mode === "administrative_group" ||
+    (mode === "multi_dimension" &&
+      dimensions !== undefined &&
+      ((dimensions.levelIds?.length ?? 0) > 0 ||
+        (dimensions.administrativeGroupIds?.length ?? 0) > 0) &&
+      (dimensions.teachingGroupIds?.length ?? 0) === 0);
+  if (!allowed) {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      "a class of all Subjects is addressed to a Level or a group — a circle, or «الكل», names its Subject",
+      { reason: "SUBJECT_REQUIRED_FOR_AUDIENCE" },
+    );
+  }
+}
+
 function assertTeacherSelfStaffed(
   userId: string,
   staff: ScheduleStaffInput[],
@@ -446,7 +484,9 @@ export interface CourseScheduleInput {
    * name behind. What somebody wants to say in her own words is `description`.
    */
   description?: string | null;
-  subjectId: string;
+  /** R195 — `null` for a class of ALL the Level's Subjects, allowed for
+   *  `entire_level` and `administrative_group` only (`assertSubjectForMode`). */
+  subjectId: string | null;
   teachingMode: TeachingMode;
   /** Exactly one entity, of the kind the mode names (§4.4c). Required for
    *  every mode EXCEPT `multi_dimension`, which uses `dimensions` instead
@@ -984,11 +1024,14 @@ export async function createCourseSchedule(
     // R178 §6(a) — the year follows the start date unless the caller named one.
     const academicYearId =
       input.academicYearId ?? (await academicYearForDate(tx, input.anchorDate ?? now));
-    const subject = await tx.subject.findFirst({
-      where: { id: input.subjectId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!subject) throw new AppError("NOT_FOUND", "no such subject");
+    assertSubjectForMode(input.teachingMode, input.subjectId, input.dimensions);
+    if (input.subjectId !== null) {
+      const subject = await tx.subject.findFirst({
+        where: { id: input.subjectId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!subject) throw new AppError("NOT_FOUND", "no such subject");
+    }
 
     const target = await resolveTarget(
       tx,
@@ -996,7 +1039,7 @@ export async function createCourseSchedule(
       input.targetId,
       input.branchId,
       input.dimensions,
-      input.subjectId,
+      input.subjectId ?? undefined,
     );
 
     // **The rule this surface was missing entirely.** Teaching Groups and
@@ -1010,8 +1053,11 @@ export async function createCourseSchedule(
     // not only the first: a class naming two Levels must teach its Subject
     // at BOTH, or one population would be silently taught a Subject their
     // curriculum never offered.
-    for (const levelId of target.effectiveLevelIds) {
-      await assertSubjectTaughtAtLevel(tx, levelId, input.subjectId);
+    // R195 — a class of all the Level's Subjects has no one Subject to check.
+    if (input.subjectId !== null) {
+      for (const levelId of target.effectiveLevelIds) {
+        await assertSubjectTaughtAtLevel(tx, levelId, input.subjectId);
+      }
     }
     // **§2 — the declared-capability check, now that the target is resolved.**
     // Reached only for `entire_level` (`assertTeacherEntireLevelOnly` above
@@ -1345,8 +1391,9 @@ export async function updateCourseSchedule(
     overwriteManuallyEdited?: boolean;
     /** Owner-reported, 2026-09-15 — see `splitCourseSchedule`'s own docstring
      *  for the reasoning; the validator refuses these outside
-     *  `scope: 'this_and_future'` before this function is ever called. */
-    subjectId?: string;
+     *  `scope: 'this_and_future'` before this function is ever called. R195 —
+     *  `null` takes the Subject off a Level-wide class («كل المواد»). */
+    subjectId?: string | null;
     branchId?: string;
     academicYearId?: string;
     teachingMode?: TeachingMode;
@@ -1614,16 +1661,20 @@ export async function updateCourseSchedule(
           { reason: "DIMENSIONS_REQUIRE_MULTI_DIMENSION" },
         );
       }
+      // R195 — a class of all Subjects stays addressed to a Level or a group.
+      assertSubjectForMode("multi_dimension", existing.subjectId, data.dimensions);
       const target = await resolveTarget(
         tx,
         "multi_dimension",
         undefined,
         existing.branchId,
         data.dimensions,
-        existing.subjectId,
+        existing.subjectId ?? undefined,
       );
-      for (const levelId of target.effectiveLevelIds) {
-        await assertSubjectTaughtAtLevel(tx, levelId, existing.subjectId);
+      if (existing.subjectId !== null) {
+        for (const levelId of target.effectiveLevelIds) {
+          await assertSubjectTaughtAtLevel(tx, levelId, existing.subjectId);
+        }
       }
       const rows = target.scopeRows!;
       await Promise.all([
@@ -1844,7 +1895,7 @@ async function splitCourseSchedule(
      * are named together or not at all (validator-enforced); either alone
      * would leave the OTHER two target columns ambiguous.
      */
-    subjectId?: string;
+    subjectId?: string | null;
     branchId?: string;
     academicYearId?: string;
     teachingMode?: TeachingMode;
@@ -2010,7 +2061,10 @@ async function splitCourseSchedule(
     // even naming the same group/level/circle, so a group that no longer
     // matches the new branch is caught here rather than by a database CHECK.
     const successorBranchId = data.branchId ?? existing.branchId;
-    const successorSubjectId = data.subjectId ?? existing.subjectId;
+    // R195 — `null` named by this edit takes the Subject off («كل المواد»);
+    // undefined keeps the predecessor's.
+    const successorSubjectId =
+      data.subjectId === undefined ? existing.subjectId : data.subjectId;
     const successorAcademicYearId = data.academicYearId ?? existing.academicYearId;
     const identityChanged =
       data.branchId !== undefined ||
@@ -2045,27 +2099,32 @@ async function splitCourseSchedule(
          * carried forward unchanged, matching every other identity field's
          * "unless this edit says otherwise" rule.
          */
+        const successorDimensions =
+          data.teachingMode !== undefined ? data.dimensions : (existingDimensions ?? undefined);
+        // R195 — a successor of all Subjects stays addressed to a Level or a group.
+        assertSubjectForMode("multi_dimension", successorSubjectId, successorDimensions);
         target = await resolveTarget(
           tx,
           "multi_dimension",
           undefined,
           successorBranchId,
-          data.teachingMode !== undefined
-            ? data.dimensions
-            : (existingDimensions ?? undefined),
-          successorSubjectId,
+          successorDimensions,
+          successorSubjectId ?? undefined,
         );
-        const subject = await tx.subject.findFirst({
-          where: { id: successorSubjectId, deletedAt: null },
-          select: { id: true },
-        });
-        if (!subject) throw new AppError("NOT_FOUND", "no such subject");
-        // Every effective Level, not only the first — a multi-dimension
-        // class can name several, and each must actually teach the Subject.
-        for (const levelId of target.effectiveLevelIds!) {
-          await assertSubjectTaughtAtLevel(tx, levelId, successorSubjectId);
+        if (successorSubjectId !== null) {
+          const subject = await tx.subject.findFirst({
+            where: { id: successorSubjectId, deletedAt: null },
+            select: { id: true },
+          });
+          if (!subject) throw new AppError("NOT_FOUND", "no such subject");
+          // Every effective Level, not only the first — a multi-dimension
+          // class can name several, and each must actually teach the Subject.
+          for (const levelId of target.effectiveLevelIds!) {
+            await assertSubjectTaughtAtLevel(tx, levelId, successorSubjectId);
+          }
         }
       } else {
+        assertSubjectForMode(resolvedMode, successorSubjectId, undefined);
         target = await resolveTarget(
           tx,
           resolvedMode,
@@ -2076,16 +2135,19 @@ async function splitCourseSchedule(
                 existing.teachingGroupId) as string),
           successorBranchId,
         );
-        const subject = await tx.subject.findFirst({
-          where: { id: successorSubjectId, deletedAt: null },
-          select: { id: true },
-        });
-        if (!subject) throw new AppError("NOT_FOUND", "no such subject");
-        await assertSubjectTaughtAtLevel(
-          tx,
-          target.effectiveLevelIds![0]!,
-          successorSubjectId,
-        );
+        // R195 — a class of all the Level's Subjects has none to check.
+        if (successorSubjectId !== null) {
+          const subject = await tx.subject.findFirst({
+            where: { id: successorSubjectId, deletedAt: null },
+            select: { id: true },
+          });
+          if (!subject) throw new AppError("NOT_FOUND", "no such subject");
+          await assertSubjectTaughtAtLevel(
+            tx,
+            target.effectiveLevelIds![0]!,
+            successorSubjectId,
+          );
+        }
       }
     } else if (resolvedMode === "multi_dimension") {
       /**
@@ -2116,7 +2178,7 @@ async function splitCourseSchedule(
     if (data.surahIds !== undefined || identityChanged) {
       const carries =
         data.surahIds !== undefined ||
-        (await subjectRequiresSurahs(tx, successorSubjectId));
+        (successorSubjectId !== null && (await subjectRequiresSurahs(tx, successorSubjectId)));
       successorSurahs = await resolveSurahs(tx, {
         subjectId: successorSubjectId,
         levelIds:

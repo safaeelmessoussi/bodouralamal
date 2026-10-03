@@ -145,7 +145,8 @@ export interface LibraryEntry {
   academic_year_label: string;
   branch_id: string | null;
   branch_name: string | null;
-  subject_id: string;
+  /** R195 — `null` is «عام»: what a class of all its Level's Subjects produced. */
+  subject_id: string | null;
   subject_name: string | null;
   /** R177 §7 — the one Surah the item is about, or none. */
   surah_id: number | null;
@@ -336,7 +337,8 @@ interface LibraryItemWire {
   /** R169 §10 — the item's OTHER Levels (`level_id` is its home), in the
    *  Levels' own order. `[]` for an item that belongs to one Level. */
   additional_levels?: { id: string; name: string }[];
-  subject_id: string;
+  /** R195 — `null` is «عام». */
+  subject_id: string | null;
   academic_year_id: string;
   branch_id: string | null;
   mime_type: string;
@@ -345,7 +347,7 @@ interface LibraryItemWire {
   category_id: string;
   category_name: string;
   level_name: string;
-  subject_name: string;
+  subject_name: string | null;
   academic_year_label: string;
   branch_name: string | null;
   /** R177 §7 — the one Surah, or none; optional while a server older than it could answer. */
