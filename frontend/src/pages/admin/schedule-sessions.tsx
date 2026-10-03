@@ -213,9 +213,9 @@ export function ScheduleSessionsPage({
   const [deleting, setDeleting] = useState<ScheduleSession | null>(null);
   const [deleteBlocked, setDeleteBlocked] = useState<string | null>(null);
   /**
-   * R193 — «إعادة البرمجة» asks first and, when the server refuses (the date
-   * has passed, the room or a مؤطِّرة was booked since), the dialog STAYS OPEN
-   * with the reason (rule AH). Until now the refusal went to the notice at
+   * R193 — «إعادة البرمجة» asks first and, when the server refuses (the room
+   * or a مؤطِّرة was booked since; R194 withdrew the past-date refusal), the
+   * dialog STAYS OPEN with the reason (rule AH). Until R193 the refusal went to the notice at
    * the top of the page, which a long list had scrolled out of sight — under
    * the sticky header — so the click read as «nothing happened».
    */
@@ -496,8 +496,7 @@ export function ScheduleSessionsPage({
         setRestoreBlocked(null);
         setRestoring(r);
       },
-      // TD-1 allows this only from `cancelled`, and the server additionally
-      // refuses it once the date has passed.
+      // TD-1 allows this only from `cancelled` — at any date since R194.
       available: (r) => r.status === 'cancelled',
     },
   ];
@@ -510,13 +509,11 @@ export function ScheduleSessionsPage({
       return describeScheduleConflict(error.details);
     }
     return t(
-      reason === 'SESSION_IN_PAST'
-        ? 'admin.sessions.pastRestore'
-        : reason === 'ALREADY_HELD'
-          ? 'admin.sessions.alreadyHeld'
-          : error instanceof ApiError && error.status === 409
-            ? 'common.conflict'
-            : 'common.saveFailed',
+      reason === 'ALREADY_HELD'
+        ? 'admin.sessions.alreadyHeld'
+        : error instanceof ApiError && error.status === 409
+          ? 'common.conflict'
+          : 'common.saveFailed',
     );
   }
 

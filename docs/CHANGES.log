@@ -152,3 +152,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-03 — SRS Revision 193: «إعادة البرمجة» asks first and keeps its refusal in the dialog
 - `schedule-sessions.tsx`: `restoring`/`restoreBlocked` + `ConfirmDialog` (title «إعادة برمجة حصة {date}», `blocked` on refusal), `refusalOf` shared with `run`; `admin.css` `.admin-notice { scroll-margin-block-start }` so a notice never lands under the sticky header. Strings `admin.sessions.restoreTitle/restoreBody`; test pin.
 - Verification: real screen on Localhost at 390 px — a past cancelled occurrence: dialog stays open with «لا يمكن إعادة برمجة حصة مضى تاريخها»; a future one restores, row «مبرمجة», notice clear of the header (9/9); the API restore itself answered 200 on a laptop and a phone before the change (the defect was the invisible refusal). Frontend 1598, guards.
+
+## 2026-10-03 — SRS Revision 194: a cancellation of a past occurrence is reversible
+- `session.service.ts` `restoreSession`: `SESSION_IN_PAST` withdrawn; a past date skips the slot check (R170 §8's rule), audit `past: true`. Tests restated (`course-schedule.integration`, `session.http.integration`); frontend `pastRestore` string/mapping removed, dialog body says «ولو مضى تاريخها»; OpenAPI prose, TD-3 comment, `error-codes.md`, SRS TD-1 and TD-3 lines, R83 clause; ledger.
+- Verification: integration 110/110 (two suites); real screen on Localhost at 390 px: a cancelled occurrence of 30 شتنبر restored through the dialog, row «مبرمجة» (4/4); backend 379, frontend 1598, build, guards.

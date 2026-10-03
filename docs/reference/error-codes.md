@@ -44,7 +44,7 @@ Canonical catalogue; every service uses exactly these identifiers; extensible on
 | `SCHEDULES_EXIST` | Deleting a Teaching Group | Move/delete the schedules targeting it |
 | `ALREADY_IN_SUBJECT_SPLIT` | Placing a student | In another split of that Subject; intent is a move |
 | `NOT_ENROLLED_IN_LEVEL` | Placing a student | Enrol first (BR-22) |
-| `ALREADY_HELD` · `SESSION_IN_PAST` | Session edits | Held: no reschedule; past: no restore |
+| `ALREADY_HELD` | Session edits | Held: no reschedule (a past cancellation is reversible since R194) |
 | `INVALID_TRANSITION` | Suspend / reactivate | TD-1 forbids it from `details.account_status` |
 | `SELF_SUSPENSION` | Suspend | No self-suspension |
 | `LAST_SUPER_ADMIN` | Suspend, `PUT .../roles` | Appoint another Super Admin first (R22 recovery needs a VPS shell) |

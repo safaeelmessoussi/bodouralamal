@@ -708,29 +708,38 @@ export async function restoreSession(
   const session = await loadForWrite(prisma, actor, sessionId);
   assertTransition(session.status, "scheduled");
 
-  if (atMidnightUtc(session.date) < atMidnightUtc(now)) {
-    throw new AppError("STATE_CONFLICT", "a past session cannot be restored", {
-      reason: "SESSION_IN_PAST",
-      date: session.date.toISOString().slice(0, 10),
-    });
-  }
+  /**
+   * **R194 (the Owner, 2026-10-03) — a cancellation of a past occurrence is
+   * reversible.** TD-1 refused it («never after»: a class that already did
+   * not happen cannot be asserted back onto the timetable), but cancelling a
+   * past occurrence was always allowed, so a mistaken cancellation of a
+   * class that DID take place could never be undone — and the oldest rows,
+   * at the top of «حصص الجدول», are where a hand first lands. The restore
+   * returns it to `scheduled`, the ordinary state of every held class, and
+   * attendance can be recorded against it. `SESSION_IN_PAST` is withdrawn.
+   */
+  const past = atMidnightUtc(session.date) < atMidnightUtc(now);
 
   return prisma.$transaction(async (tx) => {
     // Codex review, 2026-09-22 — the slot may have been booked since the
     // cancellation: the occurrence comes back only if its room and its staff
-    // are still free on that date (`SCHEDULE_CONFLICT` otherwise).
-    await assertOccurrenceFree(tx, {
-      id: sessionId,
-      branchId: session.schedule.branchId,
-      roomId: session.roomId,
-      date: session.date,
-      startTime: session.startTime,
-      endTime: session.endTime,
-      staff: await tx.sessionStaff.findMany({
-        where: { sessionId, deletedAt: null },
-        select: { userId: true, position: true },
-      }),
-    });
+    // are still free on that date (`SCHEDULE_CONFLICT` otherwise). A PAST
+    // date asks no such question (R194, as R170 §8's class restore already
+    // held): nothing can have been booked in the past.
+    if (!past) {
+      await assertOccurrenceFree(tx, {
+        id: sessionId,
+        branchId: session.schedule.branchId,
+        roomId: session.roomId,
+        date: session.date,
+        startTime: session.startTime,
+        endTime: session.endTime,
+        staff: await tx.sessionStaff.findMany({
+          where: { sessionId, deletedAt: null },
+          select: { userId: true, position: true },
+        }),
+      });
+    }
     const updated = await updateWithVersion<Session>({
       delegate: tx.session,
       id: sessionId,
@@ -749,7 +758,8 @@ export async function restoreSession(
       actionType: "session.restore",
       targetEntity: "Session",
       targetId: sessionId,
-      detail: { date: session.date.toISOString().slice(0, 10), ...reconciled },
+      // R194 — a past occurrence restored is said as such.
+      detail: { date: session.date.toISOString().slice(0, 10), past, ...reconciled },
     });
     return updated;
   });

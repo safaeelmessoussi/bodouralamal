@@ -736,8 +736,9 @@ describe("the TD-1 transitions own their obligations", () => {
     expect(restored.status).toBe(200);
     expect(restored.body.status).toBe("scheduled");
 
-    // A past class that did not happen cannot be asserted back onto the
-    // timetable — that is a false historical record, not a recoverable mistake.
+    // R194 (the Owner, 2026-10-03) — a past cancellation IS a recoverable
+    // mistake: cancelling a past occurrence was always allowed, so its
+    // reversal must be too. No room or staff question is asked of the past.
     const past = await prisma.session.create({
       data: {
         scheduleId,
@@ -752,8 +753,8 @@ describe("the TD-1 transitions own their obligations", () => {
     const res = await call("POST", `/sessions/${past.id}/restore`, superAdmin, {
       version: past.version,
     });
-    expect(res.status).toBe(409);
-    expect(res.body.error?.details?.["reason"]).toBe("SESSION_IN_PAST");
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("scheduled");
   });
 
   it("refuses a transition TD-1 does not allow", async () => {

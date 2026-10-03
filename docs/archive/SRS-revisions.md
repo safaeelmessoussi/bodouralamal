@@ -1,9 +1,11 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–193 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–194 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 194 (Document Owner, 2026-10-03 — «yes, a cancellation of a past occurrence be reversible»):** **BUILT.** TD-1's «never after» is superseded: `POST /sessions/{id}/restore` returns a cancelled occurrence to `scheduled` at any date — the ordinary state of every held class, against which attendance can then be recorded; `SESSION_IN_PAST` is withdrawn (the error, the sentence, the contract). A past date asks no room or staff question (as R170 §8's class restore already held: nothing can have been booked in the past); a future one is still checked against its slot. R77.5's notice reconciliation applies unchanged; the audit row says `past: true`. The reason: cancelling a past occurrence was always allowed, so a mistaken cancellation of a class that did take place could never be undone.
 
 **Revision 193 (Document Owner, 2026-10-03 — «إعادة البرمجة is not working»):** **BUILT.** On «حصص الجدول» the restore of a cancelled occurrence ran at the click and reported its outcome in the notice at the top of the page; a long list had scrolled that notice out of sight — and `Feedback`'s own scroll lands it under the sticky header — so a REFUSED restore read as «nothing happened» while «إلغاء الحصة» (a dialog, a row that changes) read as working. Measured on the real screen: a future occurrence restored on a laptop and a phone; the one refusal by design is TD-1's — a cancelled occurrence whose date has passed («لا يمكن إعادة برمجة حصة مضى تاريخها»; cancelling a past one is allowed, so the top rows of a list, the oldest, are exactly where this is met). **(1)** «إعادة البرمجة» asks first, naming the day, and a refusal stays in that dialog with its sentence (rule AH — the pattern every blocked deletion follows). **(2)** Every `.admin-notice` clears the sticky header when it scrolls itself into view (`scroll-margin-block-start`). TD-1's rule is unchanged; whether a cancellation of a past occurrence should be reversible is the Owner's to say.
 

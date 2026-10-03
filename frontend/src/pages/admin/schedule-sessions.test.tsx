@@ -126,9 +126,9 @@ describe('the three scopes are all stated, and each says what it changes', () =>
     }
   });
 
-  it('names the two refusals TD-1 produces', () => {
-    expect(ar.admin.sessions.pastRestore).toBeTruthy();
+  it('names the refusal TD-1 produces — and no longer a past-date one (R194)', () => {
     expect(ar.admin.sessions.alreadyHeld).toBeTruthy();
+    expect(ar.admin.sessions).not.toHaveProperty('pastRestore');
   });
 
   it('R193 — «إعادة البرمجة» asks first, naming the day, and keeps its refusal in the dialog', () => {

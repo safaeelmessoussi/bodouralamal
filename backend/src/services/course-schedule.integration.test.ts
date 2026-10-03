@@ -821,7 +821,7 @@ describe("session lifecycle (TD-1)", () => {
     expect(restored.cancellationReason).toBe("عطلة");
   });
 
-  it("refuses to restore a session whose date has passed", async () => {
+  it("R194 — restores a session whose date has passed: a cancellation of a past occurrence is reversible", async () => {
     const s = await oneSession();
     const cancelled = await cancelSession(
       prisma,
@@ -831,10 +831,13 @@ describe("session lifecycle (TD-1)", () => {
       s.version,
     );
     const later = new Date("2026-07-01T08:00:00.000Z");
-    const err = await failure(() =>
-      restoreSession(prisma, superAdmin(), s.id, cancelled.version, later),
-    );
-    expect(err.details?.["reason"]).toBe("SESSION_IN_PAST");
+    const restored = await restoreSession(prisma, superAdmin(), s.id, cancelled.version, later);
+    expect(restored.status).toBe("scheduled");
+    const trail = await prisma.auditLog.findFirst({
+      where: { actionType: "session.restore", targetId: s.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(trail?.detail).toMatchObject({ past: true });
   });
 
   it("held is terminal — every transition out of it is STATE_CONFLICT", async () => {
