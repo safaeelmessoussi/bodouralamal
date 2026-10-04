@@ -325,17 +325,17 @@ function LibraryView({
     // A chosen value stays in its own list, even when a typed search leaves
     // none of its items — a select must show what it holds.
     const chosen = entries.find((e) => e.academic_year_id === filter.yearId);
-    if (chosen && !years.has(filter.yearId)) years.set(filter.yearId, chosen.academic_year_label);
+    if (filter.yearId !== '' && chosen && !years.has(filter.yearId)) years.set(filter.yearId, chosen.academic_year_label);
     const chosenSubject = entries.find((e) => (e.subject_id || NO_SUBJECT) === filter.subjectId);
-    if (chosenSubject && !subjects.has(filter.subjectId)) subjects.set(filter.subjectId, chosenSubject.subject_name ?? t('content.noSubject'));
+    if (filter.subjectId !== '' && chosenSubject && !subjects.has(filter.subjectId)) subjects.set(filter.subjectId, chosenSubject.subject_name ?? t('content.noSubject'));
     const chosenBranch = entries.find((e) => (e.branch_id ?? GLOBAL_BRANCH) === filter.branchId);
-    if (chosenBranch && !branches.has(filter.branchId)) branches.set(filter.branchId, chosenBranch.branch_name ?? t('content.globalScope'));
+    if (filter.branchId !== '' && chosenBranch && !branches.has(filter.branchId)) branches.set(filter.branchId, chosenBranch.branch_name ?? t('content.globalScope'));
     const chosenSurah = entries.find((e) => String(e.surah_id ?? '') === filter.surahId);
-    if (chosenSurah && !surahs.has(filter.surahId)) surahs.set(filter.surahId, chosenSurah.surah_name ?? filter.surahId);
+    if (filter.surahId !== '' && chosenSurah && !surahs.has(filter.surahId)) surahs.set(filter.surahId, chosenSurah.surah_name ?? filter.surahId);
     const chosenCategory = entries.find((e) => e.category_id === filter.categoryId);
-    if (chosenCategory && !cats.has(filter.categoryId)) cats.set(filter.categoryId, chosenCategory.category_name);
+    if (filter.categoryId !== '' && chosenCategory && !cats.has(filter.categoryId)) cats.set(filter.categoryId, chosenCategory.category_name);
     const chosenShelf = entries.find((e) => e.shelf_key === filter.shelfKey);
-    if (chosenShelf && !shelves.has(filter.shelfKey))
+    if (filter.shelfKey !== '' && chosenShelf && !shelves.has(filter.shelfKey))
       shelves.set(filter.shelfKey, {
         label: levelLabel({
           id: chosenShelf.shelf_key,
