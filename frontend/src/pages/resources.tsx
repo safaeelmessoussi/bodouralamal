@@ -19,6 +19,8 @@ import {
   type ContentFilterState,
 } from '../components/content/content-filters.js';
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
+import { SurahLibrary } from '../components/content/surah-library.js';
+import { Button } from '../components/ui/button.js';
 import { useActiveChild } from '../contexts/active-child.js';
 import { useSession } from '../contexts/session.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
@@ -82,7 +84,98 @@ export function ResourcesPage(): ReactNode {
   // to a Level or a Category preselects the filter on the whole library.
   if (contentId && levelId) return <LevelView shelf={{ kind: 'level', id: levelId }} />;
   if (contentId && categoryId) return <LevelView shelf={{ kind: 'whole_category', id: categoryId }} />;
-  return <LibraryView initialLevel={levelId} initialCategory={categoryId} />;
+  return <LibraryPage levelId={levelId} categoryId={categoryId} />;
+}
+
+/**
+ * **R196 — two ways to read the library, «حسب السورة» first.** A visitor who
+ * only wants to study a Surah lands on the Surah view; «حسب المستوى» is the
+ * Category → Level → Year view as it was. The view is `?view=` (a parameter,
+ * not a navigation node — §20 rule 16), and a link naming a Level or a
+ * Category opens the Level view, as it always did.
+ */
+type LibraryMode = 'surah' | 'level';
+
+function LibraryPage({ levelId, categoryId }: { levelId: string | null; categoryId: string | null }): ReactNode {
+  const [mode, setMode] = useState<LibraryMode>(() => {
+    const param = new URLSearchParams(window.location.search).get('view');
+    if (param === 'levels' || levelId !== null || categoryId !== null) return 'level';
+    return 'surah';
+  });
+  const tabs = <ModeTabs mode={mode} onMode={setMode} />;
+  return mode === 'surah' ? (
+    <SurahView tabs={tabs} />
+  ) : (
+    <LibraryView initialLevel={levelId} initialCategory={categoryId} tabs={tabs} />
+  );
+}
+
+function ModeTabs({ mode, onMode }: { mode: LibraryMode; onMode: (next: LibraryMode) => void }): ReactNode {
+  return (
+    <div className="cal-segmented content-modes" role="tablist" aria-label={t('content.views.label')}>
+      {(['surah', 'level'] as const).map((m) => (
+        <Button
+          key={m}
+          variant="ghost"
+          className={mode === m ? 'is-active' : undefined}
+          role="tab"
+          aria-selected={mode === m}
+          onClick={() => {
+            onMode(m);
+            const url = new URL(window.location.href);
+            if (m === 'level') url.searchParams.set('view', 'levels');
+            else url.searchParams.delete('view');
+            window.history.replaceState(null, '', url);
+          }}
+        >
+          <Icon name={m === 'surah' ? 'book' : 'folder'} size={16} />
+          {t(m === 'surah' ? 'content.views.bySurah' : 'content.views.byLevel')}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+/** R196 — the Surah view: the same rows, read by Surah (`surah-library.tsx`). */
+function SurahView({ tabs }: { tabs: ReactNode }): ReactNode {
+  const { accessToken } = useSession();
+  const { activeChildId } = useActiveChild();
+  const [load, setLoad] = useState<Load<LibraryEntry[]>>({ kind: 'loading' });
+  const [open, setOpen] = useState<ContentItem | null>(null);
+  const initialSurah = useMemo(() => {
+    const raw = Number(new URLSearchParams(window.location.search).get('surah'));
+    return Number.isInteger(raw) && raw >= 1 && raw <= 114 ? raw : null;
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await fetchLibraryEntries(accessToken);
+        if (!cancelled) setLoad({ kind: 'ready', data: rows });
+      } catch {
+        if (!cancelled) setLoad({ kind: 'error' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+  return (
+    <Shell title={t('content.title')} lede={t('content.bySurah.pageLede')} tabs={tabs}>
+      {load.kind === 'loading' ? <YearSkeletons /> : null}
+      {load.kind === 'error' ? <ErrorState /> : null}
+      {load.kind === 'ready' ? (
+        <SurahLibrary
+          entries={load.data}
+          initialSurah={initialSurah}
+          accessToken={accessToken}
+          activeChildId={activeChildId}
+          onOpen={setOpen}
+        />
+      ) : null}
+      <ContentPreviewDialog item={open} onClose={() => setOpen(null)} accessToken={accessToken} activeChildId={activeChildId} />
+    </Shell>
+  );
 }
 
 /* ── Page 1 — the library index ──────────────────────────────────────────── */
@@ -122,9 +215,11 @@ const NO_SUBJECT = '__none__';
 function LibraryView({
   initialLevel,
   initialCategory,
+  tabs,
 }: {
   initialLevel: string | null;
   initialCategory: string | null;
+  tabs: ReactNode;
 }): ReactNode {
   const { accessToken } = useSession();
   const { activeChildId } = useActiveChild();
@@ -318,7 +413,7 @@ function LibraryView({
   );
 
   return (
-    <Shell title={t('content.title')} lede={t('content.lede')}>
+    <Shell title={t('content.title')} lede={t('content.lede')} tabs={tabs}>
       <div className="cal-toolbar" role="group" aria-label={t('content.filtersLabel')}>
         <div className="cal-filter cal-filter--search">
           <label className="cal-filter__label" htmlFor="lib-query">
@@ -610,12 +705,15 @@ function Shell({
   lede,
   eyebrow = null,
   back = false,
+  tabs = null,
   children,
 }: {
   title: string;
   lede: string | null;
   eyebrow?: string | null;
   back?: boolean;
+  /** R196 — «حسب السورة | حسب المستوى», under the heading. */
+  tabs?: ReactNode;
   children: ReactNode;
 }): ReactNode {
   return (
@@ -636,6 +734,7 @@ function Shell({
                 {title}
               </h1>
               {lede ? <p className="lede">{lede}</p> : null}
+              {tabs}
             </div>
             {children}
           </Container>

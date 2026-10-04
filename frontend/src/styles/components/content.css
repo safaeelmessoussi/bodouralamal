@@ -676,3 +676,328 @@
     padding: var(--space-4);
   }
 }
+
+/* ── R196 — «حسب السورة»: the library read by Surah ─────────────────────────
+   The Surahs on the start side (right, RTL), sticky; the chosen Surah beside
+   them, its content grouped by what it is. A phone stacks the list above as a
+   strip that scrolls sideways. */
+.content-modes {
+  margin-block-start: var(--space-3);
+}
+.content-modes .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.surah-library {
+  display: grid;
+  grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+.surah-library__index {
+  position: sticky;
+  inset-block-start: calc(var(--header-height) + var(--space-3));
+  max-block-size: calc(100vh - var(--header-height) - var(--space-6));
+  overflow-y: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+.surah-library__indexTitle {
+  margin: 0 0 var(--space-2);
+  padding-inline: var(--space-2);
+  font-family: var(--font-family-display);
+  font-weight: 700;
+  color: var(--color-primary-strong);
+}
+.surah-library__list {
+  display: grid;
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.surah-library__surah {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: var(--tap-min);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.surah-library__surah:hover {
+  background: var(--color-primary-faint);
+}
+.surah-library__surah:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.surah-library__surah.is-active {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+.surah-library__number {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.surah-library__surah.is-active .surah-library__number {
+  background: var(--color-surface);
+}
+.surah-library__name {
+  font-weight: 600;
+}
+.surah-library__count {
+  font-size: var(--font-size-xs);
+  opacity: 0.75;
+}
+
+.surah-library__panel {
+  display: grid;
+  gap: var(--space-5);
+  min-inline-size: 0;
+  scroll-margin-block-start: calc(var(--header-height) + var(--space-3));
+}
+.surah-library__head {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-strong);
+  color: var(--color-on-primary);
+}
+.surah-library__eyebrow {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  opacity: 0.85;
+}
+.surah-library__title {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+  color: inherit;
+}
+.surah-library__lede {
+  margin: 0;
+  max-inline-size: none;
+  text-wrap: pretty;
+  opacity: 0.92;
+}
+.surah-library__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.surah-library__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--tap-min);
+  padding: 0.25rem var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-primary-strong);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  text-decoration: none;
+}
+.surah-library__chipCount {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.surah-library__section {
+  display: grid;
+  gap: var(--space-3);
+  scroll-margin-block-start: calc(var(--header-height) + var(--space-3));
+}
+.surah-library__sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding-block-end: var(--space-2);
+  border-block-end: 2px solid var(--color-primary-soft);
+  font-family: var(--font-family-display);
+  color: var(--color-primary-strong);
+}
+.surah-library__sectionHint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+/* A lesson to listen to, played in place. */
+.surah-library__tracks {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.surah-track {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-inline-start: 4px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+.surah-track__index {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-weight: 700;
+}
+.surah-track__body {
+  display: grid;
+  gap: 0.2rem;
+  min-inline-size: 0;
+}
+.surah-track__title {
+  margin: 0;
+  font-weight: 700;
+}
+.surah-track__description,
+.surah-track__meta {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.surah-track__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.surah-track__player {
+  inline-size: 100%;
+  margin-block-start: var(--space-2);
+}
+.surah-track__error {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+}
+.surah-track__play {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Drawings and maps of the Surah's ideas, shown as themselves. */
+.surah-library__gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.surah-tile {
+  display: grid;
+  gap: var(--space-2);
+  inline-size: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.surah-tile:hover {
+  border-color: var(--color-primary-line);
+}
+.surah-tile:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.surah-tile__frame {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+}
+.surah-tile__image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+.surah-tile__title {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+@media (max-width: 44rem) {
+  .surah-library {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+  .surah-library__index {
+    position: static;
+    max-block-size: none;
+    padding: var(--space-2);
+  }
+  .surah-library__list {
+    display: flex;
+    gap: var(--space-2);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-block-end: var(--space-1);
+  }
+  .surah-library__list > li {
+    flex: none;
+  }
+  .surah-library__surah {
+    grid-template-columns: auto auto auto;
+    border: 1px solid var(--color-border);
+  }
+  .surah-library__head {
+    padding: var(--space-4);
+  }
+  .surah-track {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .surah-track__index {
+    display: none;
+  }
+  .surah-track__play {
+    justify-self: start;
+  }
+}
