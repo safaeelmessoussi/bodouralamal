@@ -211,6 +211,22 @@ interface LibraryFilter {
   kind: string;
   query: string;
 }
+/** Does an entry pass the filter, every field but `ignored` (R198 §3)? */
+function matchesFilter(e: LibraryEntry, filter: LibraryFilter, ignored: readonly (keyof LibraryFilter)[]): boolean {
+  const on = (field: keyof LibraryFilter): boolean => !ignored.includes(field) && filter[field] !== '';
+  const q = normalizeArabic(filter.query.trim());
+  return (
+    (!on('categoryId') || e.category_id === filter.categoryId) &&
+    (!on('shelfKey') || e.shelf_key === filter.shelfKey) &&
+    (!on('yearId') || e.academic_year_id === filter.yearId) &&
+    (!on('branchId') || (e.branch_id ?? GLOBAL_BRANCH) === filter.branchId) &&
+    (!on('subjectId') || (e.subject_id || NO_SUBJECT) === filter.subjectId) &&
+    (!on('surahId') || String(e.surah_id ?? '') === filter.surahId) &&
+    (!on('kind') || e.item.kind === filter.kind) &&
+    (q === '' || normalizeArabic(e.item.title).includes(q) || normalizeArabic(e.item.description ?? '').includes(q))
+  );
+}
+
 const NO_FILTER: LibraryFilter = { categoryId: '', shelfKey: '', yearId: '', branchId: '', subjectId: '', surahId: '', kind: '', query: '' };
 const GLOBAL_BRANCH = '__global__';
 const NO_SUBJECT = '__none__';
@@ -270,7 +286,14 @@ function LibraryView({
   }, [accessToken]);
   const entries = load.kind === 'ready' ? load.data : [];
 
-  // The options are what EXISTS, so no filter offers an empty answer.
+  /**
+   * The options are what EXISTS, so no filter offers an empty answer — and
+   * since R198 §3 what exists GIVEN THE OTHER FILTERS: each list is drawn from
+   * the entries every other filter keeps, so choosing a Subject narrows the
+   * Levels and the Surahs, a Surah the Levels and the Subjects, and so on.
+   * The Category list ignores the Level (choosing another Category is how a
+   * Level is changed), and a Level chosen sets its Category.
+   */
   const options = useMemo(() => {
     const cats = new Map<string, string>();
     const shelves = new Map<string, { label: string; categoryId: string }>();
@@ -278,9 +301,17 @@ function LibraryView({
     const branches = new Map<string, string>();
     const subjects = new Map<string, string>();
     const surahs = new Map<string, string>();
+    const kinds = new Set<string>();
+    const keeps = (e: LibraryEntry, ...ignored: (keyof LibraryFilter)[]): boolean =>
+      matchesFilter(e, filter, ignored);
     for (const e of entries) {
-      if (e.surah_id !== null) surahs.set(String(e.surah_id), e.surah_name ?? String(e.surah_id));
-      cats.set(e.category_id, e.category_name);
+      if (e.surah_id !== null && keeps(e, 'surahId')) surahs.set(String(e.surah_id), e.surah_name ?? String(e.surah_id));
+      if (keeps(e, 'categoryId', 'shelfKey')) cats.set(e.category_id, e.category_name);
+      if (keeps(e, 'yearId')) years.set(e.academic_year_id, e.academic_year_label);
+      if (keeps(e, 'branchId')) branches.set(e.branch_id ?? GLOBAL_BRANCH, e.branch_name ?? t('content.globalScope'));
+      if (keeps(e, 'subjectId')) subjects.set(e.subject_id || NO_SUBJECT, e.subject_name ?? t('content.noSubject'));
+      if (keeps(e, 'kind')) kinds.add(e.item.kind);
+      if (!keeps(e, 'shelfKey')) continue;
       shelves.set(e.shelf_key, {
         // The shared label owns the «{Category} — {Level}» format (rule D).
         label: levelLabel({
@@ -290,17 +321,35 @@ function LibraryView({
         }),
         categoryId: e.category_id,
       });
-      years.set(e.academic_year_id, e.academic_year_label);
-      branches.set(e.branch_id ?? GLOBAL_BRANCH, e.branch_name ?? t('content.globalScope'));
-      subjects.set(e.subject_id || NO_SUBJECT, e.subject_name ?? t('content.noSubject'));
     }
+    // A chosen value stays in its own list, even when a typed search leaves
+    // none of its items — a select must show what it holds.
+    const chosen = entries.find((e) => e.academic_year_id === filter.yearId);
+    if (chosen && !years.has(filter.yearId)) years.set(filter.yearId, chosen.academic_year_label);
+    const chosenSubject = entries.find((e) => (e.subject_id || NO_SUBJECT) === filter.subjectId);
+    if (chosenSubject && !subjects.has(filter.subjectId)) subjects.set(filter.subjectId, chosenSubject.subject_name ?? t('content.noSubject'));
+    const chosenBranch = entries.find((e) => (e.branch_id ?? GLOBAL_BRANCH) === filter.branchId);
+    if (chosenBranch && !branches.has(filter.branchId)) branches.set(filter.branchId, chosenBranch.branch_name ?? t('content.globalScope'));
+    const chosenSurah = entries.find((e) => String(e.surah_id ?? '') === filter.surahId);
+    if (chosenSurah && !surahs.has(filter.surahId)) surahs.set(filter.surahId, chosenSurah.surah_name ?? filter.surahId);
+    const chosenCategory = entries.find((e) => e.category_id === filter.categoryId);
+    if (chosenCategory && !cats.has(filter.categoryId)) cats.set(filter.categoryId, chosenCategory.category_name);
+    const chosenShelf = entries.find((e) => e.shelf_key === filter.shelfKey);
+    if (chosenShelf && !shelves.has(filter.shelfKey))
+      shelves.set(filter.shelfKey, {
+        label: levelLabel({
+          id: chosenShelf.shelf_key,
+          name: chosenShelf.shelf_kind === 'whole_category' ? t('content.wholeCategory.title') : chosenShelf.level_name,
+          category_name: chosenShelf.category_name,
+        }),
+        categoryId: chosenShelf.category_id,
+      });
     const byName = (a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], 'ar');
     const byCategory = (a: string, b: string): number =>
       rankOf(ranking.category, a) - rankOf(ranking.category, b);
     return {
       categories: [...cats].sort((a, b) => byCategory(a[0], b[0]) || byName(a, b)),
       shelves: [...shelves]
-        .filter(([, v]) => filter.categoryId === '' || v.categoryId === filter.categoryId)
         // Its Category's place, then — a Category's own shelf first — the Level's.
         .sort(
           (a, b) =>
@@ -316,23 +365,11 @@ function LibraryView({
       subjects: [...subjects].sort((a, b) => rankOf(ranking.subject, a[0]) - rankOf(ranking.subject, b[0]) || byName(a, b)),
       // Mushaf order, never alphabetical: a reader knows where البقرة is.
       surahs: [...surahs].sort((a, b) => Number(a[0]) - Number(b[0])),
+      kinds,
     };
-  }, [entries, filter.categoryId, ranking]);
+  }, [entries, filter, ranking]);
 
-  const filtered = useMemo(() => {
-    const q = normalizeArabic(filter.query.trim());
-    return entries.filter(
-      (e) =>
-        (filter.categoryId === '' || e.category_id === filter.categoryId) &&
-        (filter.shelfKey === '' || e.shelf_key === filter.shelfKey) &&
-        (filter.yearId === '' || e.academic_year_id === filter.yearId) &&
-        (filter.branchId === '' || (e.branch_id ?? GLOBAL_BRANCH) === filter.branchId) &&
-        (filter.subjectId === '' || (e.subject_id || NO_SUBJECT) === filter.subjectId) &&
-        (filter.surahId === '' || String(e.surah_id ?? '') === filter.surahId) &&
-        (filter.kind === '' || e.item.kind === filter.kind) &&
-        (q === '' || normalizeArabic(e.item.title).includes(q) || normalizeArabic(e.item.description ?? '').includes(q)),
-    );
-  }, [entries, filter]);
+  const filtered = useMemo(() => entries.filter((e) => matchesFilter(e, filter, [])), [entries, filter]);
 
   // Category → shelf (the Category's own shelf first) → year (newest first)
   // → branch (بدون فرع first) → subject → items.
@@ -419,7 +456,23 @@ function LibraryView({
         id={`lib-${id}`}
         className="cal-filter__control"
         value={filter[id]}
-        onChange={(e) => setFilter((f) => ({ ...f, [id]: e.target.value, ...(id === 'categoryId' ? { shelfKey: '' } : {}) }))}
+        onChange={(e) => {
+          const next = e.target.value;
+          setFilter((f) => {
+            const updated: LibraryFilter = { ...f, [id]: next };
+            // R198 §3 — a Level sets its Category; clearing or changing the
+            // Category retracts a Level of another one.
+            if (id === 'shelfKey' && next !== '') {
+              const shelf = entries.find((entry) => entry.shelf_key === next);
+              if (shelf) updated.categoryId = shelf.category_id;
+            }
+            if (id === 'categoryId' && f.shelfKey !== '') {
+              const shelf = entries.find((entry) => entry.shelf_key === f.shelfKey);
+              if (next === '' || shelf?.category_id !== next) updated.shelfKey = '';
+            }
+            return updated;
+          });
+        }}
       >
         <option value="">{allLabel}</option>
         {opts.map(([value, name]) => (
@@ -456,7 +509,9 @@ function LibraryView({
         {select(
           'kind',
           t('content.typeLabel'),
-          (['pdf', 'video', 'audio', 'image', 'document'] as const).map((k) => [k, t(`content.kind.${k}`)] as [string, string]),
+          (['pdf', 'video', 'audio', 'image', 'document'] as const)
+            .filter((k) => options.kinds.has(k) || filter.kind === k)
+            .map((k) => [k, t(`content.kind.${k}`)] as [string, string]),
         )}
       </div>
       {load.kind === 'loading' ? <YearSkeletons /> : null}

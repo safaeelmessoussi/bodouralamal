@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { listAdministrativeGroups, type AdministrativeGroup } from '../../adapters/administrative-groups.js';
 import { fetchCalendarBootstrap, type BranchRef } from '../../adapters/calendar.js';
-import { listSubjects, type SubjectRef } from '../../adapters/reference-data.js';
-import { listCategories, listLevelSubjects, listLevels, type Category, type Level } from '../../adapters/taxonomy.js';
+import type { SubjectRef } from '../../adapters/reference-data.js';
+import { listLevelSubjects, listLevels, type Level } from '../../adapters/taxonomy.js';
 import {
   addMember,
   createTeachingGroup,
@@ -22,6 +22,7 @@ import {
 } from '../../adapters/teaching-groups.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { SubjectCircles } from '../../components/scope/subject-circles.js';
+import { useScopeOptions, type ScopeField } from '../../hooks/use-scope-options.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
@@ -97,6 +98,9 @@ interface LevelDetail {
   state: 'loading' | 'ready' | 'error';
 }
 
+/** R198 §3 — the filter row's linked selectors. */
+const FILTER_FIELDS: readonly ScopeField[] = ['categoryId', 'levelId', 'subjectId', 'branchId'];
+
 export function TeachingStructurePage({
   levelId,
   subjectId,
@@ -113,8 +117,6 @@ export function TeachingStructurePage({
 
   // ── Reference lists, for the filters and the labels ──────────────────────
   const [levels, setLevels] = useState<Level[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [subjects, setSubjects] = useState<SubjectRef[]>([]);
   const [branches, setBranches] = useState<BranchRef[]>([]);
 
   // ── The list ────────────────────────────────────────────────────────────
@@ -123,11 +125,19 @@ export function TeachingStructurePage({
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
   const [sort, setSort] = useState<SortState | null>(null);
-  const [levelFilter, setLevelFilter] = useState('');
-  const [subjectFilter, setSubjectFilter] = useState('');
-  const [branchFilter, setBranchFilter] = useState('');
+  /**
+   * R198 §3 — the filter row is the platform's linked selectors: the
+   * Category narrows the Levels, a Level sets its Category and narrows the
+   * Subjects, a Subject narrows the Levels — whichever is chosen first.
+   */
+  const filterScope = useScopeOptions({ token: accessToken, fields: FILTER_FIELDS, mode: 'filter' });
+  const {
+    categoryId: categoryFilter,
+    levelId: levelFilter,
+    subjectId: subjectFilter,
+    branchId: branchFilter,
+  } = filterScope.value;
 
   // ── The Level view, opened by `?level=` (R69.3's deep link) ─────────────
   const [detail, setDetail] = useState<Record<string, LevelDetail>>({});
@@ -147,16 +157,13 @@ export function TeachingStructurePage({
       // Each independently recoverable: a reference list that failed to load
       // must not take the table down with it.
       const today = new Date().toISOString().slice(0, 10);
-      const [levelList, categoryList, subjectList, bootstrap] = await Promise.all([
+      // (The filter row's Categories and Subjects come from `filterScope`.)
+      const [levelList, bootstrap] = await Promise.all([
         listLevels(accessToken).catch(() => [] as Level[]),
-        listCategories(accessToken).catch(() => [] as Category[]),
-        listSubjects(accessToken).catch(() => [] as SubjectRef[]),
         // The branch list, from the same reference read «المجموعات» uses.
         fetchCalendarBootstrap({ from: today, to: today }).catch(() => null),
       ]);
       setLevels(levelList);
-      setCategories(categoryList);
-      setSubjects(subjectList);
       setBranches(bootstrap?.branches ?? []);
     })();
   }, [accessToken]);
@@ -452,10 +459,7 @@ export function TeachingStructurePage({
             }
             onClearFilters={() => {
               setQuery('');
-              setCategoryFilter('');
-              setLevelFilter('');
-              setSubjectFilter('');
-              setBranchFilter('');
+              filterScope.setMany({ categoryId: '', levelId: '', subjectId: '', branchId: '' });
               setPage(1);
             }}
             toolbar={
@@ -472,44 +476,44 @@ export function TeachingStructurePage({
                   label={t('admin.subjectOrg.filterCategory')}
                   value={categoryFilter}
                   onChange={(v) => {
-                    setCategoryFilter(v);
+                    filterScope.set('categoryId', v);
                     setPage(1);
                   }}
                   placeholder={t('admin.subjectOrg.allCategories')}
-                  options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                  options={filterScope.options.categoryId}
                 />
-                {/* The shared Level selector, so a Level reads
-                    `{Category} — {Level}` here as everywhere (§4.4b). */}
-                <LevelSelect
-                  levels={levels}
+                {/* A Level reads `{Category} — {Level}` here as everywhere
+                    (§4.4b) — the hook's label is the shared one. */}
+                <SelectField
                   value={levelFilter}
                   onChange={(v) => {
-                    setLevelFilter(v);
+                    filterScope.set('levelId', v);
                     setPage(1);
                   }}
                   label={t('admin.subjectOrg.filterLevel')}
                   placeholder={t('admin.subjectOrg.allLevels')}
+                  options={filterScope.options.levelId}
                 />
                 <SelectField
                   label={t('admin.subjectOrg.filterSubject')}
                   value={subjectFilter}
                   onChange={(v) => {
-                    setSubjectFilter(v);
+                    filterScope.set('subjectId', v);
                     setPage(1);
                   }}
                   placeholder={t('admin.subjectOrg.allSubjects')}
-                  options={subjects.map((s) => ({ value: s.id, label: s.name }))}
+                  options={filterScope.options.subjectId}
                 />
                 {/* R172 §15 — each branch has its list of circles. */}
                 <SelectField
                   label={t('admin.subjectOrg.filterBranch')}
                   value={branchFilter}
                   onChange={(v) => {
-                    setBranchFilter(v);
+                    filterScope.set('branchId', v);
                     setPage(1);
                   }}
                   placeholder={t('admin.subjectOrg.allBranches')}
-                  options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                  options={filterScope.options.branchId}
                 />
               </>
             }

@@ -295,7 +295,7 @@ describe('the library groups and filters by Surah (R177 §7)', () => {
     const source = (await import('./resources.tsx?raw')).default.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
     expect(source).toContain("select('surahId', t('content.upload.surah'), options.surahs)");
     expect(source).toContain('surahs: [...surahs].sort((a, b) => Number(a[0]) - Number(b[0]))');
-    expect(source).toContain("(filter.surahId === '' || String(e.surah_id ?? '') === filter.surahId)");
+    expect(source).toContain("(!on('surahId') || String(e.surah_id ?? '') === filter.surahId)");
     expect(source).toContain("t('content.surahGroupLabel')");
     // An item about no Surah stays under the Subject itself, never invented into a group.
     expect(source).toContain('if (e.surah_id === null) subject.items.push(e.item);');
