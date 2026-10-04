@@ -76,7 +76,10 @@ try {
   const shelf = (id) => `/resources?level=${fixture.levelId}&content=${id}`;
   await send('Network.clearBrowserCookies');
   await width(390);
+  // R196 — the bare page opens «حسب السورة»; the Level shelves are «حسب المستوى».
   await open('/resources');
+  check('fresh anonymous library opens on «حسب السورة»', await waitFor(`document.querySelector('.content-modes [aria-selected="true"]')?.textContent.includes('حسب السورة')`));
+  await open('/resources?view=levels');
   // R174 §3 — the library shows everything at once: the fixture Level is a
   // SHELF heading with its items beneath it, not a card that links away.
   check('fresh anonymous public library has real fixture level', await waitFor(`!!document.querySelector('#shelf-${fixture.levelId}') && document.querySelectorAll('#shelf-${fixture.levelId} ~ .content-year .content-card, section[aria-labelledby="shelf-${fixture.levelId}"] .content-card').length > 0`));
