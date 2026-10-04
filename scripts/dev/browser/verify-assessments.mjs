@@ -188,7 +188,7 @@ const listed = await evaluate(`(() => {
 
 check(
   '2 · the published paper is on her list, and reads as not yet started',
-  listed.mine.length === 1 && listed.mine[0].includes('لم تبدئي بعد'),
+  listed.mine.length === 1 && listed.mine[0].includes('لم يبدأ بعد'),
   JSON.stringify(listed),
 );
 

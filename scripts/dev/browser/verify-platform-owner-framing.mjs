@@ -149,7 +149,7 @@ await evaluate(`(() => {
   if (consent && !consent.checked) consent.click();
   document.querySelector('form.register-form button[type=submit]')?.click();
 })()`);
-if (!(await waitFor("document.body.innerText.includes('تم استلام طلبك')"))) {
+if (!(await waitFor("document.body.innerText.includes('تم استلام الطلب')"))) {
   const why = await evaluate("JSON.stringify([...document.querySelectorAll('.field__error, [role=alert]')].map((node) => node.textContent.trim()).filter(Boolean))");
   throw new Error('registration did not reach the pending confirmation: ' + why);
 }

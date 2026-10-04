@@ -9,6 +9,7 @@ import {
 
 import type { PublicProgramLevel } from '../../adapters/programs.js';
 import { t } from '../../i18n/index.js';
+import { ageRangeWords } from '../../lib/arabic-years.js';
 import { Button } from '../ui/button.js';
 import { Icon } from '../ui/icon.js';
 import { ArrowheadDefs, DirectionArrow } from './direction-arrow.js';
@@ -381,7 +382,7 @@ function Entrances({
             </span>
             {category.minAge !== null ? (
               <span className="entrances__note">
-                {t('admin.taxonomy.ageFrom').replace('{min}', String(category.minAge))}
+                {ageRangeWords(category.minAge, null)}
               </span>
             ) : null}
           </p>

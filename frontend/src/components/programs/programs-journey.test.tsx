@@ -173,7 +173,7 @@ describe('ProgramsJourney', () => {
   });
 
   it('says what a Level is: its ages, description, own Subjects, «حفظ وتفسير: N أحزاب» and its Surahs (R182 §3)', () => {
-    expect(html).toContain('من 6 إلى 7 سنة');
+    expect(html).toContain('من 6 إلى 7 سنوات');
     expect(html).toContain('حفظ القرآن');
     expect(html).toContain('حفظ: 1 سور');
     expect(html).toContain('مقرر الحفظ: 5 أحزاب'); // nothing by Surah → the generic words

@@ -733,8 +733,9 @@ function Shell({
               <h1 id="content-title" className="content-page__title">
                 {title}
               </h1>
-              {lede ? <p className="lede">{lede}</p> : null}
+              {/* R197 — under the tabs the lede says what the chosen TAB does. */}
               {tabs}
+              {lede ? <p className="lede">{lede}</p> : null}
             </div>
             {children}
           </Container>

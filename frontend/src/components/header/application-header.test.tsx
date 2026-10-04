@@ -131,7 +131,7 @@ describe('the switchers appear only when they mean something', () => {
   self_attendance_allowed: false,
       }),
     );
-    expect(html).toContain('اختر الدور الذي تعمل به');
+    expect(html).toContain('اختيار الدور المستعمَل حاليًا');
   });
 
   it('R64: ولي الأمر with no approved child is not a role you can switch into', () => {
@@ -154,7 +154,7 @@ describe('the switchers appear only when they mean something', () => {
       'authenticated',
       person({ roles: ['parent'], approved_child_links: [{ id: 'c1', display_name: 'مريم بنعلي' }] }),
     );
-    expect(html).toContain('اختر الدور الذي تعمل به');
+    expect(html).toContain('اختيار الدور المستعمَل حاليًا');
   });
 
   it('R62.9: there is ONE switcher, not a second child dropdown beside it', () => {

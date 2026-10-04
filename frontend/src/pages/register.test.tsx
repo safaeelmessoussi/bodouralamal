@@ -577,6 +577,6 @@ describe('SRS Revision 170 §2 — the role chooser is a closed dropdown with a 
 
   it('says what will happen before she starts — three steps, the last of which is not hers', () => {
     expect(source).toContain('data-register-steps');
-    expect(ar.register.stepReview).toBe('تراجع الإدارة طلبك');
+    expect(ar.register.stepReview).toBe('مراجعة الإدارة للطلب');
   });
 });

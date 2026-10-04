@@ -30,7 +30,7 @@ if (!COOKIE || !API_COOKIE) {
 /** The Owner's order, §5. Read independently of the registry on purpose. */
 const MENU = [
   ['مساحة التدريس', '/teacher'],
-  ['إدخال متى أنا متاحة', '/teacher/availability'],
+  ['إدخال أوقات التوفّر', '/teacher/availability'],
   ['إدخال حفظ المستفيدات', '/teacher/quran'],
   ['إدخال نقاط الامتحانات', '/teacher/exams'],
   ['الجدولة', '/teacher/schedules'],
@@ -125,7 +125,7 @@ check(
   JSON.stringify(shown.filter((h) => h.startsWith('/admin'))),
 );
 
-/* ── إدخال متى أنا متاحة, operated ───────────────────────────────────────── */
+/* ── إدخال أوقات التوفّر, operated ───────────────────────────────────────── */
 
 // Settled = the add-range control exists, which only the loaded form renders.
 await goto(
@@ -149,7 +149,7 @@ const page = await evaluate(`(() => {
   };
 })()`);
 
-check('إدخال متى أنا متاحة opens for her', page.heading === 'إدخال متى أنا متاحة', page.heading);
+check('إدخال أوقات التوفّر opens for her', page.heading === 'إدخال أوقات التوفّر', page.heading);
 check('it says plainly that this grants nothing (R88.3 on the screen)', page.saysPlanningOnly);
 check('it shows what the administration recorded she teaches (context, read-only)', page.showsCapabilities);
 check('it offers a way to add a range', page.addButton);

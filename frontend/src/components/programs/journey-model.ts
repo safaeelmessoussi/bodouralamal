@@ -1,4 +1,5 @@
 import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/programs.js';
+import { ageRangeWords } from '../../lib/arabic-years.js';
 
 /**
  * **«برامجنا التعليمية» as a journey** (SRS Revision 180) — the one model both
@@ -189,18 +190,12 @@ export function memorisationWords(
  */
 export function ageWords(
   range: { minAge: number | null; maxAge: number | null },
-  t: (key: string) => string,
+  // Kept for its callers' signature; the words come from `lib/arabic-years.ts`.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _t?: (key: string) => string,
 ): string | null {
-  if (range.minAge !== null && range.maxAge !== null) {
-    return t('admin.taxonomy.ageBetween')
-      .replace('{min}', String(range.minAge))
-      .replace('{max}', String(range.maxAge));
-  }
-  if (range.minAge !== null)
-    return t('admin.taxonomy.ageFrom').replace('{min}', String(range.minAge));
-  if (range.maxAge !== null)
-    return t('admin.taxonomy.ageUpTo').replace('{max}', String(range.maxAge));
-  return null;
+  // R197 — the counted noun agrees with its number (`lib/arabic-years.ts`).
+  return ageRangeWords(range.minAge, range.maxAge);
 }
 
 /** A Level's own range, in the same words. */

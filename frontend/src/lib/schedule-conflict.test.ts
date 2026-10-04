@@ -11,7 +11,7 @@ describe('describeScheduleConflict', () => {
       ],
       total: 1,
     });
-    expect(text).toBe('القاعة «القاعة» محجوزة يوم الخميس 8 أكتوبر 2026 (09:00–10:00) لـ«أحكام التجويد — الحلقة 2». اختاري توقيتاً أو قاعة أخرى.');
+    expect(text).toBe('القاعة «القاعة» محجوزة يوم الخميس 8 أكتوبر 2026 (09:00–10:00) لـ«أحكام التجويد — الحلقة 2». يُرجى اختيار توقيت أو قاعة أخرى.');
   });
 
   it('names a person clash, says the first three and counts the rest', () => {
@@ -19,13 +19,13 @@ describe('describeScheduleConflict', () => {
     const text = describeScheduleConflict({ conflicts: [one, one, one, one, one], total: 12 });
     expect(text.startsWith('فاطمة بوخبزى مرتبطة بـ«تفسير القرآن» يوم الخميس 8 أكتوبر 2026 (09:00–10:00).')).toBe(true);
     expect(text).toContain('وتعارضات أخرى: 9.');
-    expect(text.endsWith('اختاري توقيتاً أو قاعة أخرى.')).toBe(true);
+    expect(text.endsWith('يُرجى اختيار توقيت أو قاعة أخرى.')).toBe(true);
   });
 
   it('falls back to the generic sentence when the server named nothing', () => {
     expect(describeScheduleConflict({ conflicts: [{ kind: 'room', date: '2026-10-08' }] })).toBe(
-      'القاعة أو أحد المؤطرين مرتبط بحصة أخرى في نفس الوقت. اختر توقيتاً أو قاعة أخرى.',
+      'القاعة أو إحدى المؤطّرات مرتبطة بحصة أخرى في الوقت نفسه. يُرجى اختيار توقيت أو قاعة أخرى.',
     );
-    expect(describeScheduleConflict(undefined)).toContain('مرتبط بحصة أخرى');
+    expect(describeScheduleConflict(undefined)).toContain('مرتبطة بحصة أخرى');
   });
 });

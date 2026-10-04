@@ -72,7 +72,7 @@ describe('validateChildren — one rule set, keyed per sibling', () => {
       }),
     );
     expect(
-      markup.match(/اختياريان معاً: أدخلي الاسمين بالفرنسية أو اتركي الحقلين فارغين\./g),
+      markup.match(/اختياريان معاً: يُرجى إدخال الاسمين بالفرنسية أو ترك الحقلين فارغين\./g),
     ).toHaveLength(1);
     const optional = markup.slice(markup.indexOf('data-optional-fields'));
     expect(optional).toContain('بيانات اختيارية');

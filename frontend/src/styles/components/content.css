@@ -682,7 +682,7 @@
    them, its content grouped by what it is. A phone stacks the list above as a
    strip that scrolls sideways. */
 .content-modes {
-  margin-block-start: var(--space-3);
+  margin-block: var(--space-3) var(--space-2);
 }
 .content-modes .btn {
   display: inline-flex;
@@ -784,11 +784,6 @@
   border-radius: var(--radius-lg);
   background: var(--color-primary-strong);
   color: var(--color-on-primary);
-}
-.surah-library__eyebrow {
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  opacity: 0.85;
 }
 .surah-library__title {
   margin: 0;

@@ -1,4 +1,4 @@
-import { t } from '../i18n/index.js';
+import { ageRangeWords } from './arabic-years.js';
 
 /**
  * **Which Categories a form offers, and how each is named** (SRS Revision 170 §6).
@@ -31,14 +31,8 @@ export function categoriesForChild<C extends AudienceCategory>(categories: reado
 
 /** «من 6 إلى 12 سنة» · «من 18 سنة» · «حتى 12 سنة» · `null` when not stated. */
 export function ageRangeLabel(category: Pick<AudienceCategory, 'min_age' | 'max_age'>): string | null {
-  const min = category.min_age ?? null;
-  const max = category.max_age ?? null;
-  if (min !== null && max !== null) {
-    return t('admin.taxonomy.ageBetween').replace('{min}', String(min)).replace('{max}', String(max));
-  }
-  if (min !== null) return t('admin.taxonomy.ageFrom').replace('{min}', String(min));
-  if (max !== null) return t('admin.taxonomy.ageUpTo').replace('{max}', String(max));
-  return null;
+  // R197 — the counted noun agrees with its number (`lib/arabic-years.ts`).
+  return ageRangeWords(category.min_age ?? null, category.max_age ?? null);
 }
 
 /** The Category as a form option: its name, and its age range where one is stated. */

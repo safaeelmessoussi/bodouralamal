@@ -150,7 +150,7 @@ check(
 // R110.9 then made a catalogue row of its own, so the name proves nothing.)
 check(
   'and offers nothing that is not a catalogue row',
-  options.filter((o) => o !== '' && !o.startsWith('اختاري')).every((o) => catalogue.names.includes(o)),
+  options.filter((o) => o !== '' && !o.startsWith('اختيار')).every((o) => catalogue.names.includes(o)),
   options,
 );
 

@@ -98,7 +98,7 @@ const subject = await evaluate(pickIn('dialog[open]', 'المادة', `(o) => o.
 check('the whole-Category Subject is offered and chosen with NO Level', subject.chosen !== undefined && subject.disabled === false, JSON.stringify(subject));
 const blocked = await evaluate(`(() => {
   const dialog = document.querySelector('dialog[open]');
-  return { chooseScope: dialog.textContent.includes('اختاري المستوى والمادة'), hint: dialog.textContent.includes('مواد لكل مستويات الفئة'), start: [...dialog.querySelectorAll('button')].some((b) => b.textContent.trim() === 'بدء التسجيل') };
+  return { chooseScope: dialog.textContent.includes('اختيار المستوى والمادة'), hint: dialog.textContent.includes('مواد لكل مستويات الفئة'), start: [...dialog.querySelectorAll('button')].some((b) => b.textContent.trim() === 'بدء التسجيل') };
 })()`);
 check('the recorder is ready for a whole-Category recording (no scope problem shown)', blocked.hint === false && blocked.start === true, JSON.stringify(blocked));
 

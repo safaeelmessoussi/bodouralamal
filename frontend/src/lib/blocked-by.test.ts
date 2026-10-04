@@ -17,7 +17,7 @@ const envelope = (code: string, details: Record<string, unknown>) =>
   new ApiError(409, {
     code,
     message_key: 'errors.state_conflict',
-    message: 'تم تعديل هذا العنصر أو تغييرت حالته. يرجى تحديث الصفحة.',
+    message: 'تم تعديل هذا العنصر أو تغيّرت حالته. يرجى تحديث الصفحة.',
     details,
     request_id: 'e3986e8e02bb5a1b27b27d0594f784bc',
   });

@@ -156,7 +156,7 @@ check(
 const everybody = await page(`
   // (The title is left alone: it is SUGGESTED, and check 5e reads it.)
   // R169 §7 — Level, group and circle all at «الكل» used to be refused
-  // («اختاري مستوى…»). It is a real answer now: every Level that teaches the
+  // («يُرجى اختيار مستوى…»). It is a real answer now: every Level that teaches the
   // Subject. What the form owes her is to SAY so where she chose it, to offer
   // the Subjects some Level teaches although no Level is in play, and to stop
   // naming a missing Level as the thing to fix.
@@ -173,7 +173,7 @@ const everybody = await page(`
   return {
     stillOpen: dlg() !== null,
     saysWhatItMeans: text.includes('كل المستويات التي تُدرَّس فيها هذه المادة'),
-    oldRefusal: text.includes('اختاري مستوى، مجموعة إدارية أو حلقة'),
+    oldRefusal: text.includes('مستوى أو مجموعة إدارية أو حلقة على الأقل'),
     subjects,
   };
 `);

@@ -278,7 +278,7 @@ describe('R133 — the account-deletion wording', () => {
 
   it('says the educational record IS deleted', () => {
     for (const text of copy) {
-      expect(text, text.slice(0, 40)).toMatch(/سجلك التعليمي|سجلها التعليمي/);
+      expect(text, text.slice(0, 40)).toMatch(/سجله التعليمي|سجلها التعليمي|السجل التعليمي/);
     }
   });
 
@@ -299,7 +299,7 @@ describe('R133 — the account-deletion wording', () => {
 
   it('says what SURVIVES, so deletion does not read as a cascade', () => {
     for (const text of [t('admin.users.deleteBody'), t('profile.deleteConfirm')]) {
-      expect(text, text.slice(0, 40)).toMatch(/يخصّ غيرك|يخصّ غيرها/);
+      expect(text, text.slice(0, 40)).toMatch(/يخصّ غيرها|لا يخصّ هذا الحساب/);
     }
   });
 

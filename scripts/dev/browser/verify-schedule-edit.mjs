@@ -2,7 +2,7 @@
  * **The «تعديل العنصر» edit flow, in a real browser.**
  *
  * Reported 2026-08-18: open a class, change only «نهاية التكرار», press «حفظ» —
- * and get *«اختاري الحلقة المعنية»* beside a الحلقة selector reading *«لا حلقات
+ * and get *«يُرجى اختيار الحلقة المعنية»* beside a الحلقة selector reading *«لا حلقات
  * لهذا المستوى في هذا الفرع»*, with every scope field locked so there is no way
  * to satisfy it. Editing a class was impossible.
  *
@@ -178,8 +178,8 @@ const saved = await evaluate(`(async () => {
 check('the field changed was «نهاية التكرار»', saved.label.includes('نهاية'), saved.label);
 check('30 June 2027 was chosen in the date picker itself', saved.picked === true, JSON.stringify(saved));
 check(
-  'saving does NOT refuse with «اختاري الحلقة المعنية»',
-  !(saved.notice ?? '').includes('اختاري الحلقة'),
+  'saving does NOT refuse with «يُرجى اختيار الحلقة المعنية»',
+  !(saved.notice ?? '').includes('اختيار الحلقة'),
   saved.notice,
 );
 check('the dialog closes, so the save went through', saved.stillOpen === false, JSON.stringify(saved));

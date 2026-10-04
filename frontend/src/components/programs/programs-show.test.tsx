@@ -67,7 +67,7 @@ describe('ProgramsShow', () => {
     expect(html).toContain('role="dialog"');
     expect(html).toContain('show__backdrop');
     expect(html.split('journey__ridge ').length - 1).toBe(3);
-    expect(html).toContain('اختاري فئة لتبدئي رحلتها');
+    expect(html).toContain('اختيار فئة لبدء رحلتها');
     expect(html).toContain('class="show__category"');
     expect(html).toContain('show__ornamentStar');
     expect(html).toContain('فئة الطفل');
@@ -103,7 +103,7 @@ describe('ProgramsShow', () => {
     );
     expect(two).toContain('show__dot is-done');
     expect(two).toContain('show__dot is-current');
-    expect(two).toContain('انقري للمتابعة');
+    expect(two).toContain('التالي');
     // R188 §5 — «السابق» on every screen after the first.
     expect(two).toContain('class="show__back"');
     expect(two).toContain('السابق');

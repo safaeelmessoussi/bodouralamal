@@ -572,17 +572,17 @@ let safaTab = null;
   await wait(9000);
 
   /**
-   * **«جاري التسجيل» reaches EVERY participant, from the room itself** — this
+   * **«جارٍ التسجيل» reaches EVERY participant, from the room itself** — this
    * is R99.5, and the tab that proves it is مستفيدة أ, who did not start the
    * recording and never called the recording endpoint at all.
    */
   const seenByStudent = await rooms[2].evaluate(
-    `(() => document.body.innerText.includes('جاري التسجيل'))()`,
+    `(() => document.body.innerText.includes('جارٍ التسجيل'))()`,
   );
   const seenByTeacher = await rooms[0].evaluate(
-    `(() => document.body.innerText.includes('جاري التسجيل'))()`,
+    `(() => document.body.innerText.includes('جارٍ التسجيل'))()`,
   );
-  check('the مؤطِّرة who started it sees «جاري التسجيل»', seenByTeacher === true);
+  check('the مؤطِّرة who started it sees «جارٍ التسجيل»', seenByTeacher === true);
   check(
     'and so does a BENEFICIARY who never touched the control — nobody is recorded silently',
     seenByStudent === true,
@@ -598,7 +598,7 @@ let safaTab = null;
   const lateState = await latecomer.awaitConnected();
   await wait(3000);
   const seenOnArrival = await latecomer.evaluate(
-    `(() => document.body.innerText.includes('جاري التسجيل'))()`,
+    `(() => document.body.innerText.includes('جارٍ التسجيل'))()`,
   );
   check(
     'somebody who joins AFTER recording began sees it on arrival',
@@ -627,9 +627,9 @@ let safaTab = null;
   );
 
   const stillSeen = await rooms[2].evaluate(
-    `(() => document.body.innerText.includes('جاري التسجيل'))()`,
+    `(() => document.body.innerText.includes('جارٍ التسجيل'))()`,
   );
-  check('and a beneficiary still in the room still sees «جاري التسجيل»', stillSeen === true);
+  check('and a beneficiary still in the room still sees «جارٍ التسجيل»', stillSeen === true);
 
   // Let real media accumulate before stopping — this is what makes the file
   // real rather than a zero-length artefact.

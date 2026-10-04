@@ -134,9 +134,6 @@ export function SurahLibrary({
         key={current.id}
       >
         <header className="surah-library__head">
-          <span className="surah-library__eyebrow">
-            {t('content.bySurah.number').replace('{n}', String(current.id))}
-          </span>
           <h2 id="surah-library-title" className="surah-library__title">
             {t('content.surahGroupLabel').replace('{surah}', current.name)}
           </h2>

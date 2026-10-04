@@ -45,7 +45,7 @@ describe('replacement per dimension, not addition — and the control says which
   });
 
   it('says that clearing every branch restores the usual audience', () => {
-    expect(ar.admin.sessions.audienceBranchesHint).toContain('أزيلي كل الفروع');
+    expect(ar.admin.sessions.audienceBranchesHint).toContain('إزالة كل الفروع');
   });
 
   it('says it affects THIS occurrence only', () => {

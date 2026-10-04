@@ -132,7 +132,7 @@ await installProbe();
 // Owner, 2026-09-21, reversing R168's «nothing preselected»).
 const closedAtFirst = await roleSummary(evaluate);
 check(
-  '«ماذا تريدين؟» is a CLOSED control that names her default: «أسجّل نفسي كمستفيدة»',
+  '«المطلوب» is a CLOSED control that names her default: «أسجّل نفسي كمستفيدة»',
   closedAtFirst?.expanded === 'false' && closedAtFirst.text.includes('أسجّل نفسي كمستفيدة') && !closedAtFirst.text.includes('أسجّل أبنائي'),
   JSON.stringify(closedAtFirst),
 );
@@ -150,7 +150,7 @@ await sleep(300);
 const sections = await legends();
 check(
   'every ticked role has its section, and her identity appears once',
-  sections.filter((l) => l === 'بياناتك').length === 1 &&
+  sections.filter((l) => l === 'البيانات الشخصية').length === 1 &&
     (await evaluate(`['teaching','administration','student'].every((k) => document.querySelector('[data-role-section="' + k + '"]'))`)) === true,
   JSON.stringify(sections),
 );
@@ -234,7 +234,7 @@ check('«تقديم» moves الثلاثاء first — the order is hers to chan
 await evaluate(`(() => { const box = document.querySelector('.consent-notice input[type="checkbox"]'); if (box && !box.checked) box.click(); })()`);
 await sleep(200);
 await evaluate(`document.querySelector('form.register-form button[type="submit"]')?.click()`);
-check('the request is received', await waitFor(`document.body.innerText.includes('تم استلام طلبك')`, 60), (await evaluate('document.body.innerText')).slice(0, 400));
+check('the request is received', await waitFor(`document.body.innerText.includes('تم استلام الطلب')`, 60), (await evaluate('document.body.innerText')).slice(0, 400));
 
 const sent = await evaluate('JSON.stringify(window.__sent || [])').then(JSON.parse);
 const payload = sent.find((entry) => entry.status === 201)?.body ?? null;
@@ -415,7 +415,7 @@ if (EXISTING) {
     if (chosen !== 'ok') return chosen;
     await sleep(200);
     await evaluate(`document.querySelector('form.register-form button[type="submit"]')?.click()`);
-    return (await waitFor(`document.body.innerText.includes('تم استلام طلبك')`, 40)) ? 'sent' : 'not sent: ' + (await evaluate(`document.body.innerText`)).slice(0, 200);
+    return (await waitFor(`document.body.innerText.includes('تم استلام الطلب')`, 40)) ? 'sent' : 'not sent: ' + (await evaluate(`document.body.innerText`)).slice(0, 200);
   };
 
   await actAs(EXISTING);
@@ -427,7 +427,7 @@ if (EXISTING) {
   const offeredRoles = await selectOptions('[data-role-choices]', 'ما الصفة التي تطلبينها');
   check(
     'she is offered what she does NOT hold — never هيئة التدريس, which she has, and never «أسجّل أبنائي»',
-    JSON.stringify(offeredRoles?.options) === JSON.stringify(['اختر…', 'مستفيدة', 'هيئة الإدارة والمساعدة في الإدارة']) ||
+    JSON.stringify(offeredRoles?.options) === JSON.stringify(['اختيار…', 'مستفيدة', 'هيئة الإدارة والمساعدة في الإدارة']) ||
       (offeredRoles?.options.length === 3 && !offeredRoles.options.some((o) => o.includes('التدريس') || o.includes('وليّة'))),
     JSON.stringify(offeredRoles),
   );

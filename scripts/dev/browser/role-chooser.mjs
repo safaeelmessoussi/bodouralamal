@@ -1,5 +1,5 @@
 /**
- * **Answering «ماذا تريدين؟» the way a person does** (SRS Revision 170 §2).
+ * **Answering «المطلوب» the way a person does** (SRS Revision 170 §2).
  *
  * The registration form's four roles live in ONE closed control — the
  * platform's `MultiSelectField` — with «أسجّل نفسي كمستفيدة» chosen for her.

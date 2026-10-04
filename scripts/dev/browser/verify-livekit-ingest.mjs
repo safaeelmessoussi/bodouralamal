@@ -215,7 +215,7 @@ let audioContentId = null;
 
   await wait(9000);
   const banner = await room.text();
-  check('«جاري التسجيل» appears — nobody is recorded silently', banner.includes('جاري التسجيل'));
+  check('«جارٍ التسجيل» appears — nobody is recorded silently', banner.includes('جارٍ التسجيل'));
 
   /**
    * **Her browser is CLOSED WHILE THE RECORDING RUNS, and she never comes

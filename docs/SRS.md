@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint — current Revision 196 (2026-10-04); see the revision ledger below.
+**Status:** Final MVP Blueprint — current Revision 197 (2026-10-04); see the revision ledger below.
 **Revision date:** 2026-09-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** Safae El Messoussi
@@ -24,7 +24,7 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
-**Revision ledger (R1–R196):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 196** (2026-10-04).
+**Revision ledger (R1–R197):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 197** (2026-10-04).
 
 Where §4 (functional) and §12–§20 (rules/constraints) describe the same behavior, they must agree; if an implementer ever finds a conflict, **§12 Business Rules win**, and the conflict must be reported, not silently resolved.
 
@@ -1880,7 +1880,7 @@ TEACHER PORTAL (مؤطِّرة) — THE MENU, IN THIS EXACT ORDER (Revision 106)
 │
 ├── مساحة التدريس ..................... /teacher — what she has been told, and her own
 │                                       week (R83.5, R84). `GET /me/calendar` is the projection
-├── إدخال متى أنا متاحة ............... /teacher/availability (**Revision 106**, extended by
+├── إدخال أوقات التوفّر ............... /teacher/availability (**Revision 106**, label per **Revision 197**, extended by
 │                                       **Revision 114**) — she states her own
 │                                       read-only general framing preference, her
 │                                       `TeacherAvailability` ranges AND her own declared Subjects
@@ -2074,6 +2074,10 @@ An agent must implement these as single shared components and never duplicate th
 | `ConfirmDialog` (destructive actions, reason/justification field when TD-8 requires it) | All destructive/override actions |
 | `EmptyState` / `ErrorState` / `NoPermissionState` (§14.4) | Every page |
 | `JobStatusIndicator` (polls TD-3.7) | Bucket migrations |
+
+### 14.3a Interface language — neutral address (Revision 197, binding)
+
+**No interface text addresses the reader as a woman** — nor as a man. The public pages are for everyone; an account may be addressed in the feminine only if it belongs to a women/girls-only Category, a variant not built, so **every string is gender-neutral**: verbal nouns and labels («اختيار الفرع»), «يُرجى» + masdar for instructions and validation («يُرجى اختيار الفرع.»), impersonal or passive forms («يمكن…», «يُترك فارغًا…») — never a masculine imperative passed off as neutral. The association's role nouns «مؤطِّرة» / «مستفيدة» (Revision 71) and the honorific «الأستاذة» are unchanged. Counted nouns agree with their number («من 5 سنوات», «من 13 سنة»). Enforced by `scripts/ci/check-neutral-address.sh`.
 
 ### 14.4 UI State Standard (mandatory on every page)
 

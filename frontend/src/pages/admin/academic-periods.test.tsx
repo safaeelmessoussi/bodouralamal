@@ -31,7 +31,7 @@ describe('the taken-sequence refusal reads as what it is', () => {
 
   it('tells her what to do next, which the generic sentence could not', () => {
     // «refresh the page» is not an action that resolves a taken sequence.
-    expect(t('admin.academicPeriods.duplicate')).toMatch(/عدّلي|اختاري/);
+    expect(t('admin.academicPeriods.duplicate')).toMatch(/تعديل|اختيار/);
   });
 
   it('carries the placeholder the page interpolates', () => {

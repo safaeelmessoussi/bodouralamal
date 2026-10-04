@@ -108,15 +108,15 @@ check(
 /* ── 3 · She asks for nothing but her code ──────────────────────────────── */
 check(
   'the form asks for the reference code and not for her name or a branch',
-  notice.includes('رقم التسجيل الخاص بك') && !notice.includes('الاسم الشخصي*'),
+  notice.includes('رقم التسجيل') && !notice.includes('الاسم الشخصي*'),
 );
-check('the reference code is accepted', (await setInput('رقم التسجيل الخاص بك', CODE)) === 'ok');
+check('the reference code is accepted', (await setInput('رقم التسجيل', CODE)) === 'ok');
 
 check('the request is submittable', (await clickText('إرسال')) === 'clicked');
 await wait(1200);
 check(
   'the request was accepted and she is told it is under review',
-  (await bodyText()).includes('وصل طلبك') || (await bodyText()).includes('شكراً'),
+  (await bodyText()).includes('وصل الطلب') || (await bodyText()).includes('شكراً'),
 );
 
 /* ── 4 · The Super Admin can FIND it — rule P, on a binding decision ────── */

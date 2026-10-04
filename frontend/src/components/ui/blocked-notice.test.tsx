@@ -17,7 +17,7 @@ const REQUEST_ID = 'e3986e8e02bb5a1b27b27d0594f784bc';
 const blockedError = new ApiError(409, {
   code: 'STATE_CONFLICT',
   message_key: 'errors.state_conflict',
-  message: 'تم تعديل هذا العنصر أو تغييرت حالته. يرجى تحديث الصفحة.',
+  message: 'تم تعديل هذا العنصر أو تغيّرت حالته. يرجى تحديث الصفحة.',
   details: { blocked_by: { groups: 1, course_schedules: 1 } },
   request_id: REQUEST_ID,
 });

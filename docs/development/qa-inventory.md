@@ -105,7 +105,7 @@ Results are from the run named per row (2026-08-19 unless stated); none is copie
 | `verify-room-capacity.sh` | 10 | R169 §3: non-whole capacity refused before the wire; «not stated» when cleared | 8/8 |
 | `verify-content-visibility.sh` | 24 | §14.1 visibility selector and request body; found the upload dialog clearing the page-filter Subject (CHANGES §10) | 24/24 |
 | `verify-admin-navigation.sh` | 4 | R105 menu orders as rendered, both roles; nine الإدارة URLs asked of the server with an Admin token | 31/31 |
-| `verify-teacher-portal.sh` | 5 | R106 teacher menu, `إدخال متى أنا متاحة`, allowed vs refused with a Teacher token | 25/25 |
+| `verify-teacher-portal.sh` | 5 | R106 teacher menu, `إدخال أوقات التوفّر`, allowed vs refused with a Teacher token | 25/25 |
 | `verify-sorting-headers.sh` | 6 | §6 header sorting: text, numeric, date; not-sortable audit | 19/19 |
 | `verify-grading.sh` | 14d, 16 | R81: exam's own maximum, empty ≠ zero, publish notifies, draft silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | AQ/X/AY «الملف التدريسي»; E: untouched profile closes without asking | 14/14 |

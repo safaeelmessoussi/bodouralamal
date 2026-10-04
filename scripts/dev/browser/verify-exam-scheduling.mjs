@@ -557,7 +557,7 @@ if (physicalDraftId) {
     JSON.stringify(paperBefore),
   );
 
-  const searched = await setTextByLabel('ابحثي بعنوان الورقة', TAG, "document.querySelector('dialog[open]')");
+  const searched = await setTextByLabel('البحث بعنوان الورقة', TAG, "document.querySelector('dialog[open]')");
   check('C3b · the searchable paper selector accepts typed text', searched.ok === true, JSON.stringify(searched));
   await new Promise((r) => setTimeout(r, 1300));
   let picked = await setSelectContainingOption('ورقة الاختبار', TITLE_PHYSICAL_SOURCE);
@@ -566,7 +566,7 @@ if (physicalDraftId) {
     // picker's own unfiltered list (plenty of headroom under its 20-row
     // page in this disposable fixture), so a slow/eventual search does not
     // fail the journey over an unrelated timing margin.
-    await setTextByLabel('ابحثي بعنوان الورقة', '', "document.querySelector('dialog[open]')");
+    await setTextByLabel('البحث بعنوان الورقة', '', "document.querySelector('dialog[open]')");
     await new Promise((r) => setTimeout(r, 1000));
     picked = await setSelectContainingOption('ورقة الاختبار', TITLE_PHYSICAL_SOURCE);
   }

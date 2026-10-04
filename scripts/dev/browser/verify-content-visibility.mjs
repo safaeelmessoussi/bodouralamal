@@ -100,7 +100,7 @@ async function goto(path) {
   await send('Page.navigate', { url: `${BASE}${path}` });
   for (let i = 0; i < 120; i += 1) {
     // **`.state[role="status"]` is NOT a loading marker on this screen.** The
-    // scope hint («اختاري المستوى…») uses exactly that shape, so treating it as
+    // scope hint («اختيار المستوى…») uses exactly that shape, so treating it as
     // loading waits forever on a page that is fully rendered. Readiness here is
     // the upload action existing — the thing this harness came to operate.
     const state = await evaluate(`(() => {

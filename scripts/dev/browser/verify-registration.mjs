@@ -228,7 +228,7 @@ check(
 // six times for a guardian and two children). And what she MUST give is never
 // below what she may skip.
 const optionalBlocks = await evaluate(`JSON.stringify([...document.querySelectorAll('[data-optional-fields]')].map((block) => ({
-  rule: (block.textContent ?? '').split('اختياريان معاً: أدخلي الاسمين بالفرنسية أو اتركي الحقلين فارغين.').length - 1,
+  rule: (block.textContent ?? '').split('اختياريان معاً: يُرجى إدخال الاسمين بالفرنسية أو ترك الحقلين فارغين.').length - 1,
   inputs: block.querySelectorAll('input').length,
   requiredInside: block.querySelectorAll('[aria-required="true"], input[required], select[required]').length,
   requiredAfter: [...(block.parentElement?.querySelectorAll('.field__required') ?? [])].filter((mark) => block.compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_FOLLOWING && !block.contains(mark)).length,

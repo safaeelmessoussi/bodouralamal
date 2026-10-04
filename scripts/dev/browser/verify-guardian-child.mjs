@@ -83,7 +83,7 @@ async function open(path, ready = 'main') {
 async function chooseChild(nameFragment) {
   const opened = await evaluate(`(() => {
     const trigger = [...document.querySelectorAll('button')]
-      .find((b) => (b.textContent ?? '').includes('اختر الدور الذي تعمل به'));
+      .find((b) => (b.textContent ?? '').includes('اختيار الدور المستعمَل حاليًا'));
     if (!trigger) {
       return { noTrigger: true, buttons: [...document.querySelectorAll('button')].map((b) => b.textContent.trim()).slice(0, 12) };
     }

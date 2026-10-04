@@ -124,7 +124,7 @@ check(
  *
  * - «نوع العنصر» is chosen by what the option SAYS. Its values are catalogue
  *   ids (R110), so the literals this used to set matched nothing and the form
- *   stayed on «اختاري نوع العنصر» — every later check failed from there.
+ *   stayed on «اختيار نوع العنصر» — every later check failed from there.
  * - A date is chosen through the platform's own picker: open it, step month by
  *   month, press the day whose button carries its ISO date in its id. There is
  *   no native date input to type into any more.
@@ -393,7 +393,7 @@ const bellOf = async (cookie, home) => {
 const aminaBell = await bellOf(process.env.AMINA2_COOKIE, '/teacher');
 check(
   '7 · the assistant she named is TOLD she was assigned',
-  (aminaBell.text ?? '').includes('أُسندت إليكِ') &&
+  (aminaBell.text ?? '').includes('أُسندت إليك') &&
     (aminaBell.text ?? '').includes('نشاط المؤطرة') &&
     !(aminaBell.text ?? '').includes('event_staff_assigned'),
   JSON.stringify({ badge: aminaBell.badge, text: (aminaBell.text ?? '').slice(0, 260) }),
@@ -409,7 +409,7 @@ check(
 const safaBell = await bellOf(process.env.SAFA3_COOKIE, '/teacher');
 check(
   '9 · the مؤطرة who created it is NOT told she assigned herself',
-  !(safaBell.text ?? '').includes('أُسندت إليكِ'),
+  !(safaBell.text ?? '').includes('أُسندت إليك'),
   JSON.stringify({ text: (safaBell.text ?? '').slice(0, 200) }),
 );
 
@@ -531,7 +531,7 @@ const classForm = await evaluate(`(async () => {
   return {
     modeAsked,
     adminFilters,
-    staffLockedShown: dialog.textContent.includes('أنتِ المؤطّرة المسؤولة عن هذه الحصة.'),
+    staffLockedShown: dialog.textContent.includes('تُسنَد هذه الحصة إلى الحساب الحالي بصفة المؤطّرة المسؤولة.'),
     levelOptions,
   };
 })()`);

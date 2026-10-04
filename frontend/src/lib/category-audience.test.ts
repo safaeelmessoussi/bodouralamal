@@ -46,6 +46,6 @@ describe('the age range is said, and gates nothing', () => {
   });
 
   it('zero is an age, not «not stated»', () => {
-    expect(ageRangeLabel({ min_age: 0, max_age: 5 })).toBe('من 0 إلى 5 سنة');
+    expect(ageRangeLabel({ min_age: 0, max_age: 5 })).toBe('من 0 إلى 5 سنوات');
   });
 });
