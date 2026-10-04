@@ -302,10 +302,10 @@ export interface UserListItem {
  * What `/admin/users` may be sorted by (R76.1) — **this endpoint's own
  * allow-list**, and deliberately narrow.
  *
- * `name` and `created_at` only. `account_status` was considered and left out: it
- * is an enum whose *alphabetical* order (`active`, `pending`, `suspended`) is not
- * its meaningful one, so a sort by it would look ordered and be arbitrary — the
- * status filter already answers the question a reader actually has.
+ * Since R198 §6 every column backed by a field of the account sorts here;
+ * `account_status` by its declared order, which PostgreSQL uses for an enum.
+ * The e-mail, roles and branches are relations — the table sorts them when one
+ * page holds every account.
  */
 export const USER_SORT_FIELDS: SortableFields = {
   name: (dir) => [{ nameArabic: dir }],
@@ -327,6 +327,13 @@ export const USER_SORT_FIELDS: SortableFields = {
   first_name: (dir) => [{ firstNameSort: { sort: dir, nulls: 'last' } }],
   last_name: (dir) => [{ lastNameSort: { sort: dir, nulls: 'last' } }],
   created_at: (dir) => [{ createdAt: dir }],
+  // R198 §6 (the Owner: every header sorts). An absent value sits last either
+  // way. `status` orders by the enum's DECLARED order (PostgreSQL's), the
+  // account's life — pending, active, suspended — never the alphabet's.
+  nickname: (dir) => [{ nickname: { sort: dir, nulls: 'last' } }],
+  reference_code: (dir) => [{ referenceCode: { sort: dir, nulls: 'last' } }],
+  phone: (dir) => [{ phone: { sort: dir, nulls: 'last' } }],
+  status: (dir) => [{ accountStatus: dir }],
 };
 
 /** BR-19's order — the collated name, which is correct Arabic order natively. */

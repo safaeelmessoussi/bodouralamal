@@ -18,25 +18,13 @@ import type { Option, ScopeField, ScopeOptions } from '../../hooks/use-scope-opt
  *
  * | State | What it says |
  * |---|---|
- * | Parent not chosen | *choose a level first* — an instruction, not a failure |
- * | Parent chosen, list loading | the field is `busy`; the previous label stays |
- * | Parent chosen, list genuinely empty | *this level teaches no subjects* — a true statement about the curriculum, naming the screen that changes it |
+ * | List loading | the field is `busy`; the previous label stays |
+ * | Nothing matches the other choices | says so — a true statement about the curriculum (*this level teaches no subjects*), never a bare empty list |
  *
  * The third is the one that mattered: it is the state that used to reach the
  * server as `SUBJECT_NOT_AT_LEVEL`, and presenting it as an empty dropdown would
  * leave an administrator guessing whether the platform was broken.
  */
-
-/** The dependency each field has, so the placeholder can name what is missing.
- *  Read from the graph rather than hardcoded per call site. */
-const REQUIRES: Partial<Record<ScopeField, { field: ScopeField; labelKey: string }[]>> = {
-  levelId: [],
-  subjectId: [{ field: 'levelId', labelKey: 'scope.level' }],
-  groupId: [
-    { field: 'levelId', labelKey: 'scope.level' },
-    { field: 'branchId', labelKey: 'scope.branch' },
-  ],
-};
 
 const LABEL_KEY: Record<ScopeField, string> = {
   categoryId: 'scope.category',
@@ -45,6 +33,7 @@ const LABEL_KEY: Record<ScopeField, string> = {
   branchId: 'scope.branch',
   academicYearId: 'scope.academicYear',
   groupId: 'scope.group',
+  surahId: 'scope.surah',
 };
 
 export interface ScopeSelectorsProps {
@@ -80,6 +69,11 @@ export interface ScopeSelectorsProps {
    * the row's value and label, and nothing else.
    */
   pinned?: Partial<Record<ScopeField, Option>>;
+  /** R198 §3 — fields a form needs, marked * : what is missing is said by
+   *  the field, not by a sentence above the button. */
+  required?: readonly ScopeField[];
+  /** What `''` reads in a form for a field that may stay empty («بدون سورة محددة»). */
+  blankLabels?: Partial<Record<ScopeField, string>>;
 }
 
 export function ScopeSelectors({
@@ -89,6 +83,8 @@ export function ScopeSelectors({
   locked = [],
   extraOptions = {},
   pinned = {},
+  required = [],
+  blankLabels = {},
 }: ScopeSelectorsProps): ReactNode {
   return (
     <>
@@ -107,59 +103,23 @@ export function ScopeSelectors({
           );
         }
         /**
-         * **A filter's Subject has no unmet dependency** (Owner, 2026-08-17).
-         *
-         * The `subjectId → levelId` edge exists so a FORM cannot offer a pair the
-         * server refuses (`SUBJECT_NOT_AT_LEVEL`). A filter asks a different
-         * question — *"everything about تفسير"* is legitimate with no Level in
-         * mind — and `GET /library` has always taken the two as independent
-         * optionals, so the gate was a client-side invention.
-         *
-         * The edge stays in `REQUIRES` because it is true of forms, which is
-         * where it does its work; what changes is that a filter does not read it
-         * for this one field. `useScopeOptions({ subjectsUnscoped: true })` is
-         * what fills the control in that case.
+         * **No field waits for another** (SRS Revision 198 §3, the Owner,
+         * 2026-10-04). Until R198 a form's Subject was disabled behind
+         * «يُرجى اختيار المستوى أولًا» and a Group behind its Level and
+         * Branch; now every list is open from the start and choosing in any
+         * of them narrows the others (`scope-facets.ts`) — the Subject first
+         * narrows the Levels to those that teach it.
          */
-        /**
-         * **A FILTER never gates, whatever the field** (rule F, 2026-08-19).
-         *
-         * This read `mode === 'filter' && field === 'subjectId'` — the same
-         * correction, applied to one field and forgotten on the next. The Owner
-         * then found المستوى disabled on the back office's list, needing a
-         * Category first for no reason the domain gives: §4.4b makes a Level
-         * belong to a Category, which means choosing one **narrows** the other,
-         * not that either is a precondition.
-         *
-         * Generalising it is the fix. `REQUIRES` still governs FORMS, where a
-         * dependency is real — a Level genuinely needs its Category before it
-         * can be created — and that is the only place it now reads.
-         */
-        /**
-         * **R172 §1 (found in passing) — a FORM's Subject with no Level in play.**
-         * R169 §7 let a filter-built class name its Subject with no Level chosen
-         * («الكل» reaches every Level that teaches it), and the hook offered
-         * the Subjects accordingly — but this gate still read the Level edge
-         * and disabled the control with «اختاري المستوى أولًا», which is what
-         * the Owner met on Staging. The hook says when the Subject is
-         * independent of the Level; the gate believes it.
-         */
-        const ignoreDependency =
-          mode === 'filter' || (field === 'subjectId' && scope.subjectsIndependentOfLevel);
-        const unmetDependency = ignoreDependency
-          ? undefined
-          : (REQUIRES[field] ?? []).find((dep) => scope.value[dep.field] === '');
         const list = [...(extraOptions[field] ?? []), ...scope.options[field]];
-        const isEmpty = !unmetDependency && !scope.loading[field] && list.length === 0;
+        const isEmpty = !scope.loading[field] && list.length === 0;
 
-        const placeholder = unmetDependency
-          ? t('scope.chooseFirst').replace('{field}', t(unmetDependency.labelKey))
-          : isEmpty
+        const placeholder = isEmpty
             ? field === 'subjectId' && wholeCategoryOf(scope.value.levelId) !== null
               ? t('scope.empty.wholeCategorySubject')
               : t(`scope.empty.${field}`)
             : mode === 'filter'
               ? t(`scope.all.${field}`)
-              : t('scope.choose');
+              : (blankLabels[field] ?? t('scope.choose'));
 
         return (
           <SelectField
@@ -168,10 +128,11 @@ export function ScopeSelectors({
             value={scope.value[field]}
             onChange={(v) => scope.set(field, v)}
             busy={scope.loading[field]}
+            required={required.includes(field)}
             // Disabled where a choice is impossible rather than merely empty —
             // §14.2: an inapplicable control teaches nothing, but the label
             // above still says *why*, which a hidden control could not.
-            disabled={locked.includes(field) || unmetDependency !== undefined || isEmpty}
+            disabled={locked.includes(field) || isEmpty}
             options={[
               // `''` is offered in a filter (it means "all") and kept in a form
               // only until something is chosen, so a form cannot be submitted

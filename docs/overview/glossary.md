@@ -21,7 +21,7 @@
 | Subject | مادة | Extensible atomic schedulable curriculum item; only حفظ القرآن carries the marker authorising memorisation entry (R107–R108) |
 | Committee | لجنة | Cross-cutting tag; postponed; tables not pre-created |
 | Follow-up | — | Admin noticing dropping engagement and checking in; not automated |
-| Global / no branch | بدون فرع | Content/events on no branch, shown across all; Admins only |
+| Global / no branch | بدون فرع | Content/events on no branch, shown across all; Admins only. Content: filed by choosing no branch (R198 §2) |
 
 ## Platform vocabulary
 

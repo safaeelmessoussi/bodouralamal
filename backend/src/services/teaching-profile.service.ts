@@ -5,6 +5,7 @@ import * as scope from '../policies/branch-scope.js';
 import { firstOverlap } from '../policies/teaching-profile.js';
 import * as audit from '../repositories/audit.repository.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
+import { ADMIN_ORDER } from '../lib/sorting.js';
 
 /**
  * **The teaching profile (§E, R88) — planning data, never authority.**
@@ -264,12 +265,12 @@ export async function readOwnTeachingProfile(
     prisma.subject.findMany({
       where: { deletedAt: null },
       select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+      orderBy: [...ADMIN_ORDER],
     }),
     prisma.category.findMany({
       where: { deletedAt: null },
       select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+      orderBy: [...ADMIN_ORDER],
     }),
   ]);
   return { ...profile, selectable_subjects: subjects, selectable_categories: categories };

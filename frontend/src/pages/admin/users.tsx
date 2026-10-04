@@ -178,6 +178,7 @@ export function UsersPage(): ReactNode {
     },
     {
       key: 'nickname',
+      sortKey: 'nickname',
       header: t('admin.users.colNickname'),
       secondary: true,
       cell: (r) => r.nickname ?? <span className="muted">{t('common.notSet')}</span>,
@@ -187,6 +188,7 @@ export function UsersPage(): ReactNode {
       // and an empty cell there is the fact, not a gap. The search box finds a
       // person by it, said with or without its «BA-».
       key: 'reference_code',
+      sortKey: 'reference_code',
       header: t('admin.users.colReferenceCode'),
       secondary: true,
       cell: (r) => r.reference_code ?? <span className="muted">—</span>,
@@ -215,12 +217,14 @@ export function UsersPage(): ReactNode {
     },
     {
       key: 'status',
+      sortKey: 'status',
       header: t('admin.users.colStatus'),
       // Announced as a word, never as colour alone (§14.4).
       cell: (r) => t(`admin.users.status.${r.account_status}`),
     },
     {
       key: 'phone',
+      sortKey: 'phone',
       header: t('admin.users.colPhone'),
       secondary: true,
       cell: (r) => r.phone ?? <span className="muted">{t('common.notSet')}</span>,

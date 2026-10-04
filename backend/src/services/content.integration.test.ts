@@ -413,14 +413,12 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-const meta = (over: Partial<Record<string, unknown>> = {}) => ({
-  levelId,
-  subjectId,
-  academicYearId,
-  branchId,
-  visibility: "private",
-  ...over,
-});
+const meta = (over: Partial<Record<string, unknown>> = {}) => {
+  const { branchId: home, ...rest } = { levelId, subjectId, academicYearId, branchId, visibility: "private", ...over };
+  // R198 §2 — the service takes `branchIds` (home first, `[]` Global); the
+  // tests below still state one branch, as most uploads do.
+  return "branchIds" in over ? rest : { ...rest, branchIds: home === null ? [] : [home] };
+};
 
 /** initiate → PUT → complete, the whole path a browser takes. */
 async function uploadPdf(
@@ -616,6 +614,81 @@ describe("the two-phase upload (TD-3.5)", () => {
     // and teaching-group splits raise the same one, and the older spelling wins
     // because clients render it.
     expect(e.details?.["reason"]).toBe("SUBJECT_NOT_IN_LEVEL");
+  });
+});
+
+/**
+ * **SRS Revision 198 §2 — an item filed for several branches.** The first is
+ * its home (`branch_id`), the rest its additional branches; `[]` is Global.
+ * Each is authorised as the one branch was, and the library reads them all.
+ */
+describe("R198 §2 — several branches", () => {
+  it("files the first as home and the rest as additional, and the library carries them", async () => {
+    const { id } = await uploadPdf(admin(), "فرعان", { branchIds: [branchId, otherBranchId] });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { branchId: true, additionalBranches: { select: { branchId: true } } },
+    });
+    expect(row.branchId).toBe(branchId);
+    expect(row.additionalBranches.map((b) => b.branchId)).toEqual([otherBranchId]);
+
+    const listed = await listLibrary(prisma, { userId: adminId, roleScopes: [{ role: "admin", branches: null }], accountStatus: "active" } as never, { levelId, pageSize: 100 });
+    const item = listed.data.find((r) => r.id === id);
+    expect(item?.branchId).toBe(branchId);
+    expect(item?.additionalBranches.map((b) => b.id)).toEqual([otherBranchId]);
+  });
+
+  it("files `[]` as Global, for an Admin", async () => {
+    const { id } = await uploadPdf(admin(), "لكل الفروع", { branchIds: [] });
+    const row = await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { branchId: true } });
+    expect(row.branchId).toBeNull();
+  });
+
+  it("refuses a Teacher any branch she does not teach at, even beside her own", async () => {
+    const e = await failure(() =>
+      initiateUpload(prisma, clients, KEY, teacher(), {
+        filename: "a.pdf",
+        size: 10,
+        mime: "application/pdf",
+        meta: meta({ branchIds: [branchId, otherBranchId] }) as never,
+      }),
+    );
+    expect(e.details?.["reason"]).toBe("BRANCH_OUT_OF_SCOPE");
+  });
+
+  it("refuses a Teacher `[]` (Global), as it refuses `null`", async () => {
+    const e = await failure(() =>
+      initiateUpload(prisma, clients, KEY, teacher(), {
+        filename: "a.pdf",
+        size: 10,
+        mime: "application/pdf",
+        meta: meta({ branchIds: [] }) as never,
+      }),
+    );
+    expect(e.details?.["reason"]).toBe("GLOBAL_SCOPE_FORBIDDEN");
+  });
+
+  it("refuses an unknown branch before any byte moves", async () => {
+    const e = await failure(() =>
+      initiateUpload(prisma, clients, KEY, admin(), {
+        filename: "a.pdf",
+        size: 10,
+        mime: "application/pdf",
+        meta: meta({ branchIds: [branchId, randomUUID()] }) as never,
+      }),
+    );
+    expect(e.code).toBe("NOT_FOUND");
+  });
+
+  it("the database refuses the home branch twice, and an additional branch on a Global item", async () => {
+    const { id: home } = await uploadPdf(admin(), "منزل", {});
+    await expect(
+      prisma.educationalContentBranch.create({ data: { contentId: home, branchId } }),
+    ).rejects.toThrow(/home branch/);
+    const { id: global } = await uploadPdf(admin(), "عام للفروع", { branchIds: [] });
+    await expect(
+      prisma.educationalContentBranch.create({ data: { contentId: global, branchId } }),
+    ).rejects.toThrow(/Global/);
   });
 });
 
@@ -2583,7 +2656,7 @@ describe("B-02 — authoritative visibility/storage placement", () => {
         levelId,
         subjectId,
         academicYearId,
-        branchId,
+        branchIds: branchId === null ? [] : [branchId],
         replacesContentId: first.id,
       },
     });

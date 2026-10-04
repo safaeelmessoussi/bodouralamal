@@ -70,6 +70,9 @@ export interface UploadTicketClaims {
   academic_year_id: string;
   /** `null` is the Global scope (§4.9), which is a value, not an absence. */
   branch_id: string | null;
+  /** R198 §2 — the item's OTHER branches (`branch_id` is its home); absent on a
+   *  ticket minted before, or for an item filed for one branch or Global. */
+  additional_branch_ids?: string[];
   visibility: string;
   /**
    * **R99.12 — what the uploaded thing IS**, `uploaded` or `session_recording`.

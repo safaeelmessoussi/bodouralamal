@@ -8,6 +8,7 @@ import { fetchCourseScheduleOptions, fetchScopeOptions } from '../adapters/scope
 import type { SubjectRef } from '../adapters/reference-data.js';
 import { levelLabel } from '../components/scope/level-select.js';
 import { t } from '../i18n/index.js';
+import { facetsOf, reconcile, type FacetFacts, type FacetOptions } from './scope-facets.js';
 
 /**
  * **The curriculum's dependency graph, in one place.**
@@ -66,6 +67,9 @@ export interface ScopeValue {
   branchId: string;
   academicYearId: string;
   groupId: string;
+  /** R198 §3 — one Surah (its number, as a string). Narrows the Levels whose
+   *  syllabus holds it and the Subjects taught by Surah; is narrowed by them. */
+  surahId: string;
 }
 
 export type ScopeField = keyof ScopeValue;
@@ -82,6 +86,7 @@ export const EMPTY_SCOPE: ScopeValue = {
   branchId: '',
   academicYearId: '',
   groupId: '',
+  surahId: '',
 };
 
 export interface ScopeOptions {
@@ -153,6 +158,9 @@ export interface UseScopeOptionsInput {
    *  filter silently hides rows. */
   defaultCurrentYear?: boolean;
   /**
+   * **Subsumed by R198 §3** — every form now offers the Subjects some Level
+   * teaches with no Level chosen. Accepted, and ignored, for its callers.
+   *
    * **A form in which «no Level» is a real answer** (SRS Revision 169 §7).
    *
    * A class may be addressed to «الكل» — every Level that teaches its Subject —
@@ -228,6 +236,12 @@ export interface UseScopeOptionsInput {
  * re-fetch; exported so the property can be tested directly rather than
  * inferred from a render count.
  */
+/** A Level's place in the Super Admin's order (the levels arrive in it). */
+function levelRank(levels: readonly Level[], levelId: string): number {
+  const at = levels.findIndex((l) => l.id === levelId);
+  return at === -1 ? Number.MAX_SAFE_INTEGER : at;
+}
+
 export function scopeFieldKey(fields: readonly ScopeField[]): string {
   return [...fields].sort().join(',');
 }
@@ -239,7 +253,6 @@ export function useScopeOptions({
   defaultCurrentYear = false,
   mode = 'form',
   restrictToOwnCapability = false,
-  subjectsTaughtAnywhere = false,
   offerWholeCategory = false,
   sentinels = {},
 }: UseScopeOptionsInput): ScopeOptions {
@@ -295,17 +308,6 @@ export function useScopeOptions({
   }>({ subjectsBySurah: new Set(), levelSurahIds: {}, surahNames: {} });
 
   const [ready, setReady] = useState(false);
-  /**
-   * **Always false now, and kept rather than removed** (NEW D).
-   *
-   * Subjects are derived from the one scope-options read instead of fetched, so
-   * there is no window in which the list is in flight. The flag stays because
-   * three real behaviours read it — the control's busy state, the *«this Level
-   * teaches nothing»* message, and rule 2's clearing guard — and each of them
-   * asks *"is this list trustworthy yet?"*, which is a question the hook should
-   * keep answering even when today's answer is always yes.
-   */
-  const loadingSubjects = false;
   const [loadingGroups, setLoadingGroups] = useState(false);
 
   // Levels are needed whenever a Category, Level or Group is offered: a Category
@@ -417,110 +419,39 @@ export function useScopeOptions({
   }, [token, wants, needsLevels, defaultCurrentYear, restrictToOwnCapability]);
 
   /**
-   * ## Subjects depend on the Level — **when a Level is being chosen**
+   * **Every list is derived during render from the one read** (NEW D; R198
+   * §3), never written to state by an effect: as an effect, `options` was
+   * once memoised from an empty list in the very commit `ready` flipped true,
+   * and rule 2 cleared a Subject the caller had deliberately seeded. Derived
+   * in the same pass from the same data, the two cannot disagree.
    *
-   * A Subject reaches a Level only through `LevelSubject` (§4.4b, R43), so a
-   * **form** must offer only the Subjects the chosen Level teaches: offering
-   * others is offering the `SUBJECT_NOT_AT_LEVEL` refusal, which is the defect
-   * this whole hook was extracted for.
-   *
-   * **A filter is a different question, and the dependency does not apply to it**
-   * (Owner, 2026-08-17). *"Show me everything about تفسير"* is legitimate with no
-   * Level in mind, and `GET /library` has always accepted `level_id` and
-   * `subject_id` as **independent optionals** — so the gate was a client-side
-   * invention, not a contract. `مكتبة المحتوى` disabled the Subject filter behind
-   * *«اختاري المستوى أولًا»* and answered a question nobody had to ask.
-   *
-   * So with no Level chosen the options are **every live Subject**, and choosing
-   * a Level narrows them to that Level's. The caller says which mode it is in;
-   * `ScopeSelectors` passes `mode` through for exactly this.
-   *
-   * **The two reads are different endpoints on purpose**: `listSubjects` is the
-   * platform's Subject list and `listLevelSubjects` is one Level's pairing. This
-   * picks between them; it does not filter one to fake the other.
+   * What each list offers is `scope-facets.ts`'s rule: with nothing else
+   * chosen a FILTER offers every Subject (Owner, 2026-08-17 — «everything
+   * about تفسير» is a fair question) and a FORM every Subject some Level
+   * teaches; whatever is chosen narrows the rest.
    */
-  /**
-   * **Derived during render, not held in state** (NEW D; made a `useMemo` on
-   * 2026-08-27 to close a real race).
-   *
-   * This used to call `/admin/subjects` or `/admin/levels/{id}/subjects` — both
-   * Admin-only, so a مؤطِّرة's Subject control was empty in a filter and refused
-   * the moment she chose a Level. The one scope-options read carries every
-   * Subject and each Level's own, so the SAME rule now runs against data she is
-   * allowed to have.
-   *
-   * The rule itself is unchanged and is still the Owner's (2026-08-17): with no
-   * Level chosen a **filter** offers every Subject and a **form** offers none,
-   * and choosing a Level narrows to that Level's.
-   *
-   * ## Why it is a memo and not an effect
-   *
-   * As an effect it wrote `subjects` state, and that opened a **one-commit
-   * window** that silently dropped a seeded Subject:
-   *
-   * 1. the form mounts with `initial` — Level *and* Subject already chosen;
-   * 2. the scope-options payload lands, so `levelSubjects` fills and `ready`
-   *    flips true **in the same commit**;
-   * 3. rule 2's clearing effect runs on that commit against `options`, which was
-   *    memoised **during that render** from the still-EMPTY `subjects` state —
-   *    the effect that would have filled it has not committed yet;
-   * 4. the seeded Subject is not in an empty list, so it is cleared.
-   *
-   * Before NEW D the `loadingSubjects` flag was true across that window and rule
-   * 2 skipped the field. NEW D removed the fetch and made the flag a constant
-   * `false`, which removed the guard along with the request it was guarding —
-   * and the defect it had been hiding became reachable. مكتبة المحتوى's upload
-   * dialog lost the Subject its page filter had set, every time.
-   *
-   * Deriving it during render removes the window rather than re-guarding it:
-   * `options` can no longer disagree with `levelSubjects`, because both are
-   * computed in the same pass from the same data.
-   */
-  const subjects = useMemo<SubjectRef[]>(() => {
-    if (!wants('subjectId')) return [];
-    if (value.levelId === '') {
-      if (subjectsUnscoped) return allSubjects;
-      if (!subjectsTaughtAnywhere) return [];
-      const somewhere = new Set([...levelSubjects.values()].flat());
-      return allSubjects.filter((s) => somewhere.has(s.id));
-    }
-    // R172 §1 — «كل مستويات الفئة» chosen where a Level would be: the Subjects
-    // the whole Category is taught, and nothing a single Level adds.
-    const wholeOf = wholeCategoryOf(value.levelId);
-    if (wholeOf !== null) {
-      const taught = new Set(categorySubjects.get(wholeOf) ?? []);
-      return allSubjects.filter((s) => taught.has(s.id));
-    }
-    // R178 §1 (Owner-reported, 2026-09-29) — a Level teaches its own Subjects
-    // AND every Subject taught to its whole Category (R172 §1), which is what
-    // the server's curriculum policy already accepts. Reading `LevelSubject`
-    // alone hid a Category-wide Subject the moment a Level was in play — and
-    // on «تعديل العنصر» that emptied the LOCKED Subject of the class itself.
-    const taught = new Set([
-      ...(levelSubjects.get(value.levelId) ?? []),
-      ...(categorySubjects.get(levels.find((l) => l.id === value.levelId)?.category_id ?? '') ?? []),
-    ]);
-    return allSubjects.filter((s) => taught.has(s.id));
-  }, [value.levelId, wants, subjectsUnscoped, subjectsTaughtAnywhere, allSubjects, levelSubjects, categorySubjects, levels]);
-
-  /* ── Groups depend on Level AND Branch together (§4.4c) ───────────────── */
+  /* ── Groups: every one the caller may read, once (R198 §3) ─────────────── */
+  //
+  // A group is a roster of one Level at one premises (§4.4c). Until R198 the
+  // list was requested only once a Level AND a Branch were both chosen; it is
+  // now read whole (pages of the TD-10 maximum) and narrowed here by whatever
+  // is chosen — and choosing a group sets its Level, Category and Branch.
   useEffect(() => {
     if (!wants('groupId')) return;
-    // Neither alone narrows the set: a group is a roster of people **at a
-    // premises**, so asking with one half would offer groups at other branches.
-    if (value.levelId === '' || value.branchId === '') {
-      setGroups([]);
-      return;
-    }
     let cancelled = false;
     setLoadingGroups(true);
     void (async () => {
       try {
-        const page = await listAdministrativeGroups(token, 1, {
-          level_id: value.levelId,
-          branch_id: value.branchId,
-        });
-        if (!cancelled) setGroups(page.data);
+        const all: AdministrativeGroup[] = [];
+        for (let page = 1; ; page += 1) {
+          const batch = await listAdministrativeGroups(token, page, {}, null, 100);
+          all.push(...batch.data);
+          if (batch.data.length < 100 || all.length >= batch.meta.total) break;
+        }
+        if (!cancelled) setGroups(all);
+      } catch {
+        // A caller the group read refuses simply has no group to offer.
+        if (!cancelled) setGroups([]);
       } finally {
         if (!cancelled) setLoadingGroups(false);
       }
@@ -528,31 +459,74 @@ export function useScopeOptions({
     return () => {
       cancelled = true;
     };
-  }, [value.levelId, value.branchId, token, wants]);
+  }, [token, wants]);
+
+  /**
+   * **The facts every list is narrowed by, and the rules that narrow them**
+   * (`scope-facets.ts`). Held in a ref too, so `set` — which must stay
+   * referentially stable (see `fields` above) — reads the current ones.
+   */
+  const facts = useMemo<FacetFacts>(
+    () => ({
+      categoryIds: categories.map((c) => c.id),
+      levels,
+      subjectIds: allSubjects.map((x) => x.id),
+      levelSubjects,
+      categorySubjects,
+      levelSurahIds: surahFacts.levelSurahIds,
+      subjectsBySurah: surahFacts.subjectsBySurah,
+      // Ordered by the Level's place (the Super Admin's), then the group's own.
+      groups: [...groups].sort((a, b) => levelRank(levels, a.level_id) - levelRank(levels, b.level_id)),
+    }),
+    [categories, levels, allSubjects, levelSubjects, categorySubjects, surahFacts, groups],
+  );
+  const facetOptions = useMemo<FacetOptions>(
+    () => ({ subjectsUnscoped, offerWholeCategory, sentinels }),
+    // `sentinels` is a literal at most call sites: compared by content.
+    [subjectsUnscoped, offerWholeCategory, JSON.stringify(sentinels)],
+  );
+  const facets = useMemo(() => facetsOf(value, facts, facetOptions), [value, facts, facetOptions]);
+  const factsRef = useRef({ facts, facetOptions });
+  factsRef.current = { facts, facetOptions };
 
   /* ── The option lists ─────────────────────────────────────────────────── */
   const options = useMemo((): Record<ScopeField, Option[]> => {
-    const levelPool =
-      value.categoryId === '' ? levels : levels.filter((l) => l.category_id === value.categoryId);
-
-    const wholeCategory = offerWholeCategory
-      ? categories
-          .filter((c) => value.categoryId === '' || c.id === value.categoryId)
-          .map((c) => ({ value: wholeCategoryValue(c.id), label: `${c.name} — ${t('scope.wholeCategory')}` }))
-      : [];
+    const categoryName = new Map(categories.map((c) => [c.id, c.name]));
+    const levelById = new Map(levels.map((l) => [l.id, l]));
+    const subjectName = new Map(allSubjects.map((x) => [x.id, x.name]));
+    const groupById = new Map(groups.map((g) => [g.id, g]));
     return {
-      categoryId: categories.map((c) => ({ value: c.id, label: c.name })),
+      categoryId: facets.categoryId.map((id) => ({ value: id, label: categoryName.get(id) ?? '' })),
       // One label for a Level everywhere (`{Category} — {Level}`): a Level name
       // is not unique across Categories and not numbered uniformly (§4.4b), so
       // the bare name genuinely fails to identify one. Shared with the atomic
-      // selector rather than spelled out again here.
-      levelId: [...wholeCategory, ...levelPool.map((l) => ({ value: l.id, label: levelLabel(l) }))],
-      subjectId: subjects.map((s) => ({ value: s.id, label: s.name })),
+      // selector rather than spelled out again here. R172 §1's whole-Category
+      // choices lead the list.
+      levelId: facets.levelId.map((id) => {
+        const whole = wholeCategoryOf(id);
+        if (whole !== null) return { value: id, label: `${categoryName.get(whole) ?? ''} — ${t('scope.wholeCategory')}` };
+        const level = levelById.get(id);
+        return { value: id, label: level ? levelLabel(level) : '' };
+      }),
+      subjectId: facets.subjectId.map((id) => ({ value: id, label: subjectName.get(id) ?? '' })),
       branchId: branches.map((b) => ({ value: b.id, label: b.name })),
       academicYearId: years.map((y) => ({ value: y.id, label: y.label })),
-      groupId: groups.map((g) => ({ value: g.id, label: g.name })),
+      groupId: facets.groupId.map((id) => {
+        const group = groupById.get(id);
+        const level = group ? levelById.get(group.level_id) : undefined;
+        // A group's name is not unique across Levels: the Level says which,
+        // unless the Level is the one chosen.
+        return {
+          value: id,
+          label: group === undefined ? '' : level && value.levelId !== level.id ? `${level.name} — ${group.name}` : group.name,
+        };
+      }),
+      surahId: facets.surahId.map((id) => ({
+        value: id,
+        label: surahFacts.surahNames[Number(id)] ?? id,
+      })),
     };
-  }, [categories, levels, subjects, branches, years, groups, value.categoryId, offerWholeCategory]);
+  }, [facets, categories, levels, allSubjects, branches, years, groups, surahFacts.surahNames, value.levelId]);
 
   /* ── Rule 2: a selection no longer offered is CLEARED ─────────────────── */
   //
@@ -573,79 +547,71 @@ export function useScopeOptions({
     setValue((current) => {
       const next = { ...current };
       let changed = false;
+      // Checked as the hierarchy reads (Category → Level → Subject → Surah),
+      // never a parent against its child: a seeded edit whose Level and
+      // Subject disagree loses the Subject, as it always has, not the Level.
+      const { facts: f, facetOptions: o } = factsRef.current;
+      const allowed = (field: ScopeField): readonly string[] => {
+        if (field === 'categoryId') return f.categoryIds;
+        if (field === 'levelId') return facetsOf({ ...next, subjectId: '', surahId: '', groupId: '' }, f, o).levelId;
+        if (field === 'subjectId') return facetsOf({ ...next, surahId: '', groupId: '' }, f, o).subjectId;
+        if (field === 'surahId') return facetsOf({ ...next, groupId: '' }, f, o).surahId;
+        if (field === 'groupId') return facetsOf(next, f, o).groupId;
+        return optionsRef.current[field].map((x) => x.value);
+      };
       const drop = (field: ScopeField, blocked: boolean): void => {
         if (blocked) return;
-        const chosen = current[field];
+        const chosen = next[field];
         if (chosen === '') return;
         // R195 — a sentinel the caller declared is a legal value, not a stale id.
         if (sentinelsRef.current[field]?.includes(chosen)) return;
-        if (!optionsRef.current[field].some((o) => o.value === chosen)) {
+        if (!allowed(field).includes(chosen)) {
           next[field] = '';
           changed = true;
         }
       };
       drop('categoryId', false);
       drop('levelId', false);
-      // A child whose list is mid-flight is left alone: it will be re-checked
-      // when the request lands, and clearing on the way there would blank a
-      // valid choice every time its parent is merely re-selected.
-      drop('subjectId', loadingSubjects || value.levelId === '');
+      drop('subjectId', !wants('subjectId'));
+      drop('surahId', !wants('surahId'));
       drop('branchId', false);
       drop('academicYearId', false);
-      drop('groupId', loadingGroups || value.levelId === '' || value.branchId === '');
+      // A list still arriving is left alone: clearing on the way there would
+      // blank a valid seeded group every time.
+      drop('groupId', loadingGroups || !wants('groupId'));
       return changed ? next : current;
     });
-  }, [options, ready, loadingSubjects, loadingGroups, value.levelId, value.branchId]);
+  }, [options, ready, loadingGroups, wants]);
 
   /**
-   * Read inside `set`, which must stay referentially stable — a `useCallback`
-   * that depended on the flag would change identity and re-run every effect
-   * keyed on it, which is the bug this hook's own docstring records for `fields`.
+   * **One field changed: the others follow** (R198 §3, `reconcile`). A Level
+   * sets its Category, a Group its Level and Branch, clearing the Category
+   * retracts its Level, and whatever the new combination no longer offers is
+   * cleared at the source, so no frame shows a stale pair. Reads the facts
+   * through a ref, so `set` stays referentially stable — a `useCallback`
+   * keyed on them would re-run every effect that depends on it.
    */
-  const unscopedSubjectsRef = useRef(subjectsUnscoped || subjectsTaughtAnywhere);
-  unscopedSubjectsRef.current = subjectsUnscoped || subjectsTaughtAnywhere;
-
   const set = useCallback((field: ScopeField, next: string) => {
     setValue((current) => {
       if (current[field] === next) return current;
-      const updated = { ...current, [field]: next };
-      // **Rule 1, applied at the source.** Clearing descendants here rather than
-      // waiting for the reconciliation above means the screen never renders a
-      // moment where the old child still looks chosen under a new parent.
-      if (field === 'categoryId') {
-        updated.levelId = '';
-        updated.subjectId = '';
-        updated.groupId = '';
-      }
-      if (field === 'levelId') {
-        /**
-         * **Clearing the Level keeps the Subject when Subjects are unscoped**
-         * (Owner, 2026-08-17).
-         *
-         * Moving to *another* Level still clears it — that Level may not teach
-         * it, and a stale id is what reaches the server as an impossible pair.
-         * But **clearing** the Level in a filter is the reader *widening* their
-         * question, not retracting their Subject: they asked for تفسير and then
-         * removed the Level constraint, and discarding تفسير would throw away
-         * the half they did not touch.
-         *
-         * In a form (`subjectsUnscoped: false`) it clears either way, because
-         * with no Level there is no valid Subject to hold.
-         */
-        const wideningAFilter = next === '' && unscopedSubjectsRef.current;
-        if (!wideningAFilter) updated.subjectId = '';
-        updated.groupId = '';
-      }
-      if (field === 'branchId') {
-        updated.groupId = '';
-      }
-      return updated;
+      if (field === 'academicYearId') return { ...current, academicYearId: next };
+      const { facts: f, facetOptions: o } = factsRef.current;
+      const { academicYearId, ...rest } = current;
+      const updated = reconcile(rest, field, next, f, o);
+      return { ...updated, academicYearId };
     });
   }, []);
 
   const setMany = useCallback((patch: Partial<ScopeValue>) => {
     setValue((current) => ({ ...current, ...patch }));
   }, []);
+
+  // What the chosen Level (or whole Category) teaches at all — whatever the
+  // Surah: «this Level teaches nothing» is about the curriculum, not a filter.
+  const taughtAtChosen =
+    value.levelId === ''
+      ? null
+      : facetsOf({ ...value, subjectId: '', surahId: '', groupId: '' }, facts, facetOptions).subjectId.length;
 
   return {
     value,
@@ -655,14 +621,15 @@ export function useScopeOptions({
     loading: {
       categoryId: !ready,
       levelId: !ready,
-      subjectId: loadingSubjects,
+      subjectId: !ready,
       branchId: !ready,
       academicYearId: !ready,
       groupId: loadingGroups,
+      surahId: !ready,
     },
     ready,
     levelTeachesNothing:
-      wants('subjectId') && value.levelId !== '' && !loadingSubjects && subjects.length === 0,
+      wants('subjectId') && ready && wholeCategoryOf(value.levelId) === null && value.levelId !== '' && taughtAtChosen === 0,
     levelCategoryIds: Object.fromEntries(levels.map((l) => [l.id, l.category_id])),
     levelNames: Object.fromEntries(levels.map((l) => [l.id, l.name])),
     /**
@@ -678,12 +645,10 @@ export function useScopeOptions({
     wholeCategoryOptions: options.levelId.filter((o) => wholeCategoryOf(o.value) !== null),
     /** True while «كل مستويات الفئة» is chosen and that Category is taught no Subject whole. */
     wholeCategoryTeachesNothing:
-      wants('subjectId') &&
-      wholeCategoryOf(value.levelId) !== null &&
-      !loadingSubjects &&
-      subjects.length === 0,
-    /** True while the Subject control may be used with no Level in play. */
-    subjectsIndependentOfLevel: subjectsUnscoped || subjectsTaughtAnywhere,
+      wants('subjectId') && ready && wholeCategoryOf(value.levelId) !== null && taughtAtChosen === 0,
+    /** Always true since R198 §3: a Subject may be chosen first, and narrows
+     *  the Levels in turn. Kept for the callers that read it. */
+    subjectsIndependentOfLevel: true,
     teacherHonorific,
     ...surahFacts,
     /**

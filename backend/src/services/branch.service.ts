@@ -127,6 +127,14 @@ export const BRANCH_SORT_FIELDS: SortableFields = {
   // branch list for. Nulls last either way: a branch with no recorded start is
   // not "earliest".
   operational_start_date: (dir) => [{ operationalStartDate: { sort: dir, nulls: 'last' } }],
+  // R198 §6 — every column the table shows sorts; an absent value is not
+  // "smallest", so it sits last either way.
+  address: (dir) => [{ address: { sort: dir, nulls: 'last' } }],
+  phone: (dir) => [{ phone: { sort: dir, nulls: 'last' } }],
+  phone_secondary: (dir) => [{ phoneSecondary: { sort: dir, nulls: 'last' } }],
+  email: (dir) => [{ email: { sort: dir, nulls: 'last' } }],
+  opening_hours: (dir) => [{ openingHoursAr: { sort: dir, nulls: 'last' } }],
+  maps_url: (dir) => [{ googleMapsUrl: { sort: dir, nulls: 'last' } }],
 };
 
 /** BR-19's order — what an unparameterised list still receives (R76.2). */

@@ -9,7 +9,7 @@ import {
 } from '../../adapters/trash.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
+import { DataTable, type Column, type RowAction, type SortState, type TableStatus } from '../../components/ui/data-table.js';
 import { DateField, SearchInput, SelectField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
@@ -141,6 +141,8 @@ export function TrashPage(): ReactNode {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [query, setQuery] = useState('');
+  /** R198 §6 — server-side: this list is paginated, so the DATABASE orders it. */
+  const [sort, setSort] = useState<SortState | null>(null);
   // (The «actionable / retained» lens of 2026-09-02 is withdrawn by R191:
   // every row is both restorable and purgeable, so there is one side.)
   const [restoring, setRestoring] = useState<TrashEntry | null>(null);
@@ -158,6 +160,7 @@ export function TrashPage(): ReactNode {
           ...(from ? { from } : {}),
           ...(to ? { to } : {}),
           ...(query.trim() ? { q: query.trim() } : {}),
+          ...(sort ? { sort_by: sort.by, sort_dir: sort.dir } : {}),
         },
         page,
       );
@@ -167,7 +170,7 @@ export function TrashPage(): ReactNode {
     } catch {
       setStatus('error');
     }
-  }, [accessToken, entity, from, to, query, page]);
+  }, [accessToken, entity, from, to, query, page, sort]);
 
   useEffect(() => {
     void load();
@@ -189,6 +192,7 @@ export function TrashPage(): ReactNode {
     },
     {
       key: 'entity',
+      sortKey: 'entity',
       header: t('admin.trash.colEntity'),
       // A type nothing writes any more (R191 — the legacy «Exam.questions»
       // entry) has no word in the catalogue: its raw name, never a raw key.
@@ -199,11 +203,13 @@ export function TrashPage(): ReactNode {
     },
     {
       key: 'deletedAt',
+      sortKey: 'deleted_at',
       header: t('admin.trash.colDeletedAt'),
       cell: (r) => <time dateTime={r.deleted_at}>{formatDate(r.deleted_at)}</time>,
     },
     {
       key: 'deletedBy',
+      sortKey: 'deleted_by',
       header: t('admin.trash.colDeletedBy'),
       secondary: true,
       // `null` where the deletion was the system's rather than a person's.
@@ -211,6 +217,7 @@ export function TrashPage(): ReactNode {
     },
     {
       key: 'purge',
+      sortKey: 'purge_after',
       header: t('admin.trash.colPurge'),
       secondary: true,
       // BR-15's window, shown because it is the deadline for acting.
@@ -408,6 +415,8 @@ export function TrashPage(): ReactNode {
             />
           </>
         }
+        sort={sort}
+        onSort={setSort}
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />
 

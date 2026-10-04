@@ -50,28 +50,31 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 - Exception: cells holding live form controls bound to per-row draft state — grade sheet, Quran log editor, Hijri month editor — allowlisted in the guard; a fourth means build an editable-table primitive. A calendar month grid is a `<table>`, not a list.
 
 ## AF · Ordering a list: sort is a question, drag is a decision
-- Column sort is a temporary view: header is a `<button>`, asc → desc → asc (never back to unsorted), `aria-sort` on the `<th>`, only a `sortKey` column sorts, never actions; the server sorts (`?sort_by=&sort_dir=`).
+- Column sort is a temporary view: header is a `<button>`, asc → desc → asc (never back to unsorted), `aria-sort` on the `<th>`, every column sorts (SRS §14.3b, R198 §6), never actions; a paged list sorts on the server (`?sort_by=&sort_dir=`).
 - Drag is a persisted decision: «الترتيب» is no longer a typed number; the grip is a `<button>` with ↑/↓ (native drag is mouse-only); the client sends the sequence, the server assigns `display_order`; the optimistic order holds until the returned rows agree.
-- `DataTable` derives the blocks itself and a blocked handle is disabled and explained, never hidden: `sorted` (visible order is not the business one) · `paged` (the server takes the exact live set) · `scope` (`Level` and `AdministrativeGroup` order within a parent, §2.2).
+- `DataTable` derives the blocks itself and a blocked handle is disabled and explained, never hidden: `sorted` (visible order is not the business one; the status line offers «العودة إلى الترتيب المحفوظ») · `paged` (the server takes the exact live set) · `scope` (`Level` and `AdministrativeGroup` order within a parent, §2.2).
 
 ### Which tables sort, and which deliberately do not
 - Server-side wherever the list is paged (R76.1): a sortable column is an endpoint contract (`sortKey`).
-- Local, exact, wherever the table holds the whole collection (R177 §6): an unpaged `DataTable` sorts the rows on screen by any column backed by a row field (or a `sortValue`), Arabic collation, empties last, stable. Never on a paged table, and **never on a drag-to-reorder table** — its order is the point, so those show no header sorting at all.
+- Local, exact, wherever the table holds the whole collection (R177 §6, R198 §6): an unpaged `DataTable` — or a paged one whose page holds the whole list — sorts the rows on screen by any column: its `sortValue`, else a primitive row field under its key, else the text its cell shows (`textOf`; a `<time>` by `dateTime`); Arabic collation, empties last, stable. Drag-to-reorder tables sort too; dragging waits for the saved order.
+- Server-only gaps (a set or a derived value): users' e-mail/roles/branches, approvals' type/bundle/branch/requested/framing, Trash's record label and purgeable/restorable — sortable once one page holds the whole list (`docs/TASKS.md` E10).
 
 | Sorts | Fields |
 |---|---|
-| الفروع · الفئات · المواد · المستويات · المجموعات الإدارية | R76's original five |
-| حلقات المواد | `name` · `level` · `subject` (R78) |
-| المستخدمون | `name` · `created_at` |
+| الفروع · الفئات · المواد · المستويات · المجموعات الإدارية | R76's original five; الفروع adds `address` · `phone` · `phone_secondary` · `email` · `opening_hours` · `maps_url`, المجموعات `level` · `branch` · `members` (R198 §6) |
+| حلقات المواد | `name` · `level` · `subject` (R78) · `branch` · `members` (R198 §6) |
+| المستخدمون | `name` · `created_at` · `nickname` · `reference_code` · `phone` · `status` (declared enum order, R198 §6) |
+| سلة المحذوفات (R198 §6) | `entity` · `deleted_at` · `deleted_by` · `purge_after` |
+| بناء الاختبارات (R198 §6) | `title` · `status` · `mode` · `level` · `subject` · `date` · `questions` · `submissions` · `scale` |
 | المستفيدات | `student` · `level` · `branch` |
 | المؤطِّرات (§6) | `name` |
 | طلبات الانضمام (§6) | `applicants` · `submitted` |
 | الجدولة (§6) | `type` · `title` · `when` · `branch` — client-side |
-| مكتبة المحتوى (§6) | `title` · `branch` · `size` · `published` |
+| مكتبة المحتوى (§6) | `title` · `branch` · `size` · `published` · `kind` (MIME) · `visibility` (openness) — R198 §6 |
 | نقاط الامتحانات (§6) | `title` · `date` · `level` · `subject` — the exam list |
 | إدخال الحفظ (§6) | `name` — the roster, client-side |
 
-- Not sortable: draft-bearing editors under active edit (grade sheet, Quran log editor, Hijri month editor) — §6 (Owner, 2026-08-26) narrowed the exclusion to those; `نقاط الامتحانات` and `إدخال الحفظ` sort their selection table, not the editor; Level surahs/subjects and a student's own grades/progress keep the domain's order; `account_status` on المستخدمون is not sortable (alphabetical order means nothing; the filter answers it).
+- Not sortable: draft-bearing editors under active edit (grade sheet, Quran log editor, Hijri month editor) — §6 (Owner, 2026-08-26) narrowed the exclusion to those; `نقاط الامتحانات` and `إدخال الحفظ` sort their selection table, not the editor; Level surahs/subjects and a student's own grades/progress keep the domain's order; an enum sorts by its meaning (status by declared order, visibility by openness), never by its label's alphabet.
 - Dataset decides server vs client: paginated collections use `lib/sorting.ts` (allow-list; order ends in `id`); only `الجدولة` (three sources merged in `adapters/scheduling.ts`) and the whole `إدخال الحفظ` roster use `lib/sort-rows.ts` (typed accessors, `Intl.Collator('ar')` matching `ar-x-icu`, absent last both ways, stable); never reorder one page of a paginated collection.
 - SRS R76 · `components/ui/reorderable.ts` (pure functions) · [API contracts](../architecture/api.md#manual-ordering-takes-the-sequence-not-per-row-numbers).
 
@@ -160,22 +163,22 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 ## AD · A picker with an action is a picker, then an action
 - `SearchableSelect` (or the field), then the action in `form__actions`; never a `.form__row` holding a field and a bare button (that grid is for two fields and top-aligns).
 
-## AE · A dependency between selectors belongs to forms, not to filters
-- `subjectId → levelId` exists so a form cannot offer a pair the server refuses (`SUBJECT_NOT_AT_LEVEL`, §4.4b); a filter has none (`GET /library` and the scheduling list take both as independent optionals); clearing the Level in a filter keeps the Subject, moving to another Level clears it.
-- The mechanism is `mode` (default `form`, the strict direction), not a per-caller flag (a `subjectsUnscoped` boolean left `الجدولة` wrong, 2026-08-18); `useScopeOptions({ mode })` and `ScopeSelectors`' `mode` must agree ([`use-scope-options.test.ts`](../../frontend/src/hooks/use-scope-options.test.ts)).
+## AE · Every selector narrows the others; none waits for another (SRS §14.3b, R198 §3)
+- Category ↔ Level ↔ Subject ↔ Surah ↔ Group narrow each other whichever is chosen first; a list never narrows itself; the Category list ignores the Level (choosing another Category changes it). Offered values are always a pair the server accepts (`SUBJECT_NOT_AT_LEVEL`, §4.4b, cannot be reached).
+- `mode` differs in one thing: with nothing else chosen a filter offers every Subject, a form every Subject some Level teaches. `useScopeOptions({ mode })` and `ScopeSelectors`' `mode` must agree ([`use-scope-options.test.ts`](../../frontend/src/hooks/use-scope-options.test.ts)).
 
 ### The dependent-selector contract
 `useScopeOptions` answers these once; no page re-derives them.
 
 | Event | Behaviour |
 |---|---|
-| Parent selected | children reload from the parent's own read |
-| Parent changed | children clear eagerly, in `set` |
-| Parent cleared | children clear — except a filter's Subject |
-| Child no longer offered | cleared by reconciliation |
+| Any field chosen | every other list narrows to what fits (`facetsOf`, [`scope-facets.ts`](../../frontend/src/hooks/scope-facets.ts)) |
+| Level / Group chosen | sets its Category (and a Group its Level and Branch) |
+| Category cleared | its Level clears |
+| A value no longer fits | cleared at once in `set` (`reconcile`), and by reconciliation when data arrives (checked down the hierarchy, never a parent against its child) |
 | Loading | the field is `busy` — disabled and announced |
-| Empty | its own sentence (*this Level teaches no subjects*) |
-| Unmet dependency | names the missing parent, in a form only |
+| Empty | «لا … تطابق الاختيارات», or *this Level teaches no subjects* naming the screen that fixes it |
+| Required | marked `*` (`ScopeSelectors` `required`); no «choose X first» |
 
 ## T · The page header is one block
 - Title, description and action are one two-column grid: heading takes the free space (description up to `--measure-lede`, `min-inline-size: 0`), action as wide as its buttons with `align-self: start`; never a flex row (`flex-wrap: wrap` drops the action under the heading); below 44rem one column.
@@ -370,8 +373,8 @@ Owner decision (2026-08-25), both halves binding: no Add/Edit form may silently 
 
 ## AX · A create/edit form contains every field that decides what is saved
 Owner decision (2026-08-25): every field that materially determines the object is visible inside the form; pre-filling from page filters or context is allowed.
-- Pre-fill, do not depend; changing a field changes the target; fixed by permission or context → disabled, never hidden (Replacement, R53); withholding a value is not hiding a field (Global / بدون فرع only for permitted callers, §4.9); the form runs its own `useScopeOptions` in `mode: 'form'` and re-proposes the Category's visibility default on Level change.
-- The Content Upload dialog was the violation (its filter bar doubled as write scope); `ContentUploadForm` and `ContentRecorderForm` (closed 2026-08-27, §10) carry Level, Subject, Year, Branch and Visibility through the shared `useContentScope`; `session-materials-dialog` is borderline and the Owner's call (its scope is the Session's, a prop); every other screen submitting `level_id`/`subject_id`/`branch_id`/`academic_year_id` renders the control.
+- Pre-fill, do not depend; changing a field changes the target; fixed by permission or context → disabled, never hidden (Replacement, R53); withholding a value is not hiding a field; the branches are a multi-select where none is Global (R198 §2) and a مؤطِّرة must name one (`*`); the form runs its own `useScopeOptions` in `mode: 'form'` and re-proposes the Category's visibility default on Level change.
+- The Content Upload dialog was the violation (its filter bar doubled as write scope); `ContentUploadForm` and `ContentRecorderForm` (closed 2026-08-27, §10) carry Category, Level, Subject, Surah, Year, Branches and Visibility through the shared `useContentScope`; several files per upload, each with its own «هذا تسجيل حصة», title and description (R198 §1); `session-materials-dialog` is borderline and the Owner's call (its scope is the Session's, a prop); every other screen submitting `level_id`/`subject_id`/`branch_id`/`academic_year_id` renders the control.
 - A flag kept after its mechanism was removed guards nothing (`loadingSubjects = false` let a seeded Subject be cleared): the Subject list is derived during render, never in an effect; a form left mounted behind a closed dialog is a defect (both content dialogs mount only while open). Guarded by `scripts/dev/browser/verify-content-visibility.sh` (selectors present, seeded, editable on create, disabled on replacement, `/uploads/initiate` payload matches).
 
 ## AK · UI text is not prose, and does not take the prose measure

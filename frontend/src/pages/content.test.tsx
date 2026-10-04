@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { FileUploader, uploadErrorMessage } from '../components/content/file-uploader.js';
 import { t } from '../i18n/index.js';
+import { ar } from '../i18n/ar.js';
 import { ApiError } from '../lib/api.js';
 import { ADMIN_MODULES } from '../lib/admin-modules.js';
 import { TEACHER_MODULES } from '../lib/teacher-modules.js';
@@ -103,11 +104,26 @@ describe('the uploader before anything is chosen', () => {
     expect(html).not.toContain('<progress');
   });
 
-  it('states an incomplete scope instead of leaving the button to fail', () => {
+  it('states a curriculum problem instead of leaving the button to fail', () => {
     const html = renderToStaticMarkup(
-      <FileUploader {...props} disabledReason={t('content.upload.chooseScope')} />,
+      <FileUploader {...props} disabledReason={t('scope.assignSubjectsHint')} />,
     );
-    expect(html).toContain(t('content.upload.chooseScope'));
+    expect(html).toContain(t('scope.assignSubjectsHint'));
+  });
+
+  it('R198 §1 — picks several files, each with its own recording flag, title and description', () => {
+    const html = renderToStaticMarkup(<FileUploader {...props} />);
+    expect(html).toContain('multiple=""');
+    expect(html).toContain(t('content.upload.isRecording'));
+    expect(html).toContain(t('content.upload.description'));
+    // R53's replacement swaps ONE file.
+    expect(renderToStaticMarkup(<FileUploader {...props} single />)).not.toContain('multiple=""');
+  });
+
+  it('R198 §3 — says nothing about a missing choice: the fields carry their *', () => {
+    expect(JSON.stringify(ar.content.upload)).toContain('العنوان');
+    expect(JSON.stringify(ar.content.upload)).not.toContain('قبل الرفع');
+    expect(JSON.stringify(ar.scope)).not.toContain('أولًا');
   });
 
   /**

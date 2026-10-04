@@ -84,11 +84,19 @@ export function CalendarFilters({
         // The Categories travel through purely to complete the Level label —
         // `{Category} — {Level}`, the platform's one format (rule D).
         <LevelSelector
-          levels={levels ?? []}
+          // R198 §3 — the Category narrows the Levels, and a Level chosen
+          // sets its Category: the two never disagree on screen.
+          levels={(levels ?? []).filter(
+            (l) => value('categoryId') === null || l.category_id === '' || l.category_id === value('categoryId'),
+          )}
           categories={categories ?? []}
           value={value('levelId')}
           busy={levelsBusy}
-          onChange={(id) => filters.set('levelId', id)}
+          onChange={(id) => {
+            const category = id === null ? undefined : (levels ?? []).find((l) => l.id === id)?.category_id;
+            if (has('categoryId') && category && value('categoryId') !== category) filters.set('categoryId', category);
+            filters.set('levelId', id);
+          }}
         />
       ) : null}
 

@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import type { Actor } from '../policies/actor.js';
 import { TEACHER_HONORIFIC } from '../lib/item-title.js';
+import { ADMIN_ORDER, LEVEL_ADMIN_ORDER } from '../lib/sorting.js';
 import {
   DEFAULT_VISIBILITY_PREFIX,
   readDefaultVisibility,
@@ -160,7 +161,7 @@ export async function readScopeOptions(
           select: { subjectId: true },
         },
       },
-      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+      orderBy: [...ADMIN_ORDER],
     }),
     prisma.level.findMany({
       where: { deletedAt: null },
@@ -180,12 +181,12 @@ export async function readScopeOptions(
           orderBy: { surahId: 'asc' },
         },
       },
-      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+      orderBy: [...LEVEL_ADMIN_ORDER],
     }),
     prisma.subject.findMany({
       where: { deletedAt: null },
       select: { id: true, name: true, requiresSurahs: true },
-      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+      orderBy: [...ADMIN_ORDER],
     }),
     prisma.academicYear.findMany({
       where: { deletedAt: null },
@@ -199,7 +200,7 @@ export async function readScopeOptions(
         ...(reachable === null ? {} : { id: { in: reachable } }),
       },
       select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+      orderBy: [...ADMIN_ORDER],
     }),
   ]);
 
@@ -335,7 +336,7 @@ export async function readCourseScheduleOptions(
           select: { subjectId: true },
         },
       },
-      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+      orderBy: [...ADMIN_ORDER],
     }),
     prisma.branch.findMany({
       where: {
@@ -344,7 +345,7 @@ export async function readCourseScheduleOptions(
         ...(branchIds === null ? {} : { id: { in: branchIds } }),
       },
       select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+      orderBy: [...ADMIN_ORDER],
     }),
     prisma.level.findMany({
       where: {
@@ -378,7 +379,7 @@ export async function readCourseScheduleOptions(
           orderBy: { surahId: 'asc' },
         },
       },
-      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+      orderBy: [...LEVEL_ADMIN_ORDER],
     }),
     prisma.academicYear.findMany({
       where: { deletedAt: null },
@@ -425,7 +426,7 @@ export async function readCourseScheduleOptions(
   const subjects = await prisma.subject.findMany({
     where: { deletedAt: null, id: { in: [...referencedSubjectIds] } },
     select: { id: true, name: true, requiresSurahs: true },
-    orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+    orderBy: [...ADMIN_ORDER],
   });
 
   return {

@@ -20,7 +20,8 @@ const title = z.string().trim().min(1).max(120);
 const description = z.string().trim().max(2000).nullable().optional();
 
 /**
- * `branch_id` is **required and explicitly nullable**, never merely optional.
+ * `branch_id` (or, since R198 §2, `branch_ids`) is **required**: one of the two
+ * must be named, and `null` / `[]` is stated, never defaulted.
  * `null` is the Global scope (§4.9) — a real, authorization-relevant value that
  * only an Admin may choose — and an *absent* key would make "Global" the silent
  * default for a Teacher who simply forgot the field.
@@ -47,7 +48,18 @@ export const initiateUploadSchema = z
          *  skipped. */
         subject_id: uuid.nullable(),
         academic_year_id: uuid,
-        branch_id: uuid.nullable(),
+        branch_id: uuid.nullable().optional(),
+        /**
+         * **R198 §2 — the branches the item is filed for**; `[]` is Global
+         * (§4.9), as `branch_id: null` is. The first is its home branch. Name
+         * exactly one of `branch_id` and `branch_ids`, so Global is still a
+         * choice stated, never a key forgotten.
+         */
+        branch_ids: z
+          .array(uuid)
+          .max(40)
+          .refine((ids) => new Set(ids).size === ids.length, 'a branch may be named once')
+          .optional(),
         visibility: z.enum(['public', 'private', 'hidden']).optional(),
         /**
          * **R99.12 — the upload boundary must be able to say *this is a class
@@ -74,6 +86,10 @@ export const initiateUploadSchema = z
       .refine((meta) => (meta.level_id === undefined) !== (meta.category_id === undefined), {
         message: 'name exactly one of level_id and category_id',
         path: ['level_id'],
+      })
+      .refine((meta) => (meta.branch_id === undefined) !== (meta.branch_ids === undefined), {
+        message: 'name exactly one of branch_id and branch_ids',
+        path: ['branch_ids'],
       }),
   })
   .strict();

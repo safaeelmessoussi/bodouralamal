@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ConfirmDialog } from './confirm-dialog.js';
-import { DataTable, orderActions, sortLocallyForTest, type Column, type SortState } from './data-table.js';
+import { DataTable, orderActions, sortLocallyForTest, textOf, type Column, type SortState } from './data-table.js';
 import { t } from '../../i18n/index.js';
 import { SearchInput, TextArea, TextField } from './field.js';
 
@@ -321,6 +321,9 @@ describe('sortable column headers (R76.8)', () => {
         status="ready"
         sort={sort}
         {...(onSort ? { onSort } : {})}
+        // Paged: the server sorts, so only a `sortKey` column offers a header
+        // (an unpaged table sorts every column on screen, R198 §6, below).
+        pagination={{ page: 1, pageSize: 25, total: 50, onPage: () => undefined }}
       />,
     );
 
@@ -518,9 +521,10 @@ describe('manual ordering — the drag gesture and its states (R76.8)', () => {
 });
 
 /**
- * R177 §6 (Owner, 2026-09-29) — every table sorts by its headers, except a
- * drag-to-reorder one. A table holding the whole collection sorts exactly on
- * the rows on screen; a paged one still sorts through the server (`sortKey`).
+ * R177 §6 (Owner, 2026-09-29), widened by R198 §6 (2026-10-04) — every table
+ * sorts by every header, a drag-to-reorder one included. A table holding the
+ * whole collection sorts exactly on the rows on screen (a computed cell by
+ * the text it shows); a paged one still sorts through the server (`sortKey`).
  */
 describe('local sorting of an unpaged table (R177 §6)', () => {
   interface Person {
@@ -543,19 +547,30 @@ describe('local sorting of an unpaged table (R177 §6)', () => {
       <DataTable caption="ج" columns={columns} rows={people} rowKey={(r) => r.id} status="ready" {...extra} />,
     );
 
-  it('offers a header button for every column backed by a row field, and none for a computed cell', () => {
+  it('offers a header button for every column — a computed cell sorts by its text (R198 §6)', () => {
     const html = render();
-    expect(html.match(/datatable__sort"/g)?.length).toBe(2);
+    expect(html.match(/datatable__sort"/g)?.length).toBe(3);
   });
 
-  it('offers no header sorting at all on a drag-to-reorder table', () => {
+  it('sorts a drag-to-reorder table by its headers too (R198 §6)', () => {
     const html = render({ onReorder: async () => undefined });
-    expect(html).not.toContain('datatable__sort"');
+    expect(html.match(/datatable__sort"/g)?.length).toBe(3);
+  });
+
+  it('reads a cell’s text, and a <time> by its dateTime', () => {
+    expect(textOf(<span>أ<b>ب</b>{3}</span>)).toBe('أب3');
+    expect(textOf(<time dateTime="2026-10-04">4 أكتوبر</time>)).toBe('2026-10-04');
+    expect(textOf(null)).toBe('');
   });
 
   it('offers none on a paged table either — the server sorts those (sortKey)', () => {
     const html = render({ pagination: { page: 1, pageSize: 20, total: 40, onPage: () => undefined } });
     expect(html).not.toContain('datatable__sort"');
+  });
+
+  it('sorts a paged table locally when its one page holds the whole collection (R198 §6)', () => {
+    const html = render({ pagination: { page: 1, pageSize: 25, total: 3, onPage: () => undefined } });
+    expect(html.match(/datatable__sort"/g)?.length).toBe(3);
   });
 
   it('sorts the rows on screen in Arabic order, empties last, and the actions stay put', () => {

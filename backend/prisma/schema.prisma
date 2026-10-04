@@ -1064,6 +1064,8 @@ model Branch {
   courseSchedules      RecurringCourseSchedule[]
   branchRoles          UserBranchRole[]
   content              EducationalContent[]
+  /// R198 §2 — content filed for this branch besides its home one.
+  additionalContent    EducationalContentBranch[] @relation("ContentAdditionalBranches")
   eventScopes          EventBranch[]
   /// Revision 155 (expand phase) — a `multi_dimension` schedule's own
   /// audience joins, mirroring `eventScopes` above.
@@ -3840,6 +3842,9 @@ model EducationalContent {
   /// Admins; Teachers are locked to their own branch scope (BR-20, §4.9).
   branchId String? @map("branch_id") @db.Uuid
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  /// R198 §2 — the item's OTHER branches; `branchId` stays its home (NULL =
+  /// Global, which holds none — a trigger refuses both, in hand-written SQL).
+  additionalBranches EducationalContentBranch[]
 
   /// Required at the upload boundary (Revision 43): content belongs to a
   /// Subject as well as a Level. `NULL` since R195 — «عام», TD-5's «General»
@@ -3913,6 +3918,22 @@ model EducationalContentLevel {
   @@id([contentId, levelId])
   @@index([levelId])
   @@map("educational_content_level")
+}
+
+/// **An item's OTHER branches** (SRS Revision 198 §2), the twin of
+/// `EducationalContentLevel`. `EducationalContent.branchId` stays the HOME
+/// branch; a Global item (NULL) holds none. Additive: an item with none
+/// behaves as before.
+model EducationalContentBranch {
+  contentId String             @map("content_id") @db.Uuid
+  content   EducationalContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  branchId  String             @map("branch_id") @db.Uuid
+  branch    Branch             @relation("ContentAdditionalBranches", fields: [branchId], references: [id], onDelete: Restrict)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([contentId, branchId])
+  @@index([branchId])
+  @@map("educational_content_branch")
 }
 
 // ---------------------------------------------------------------------------

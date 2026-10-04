@@ -154,8 +154,9 @@ export interface LibraryEntry {
 }
 
 /**
- * Every visible row, one entry per shelf it belongs to (an item filed for
- * several Levels appears under each — R169 §10). The page groups and filters
+ * Every visible row, one entry per shelf and branch it belongs to (an item
+ * filed for several Levels appears under each — R169 §10; for several
+ * branches, under each — R198 §2). The page groups and filters
  * these itself: the rows are already all fetched for the index, so a second
  * request per Level bought nothing.
  */
@@ -181,7 +182,12 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
           { key: row.level_id, kind: 'level' as const, id: row.level_id, name: row.level_name },
           ...(row.additional_levels ?? []).map((l) => ({ key: l.id, kind: 'level' as const, id: l.id, name: l.name })),
         ];
-    for (const shelf of shelves) {
+    // R198 §2 — and under each branch it is filed for (home first).
+    const branchesOf = [
+      { id: row.branch_id, name: row.branch_name },
+      ...(row.branch_id === null ? [] : (row.additional_branches ?? [])),
+    ];
+    for (const shelf of shelves) for (const branch of branchesOf) {
       entries.push({
         item,
         category_id: row.category_id,
@@ -192,8 +198,8 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
         level_name: shelf.name,
         academic_year_id: row.academic_year_id,
         academic_year_label: row.academic_year_label,
-        branch_id: row.branch_id,
-        branch_name: row.branch_name,
+        branch_id: branch.id,
+        branch_name: branch.name,
         subject_id: row.subject_id,
         subject_name: row.subject_name,
         surah_id: row.surah_id ?? null,
@@ -337,6 +343,8 @@ interface LibraryItemWire {
   /** R169 §10 — the item's OTHER Levels (`level_id` is its home), in the
    *  Levels' own order. `[]` for an item that belongs to one Level. */
   additional_levels?: { id: string; name: string }[];
+  /** R198 §2 — the item's OTHER branches; `branch_id` is its home. */
+  additional_branches?: { id: string; name: string }[];
   /** R195 — `null` is «عام». */
   subject_id: string | null;
   academic_year_id: string;

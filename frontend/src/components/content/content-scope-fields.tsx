@@ -4,7 +4,8 @@ import { ScopeSelectors } from '../scope/scope-selectors.js';
 import { useScopeOptions, wholeCategoryOf, type ScopeField, type ScopeValue } from '../../hooks/use-scope-options.js';
 import { Feedback } from '../ui/feedback.js';
 import { SelectField } from '../ui/field.js';
-import { subjectWorksBySurah, surahChoices } from '../scheduling/surahs.js';
+import { subjectWorksBySurah } from '../scheduling/surahs.js';
+import { MultiSelectField } from '../ui/multi-select.js';
 import { t } from '../../i18n/index.js';
 import { formatDateWithWeekday } from '../../lib/format-date.js';
 import type { UploadMeta } from '../../adapters/uploads.js';
@@ -34,12 +35,17 @@ export const SCOPE_FIELDS: readonly ScopeField[] = [
   'categoryId',
   'levelId',
   'subjectId',
+  // R198 §3 — the Surah lists every Surah of the syllabi and narrows the
+  // Levels and Subjects; they narrow it.
+  'surahId',
   'academicYearId',
-  'branchId',
 ];
 
-/** `branch_id = null` — a real scope (§4.9), and the one value a branch list can
- *  never contain. `''` already means *not chosen*, so the two cannot share it. */
+/** What the hook loads: the rendered fields, and the Branches the multi-select reads. */
+const HOOK_FIELDS: readonly ScopeField[] = [...SCOPE_FIELDS, 'branchId'];
+
+/** `branch_id = null` — Global (§4.9). Kept for the library's FILTER, where
+ *  «بدون فرع» narrows to Global items; a form no longer offers it (R198 §2). */
 export const GLOBAL = '__global__';
 
 export interface ContentScope {
@@ -53,8 +59,10 @@ export interface ContentScope {
    * Shown in the title field, editable, and followed until the person types.
    */
   suggestedTitle: string;
-  /** Why it cannot proceed yet, in the person's terms — or `null`. */
+  /** A curriculum state that must be fixed first, in the person's terms — or `null`. */
   problem: string | null;
+  /** Every required field (marked *) holds a value. */
+  complete: boolean;
 }
 
 export function useContentScope({
@@ -67,7 +75,7 @@ export function useContentScope({
   token: string | null;
   mayAssignGlobal: boolean;
   /** Seed values, normally the page's current filters. Read **once**, at mount. */
-  initial: Partial<ScopeValue> & { surahId?: number | null };
+  initial: Partial<ScopeValue>;
   /**
    * Replacement (R53) keeps the record and swaps only the object, so its scope
    * and visibility are the row's. Still **rendered — disabled rather than
@@ -79,9 +87,10 @@ export function useContentScope({
 }): ContentScope {
   const scope = useScopeOptions({
     token,
-    fields: SCOPE_FIELDS,
-    // Seeded from the page's filters, then owned by this form.
-    initial,
+    fields: HOOK_FIELDS,
+    // Seeded from the page's filters, then owned by this form. The Branch is
+    // the multi-select's below, never the hook's.
+    initial: { ...initial, branchId: '' },
     // R172 §1 — «كل مستويات الفئة» in the Level list, unless the scope is
     // locked (a replacement keeps the record's own Level).
     offerWholeCategory: !locked,
@@ -91,14 +100,28 @@ export function useContentScope({
     mode: 'form',
   });
 
-  const { levelId, subjectId, academicYearId, branchId } = scope.value;
+  const { levelId, subjectId, academicYearId, surahId } = scope.value;
   const [visibility, setVisibility] = useState<string | null>(lockedVisibility ?? null);
-  // R177 §7 — the one Surah the item is about. Offered only while the Subject
-  // works by Surah, from the syllabus of the Level(s) the item is filed under;
-  // cleared the moment either changes so nothing inadmissible is submitted.
-  const [surahId, setSurahId] = useState<number | null>(initial.surahId ?? null);
   const [initialisedFor, setInitialisedFor] = useState<string | null>(null);
   const categoryDefault = scope.defaultVisibility;
+
+  /**
+   * **R198 §2 — the branches the item is for; none chosen is Global.** The
+   * «بدون فرع» choice is withdrawn (it never held: the hook cleared a value
+   * its list did not contain). A مؤطِّرة with one branch has it chosen.
+   */
+  const [branchIds, setBranchIds] = useState<string[]>(() =>
+    initial.branchId && initial.branchId !== GLOBAL ? [initial.branchId] : [],
+  );
+  const branchOptions = scope.options.branchId;
+  useEffect(() => {
+    if (locked || mayAssignGlobal || branchOptions.length !== 1) return;
+    const only = (branchOptions[0] as { value: string }).value;
+    setBranchIds((current) => (current.length === 0 ? [only] : current));
+  }, [locked, mayAssignGlobal, branchOptions]);
+  // A branch no longer offered is not kept (rule 2's discipline).
+  const offeredBranches = useMemo(() => new Set(branchOptions.map((o) => o.value)), [branchOptions]);
+  const chosenBranches = scope.ready ? branchIds.filter((id) => offeredBranches.has(id)) : branchIds;
 
   useEffect(() => {
     if (locked) return;
@@ -118,68 +141,56 @@ export function useContentScope({
   // R172 §1 — «كل مستويات الفئة» in the Level slot files the item for the
   // whole Category, with no Level chosen: `category_id` travels instead.
   const wholeOf = wholeCategoryOf(levelId);
-  const asksSurah = subjectId !== '' && subjectWorksBySurah(scope, subjectId);
-  const filedLevelIds = useMemo(
-    () =>
-      wholeOf === null
-        ? levelId === '' ? [] : [levelId]
-        : Object.entries(scope.levelCategoryIds)
-            .filter(([, categoryId]) => categoryId === wholeOf)
-            .map(([id]) => id),
-    [wholeOf, levelId, scope.levelCategoryIds],
-  );
-  const surahOffered = useMemo(
-    () => new Set(surahChoices(scope, filedLevelIds).map((s) => s.id)),
-    [scope.levelSurahIds, scope.surahNames, filedLevelIds],
-  );
-  useEffect(() => {
-    if (locked) return;
-    if (surahId !== null && (!asksSurah || !surahOffered.has(surahId))) setSurahId(null);
-  }, [locked, asksSurah, surahOffered, surahId]);
+  // R177 §7 — the one Surah, admissible only for a Subject taught by Surah.
+  const surahNumber = surahId === '' ? null : Number(surahId);
+  const surahApplies = surahNumber !== null && subjectId !== '' && subjectWorksBySurah(scope, subjectId);
   const meta = useMemo<UploadMeta>(
     () => ({
       ...(wholeOf === null ? { level_id: levelId } : { category_id: wholeOf }),
       subject_id: subjectId,
       academic_year_id: academicYearId,
-      branch_id: branchId === '' || branchId === GLOBAL ? null : branchId,
+      // R198 §2 — the first is the home branch; `[]` is Global.
+      branch_ids: chosenBranches,
       ...(visibility === null || locked
         ? {}
         : { visibility: visibility as 'public' | 'private' | 'hidden' }),
-      ...(surahId !== null && asksSurah ? { surah_id: surahId } : {}),
+      ...(surahApplies && surahNumber !== null ? { surah_id: surahNumber } : {}),
     }),
-    [levelId, wholeOf, subjectId, academicYearId, branchId, visibility, locked, surahId, asksSurah],
+    [levelId, wholeOf, subjectId, academicYearId, chosenBranches, visibility, locked, surahApplies, surahNumber],
   );
 
   const suggestedTitle = useMemo(() => {
     const subject = scope.options.subjectId.find((o) => o.value === subjectId)?.label ?? '';
-    const surah = surahId === null || !asksSurah ? '' : `سورة ${scope.surahNames[surahId] ?? ''}`.trim();
+    const surah = surahApplies && surahNumber !== null ? `سورة ${scope.surahNames[surahNumber] ?? ''}`.trim() : '';
     return [subject, surah, formatDateWithWeekday(new Date().toISOString().slice(0, 10))]
       .filter((part) => part !== '' && part !== 'سورة')
       .join(' — ');
-  }, [scope.options.subjectId, scope.surahNames, subjectId, surahId, asksSurah]);
+  }, [scope.options.subjectId, scope.surahNames, subjectId, surahNumber, surahApplies]);
 
   const problem = scope.wholeCategoryTeachesNothing
     ? t('scope.assignWholeCategorySubjectsHint')
     : scope.levelTeachesNothing
       ? t('scope.assignSubjectsHint')
-      : levelId === '' || subjectId === '' || academicYearId === ''
-        ? t('content.upload.chooseScope')
-        : null;
+      : null;
+  // R198 §3 — what is still missing is said by the fields themselves (*),
+  // never by a sentence above the button.
+  const complete =
+    levelId !== '' && subjectId !== '' && academicYearId !== '' && (mayAssignGlobal || chosenBranches.length > 0);
+
+  // The Surah is offered while it can apply: no Subject yet, or one taught by
+  // Surah. A Subject that is not has no Surah to choose.
+  const showsSurah = subjectId === '' || subjectWorksBySurah(scope, subjectId);
+  const rendered = SCOPE_FIELDS.filter((field) => field !== 'surahId' || (showsSurah && !locked));
 
   const fields = (
     <>
       <ScopeSelectors
         scope={scope}
-        fields={SCOPE_FIELDS}
+        fields={rendered}
         mode="form"
-        {...(locked ? { locked: SCOPE_FIELDS } : {})}
-        // Offered only to those who may assign it (§4.9). The field stays
-        // visible for everyone; only the value is withheld.
-        extraOptions={
-          mayAssignGlobal && !locked
-            ? { branchId: [{ value: GLOBAL, label: t('content.globalScope') }] }
-            : {}
-        }
+        required={['levelId', 'subjectId', 'academicYearId']}
+        {...(locked ? { locked: rendered } : {})}
+        blankLabels={{ surahId: t('content.upload.noSurah') }}
       />
 
       {/* R172 §11 — said HERE, under the selectors, the moment «كل مستويات
@@ -187,19 +198,17 @@ export function useContentScope({
           choosing the scope now, not saving later. */}
       {scope.wholeCategoryTeachesNothing ? <Feedback>{t('scope.assignWholeCategorySubjectsHint')}</Feedback> : null}
 
-      {/* R177 §7 — one Surah, optional, only for a Subject taught by Surah. */}
-      {asksSurah && !locked ? (
-        <SelectField
-          label={t('content.upload.surah')}
-          value={surahId === null ? '' : String(surahId)}
-          onChange={(next: string) => setSurahId(next === '' ? null : Number(next))}
-          hint={t('content.upload.surahHint')}
-          options={[
-            { value: '', label: t('content.upload.noSurah') },
-            ...surahChoices(scope, filedLevelIds).map((s) => ({ value: String(s.id), label: s.name })),
-          ]}
-        />
-      ) : null}
+      {/* R198 §2 — several branches, or none (Global). A مؤطِّرة names at
+          least one: Global is not hers to assign (§4.9). */}
+      <MultiSelectField
+        label={t('scope.branch')}
+        options={branchOptions}
+        selected={chosenBranches}
+        onChange={setBranchIds}
+        emptyLabel={t('content.upload.noBranch')}
+        disabled={locked}
+        required={!mayAssignGlobal}
+      />
 
       <SelectField
         label={t('content.col.visibility')}
@@ -219,5 +228,5 @@ export function useContentScope({
     </>
   );
 
-  return { fields, meta, problem, suggestedTitle };
+  return { fields, meta, problem, suggestedTitle, complete };
 }

@@ -222,19 +222,19 @@ Category ──< Level ──< LevelSubject >── Subject
 ```
 
 - R172 §1: a whole-Category Subject appears under every Level (`levels[].subject_ids`) and beside the Category (`categories[].subject_ids`). `wholeCategoryOptions` lets a Level control offer «{Category} — كل مستويات الفئة» (only where some Subject is taught whole; value `category:<id>` in the Level slot, recovered by `wholeCategoryOf()`; the content scope then sends `category_id` instead of `level_id`). `subjectsIndependentOfLevel` lets `ScopeSelectors` allow a form's Subject with no Level (a filter-built class addressed to «الكل», R169 §7; formerly disabled with «اختاري المستوى أولًا»).
-- Changing a parent reloads every child (a Level change invalidates Subjects and Groups); a selection no longer offered is cleared, not kept.
+- R198 §3 — every list narrows the others (`scope-facets.ts`: `facetsOf` for what each offers, `reconcile` for what one change does to the rest); a Level sets its Category, a Group its Level/Category/Branch; a selection no longer offered is cleared, not kept. `surahId` is a field (the Surahs of the syllabi, Mushaf order); groups are read whole once (pages of 100) and narrowed locally. A screen with its own URL-backed filters (الجدولة) routes the hook's fields through the hook and mirrors its value into the filters.
 - One module for six screens, not one chain each. Academic Year is unchained (years are global, §4.10).
 - The field list is keyed by content (`scopeFieldKey`), not identity: an inline literal once caused a render loop that the rate limiter (TD-13) refused. A hook taking an array/object prop keys on content or documents the memoisation requirement; the test asserts the key is content-based and used.
-- `components/scope/scope-selectors.tsx` words three empties differently: parent not chosen → *choose a level first*; loading → field is `busy`, label does not flicker; genuinely empty → *this level teaches no subjects*, naming the screen that changes it.
-- Global / بدون فرع (`branch_id = null`, §4.9) travels as `extraOptions` from the screens that mean it.
+- `components/scope/scope-selectors.tsx`: no field is gated on another (R198 §3); loading → field is `busy`, label does not flicker; empty → «لا … تطابق الاختيارات» (*this level teaches no subjects* when the Level teaches nothing, naming the screen that changes it); `required` marks `*`, `blankLabels` names an optional empty choice.
+- Global / بدون فرع (`branch_id = null`, §4.9) is a FILTER value on مكتبة المحتوى (`extraOptions` + `sentinels`, so reconciliation keeps it); a form files Global by choosing no branch (R198 §2).
 
 ## Content upload
 
 - `/admin/content` (§5.6) and `/teacher/content` (§5.5) render the same component; the server decides (a Teacher cannot choose Global and is confined to staffed branches, §4.9); the one client exception: Global is not offered to a Teacher. Refusals render as actionable sentences.
 - The R53 replacement primitive stays in the upload contract; the page offers no «استبدال الملف» action.
 - A teacher's branch list derives from staffed schedules (§4.4c; Revision 30 forbids browsing reference data), names from the public branch list.
-- Uploads are single-shot, no resume (Risk R-9, §4.9), with visible progress: `XMLHttpRequest` for the PUT (`fetch` has no upload progress; streamed bodies unsupported across §14.7). Retry re-runs the whole flow — new ticket, key, hash segment.
-- The list is `GET /library` (TD-3.13; staff see `hidden`); branch is the one client-side filter (no `branch_id` parameter).
+- Several files per upload (R198 §1), each its own card (`.uploader__item`: «هذا تسجيل حصة», title proposed from the scope and numbered when several, description) and its own initiate → PUT → complete, one after another; a failed file stays for retry, done ones stay done; `onUploaded(ids)` once all are in (the materials dialog links each). Uploads are single-shot, no resume (Risk R-9, §4.9), with visible progress: `XMLHttpRequest` for the PUT (`fetch` has no upload progress; streamed bodies unsupported across §14.7). Retry re-runs the whole flow — new ticket, key, hash segment.
+- The list is `GET /library` (TD-3.13; staff see `hidden`); branch is the one client-side filter (no `branch_id` parameter), matching the home or an additional branch; the branch column lists them all (R198 §2).
 - Session materials (`/admin/schedules/{id}/sessions`): content is referenced, never owned (Revision 43); link is primary, upload creates then links; remove unlinks, never deletes (TD-3.12).
 
 ## The CRUD framework

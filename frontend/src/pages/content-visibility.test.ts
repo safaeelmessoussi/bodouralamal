@@ -171,7 +171,7 @@ describe('replacement changes the object, never the tier or the scope', () => {
   it('locks every scope field rather than hiding them', () => {
     // The rule is that a determining field is never hidden — «this is fixed» is
     // exactly what a hidden field cannot say.
-    expect(scopeBlock()).toContain('locked: SCOPE_FIELDS');
+    expect(scopeBlock()).toContain('locked: rendered');
     expect(scopeBlock()).toContain('disabled={locked}');
   });
 });

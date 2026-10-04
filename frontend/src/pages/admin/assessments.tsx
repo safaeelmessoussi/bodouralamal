@@ -26,7 +26,7 @@ import { TARGET_LABELS } from '../../components/scheduling/target-picker.js';
 import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { DataTable, type Column, type TableStatus } from '../../components/ui/data-table.js';
+import { DataTable, type Column, type SortState, type TableStatus } from '../../components/ui/data-table.js';
 import { NumberField, SearchInput, SelectField, TextArea, TextField } from '../../components/ui/field.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
@@ -226,6 +226,9 @@ function Library({
 
   const filtered = query.trim() !== '' || modeFilter !== '' || levelFilter !== '';
 
+  /** R198 §6 — server-side: this list is paginated, so the DATABASE orders it. */
+  const [sort, setSort] = useState<SortState | null>(null);
+
   const load = useCallback(async () => {
     setStatus('loading');
     setFailure(null);
@@ -236,6 +239,7 @@ function Library({
           ...(query.trim() ? { q: query.trim() } : {}),
           ...(modeFilter ? { mode: modeFilter as 'physical' | 'online' } : {}),
           ...(levelFilter ? { level_id: levelFilter } : {}),
+          ...(sort ? { sort_by: sort.by, sort_dir: sort.dir } : {}),
         },
         token,
       );
@@ -246,7 +250,7 @@ function Library({
       setFailure(error);
       setStatus('error');
     }
-  }, [token, page, query, modeFilter, levelFilter]);
+  }, [token, page, query, modeFilter, levelFilter, sort]);
 
   useEffect(() => {
     void load();
@@ -255,11 +259,13 @@ function Library({
   const columns: Column<AssessmentSummary>[] = [
     {
       key: 'title',
+      sortKey: 'title',
       header: t('assessments.name'),
       cell: (row) => <a href={`?exam=${encodeURIComponent(row.id)}`}>{row.title}</a>,
     },
     {
       key: 'status',
+      sortKey: 'status',
       header: t('assessments.filterStatus'),
       /**
        * **مسودة, always** (R136) — this library is `status = 'draft'`-only
@@ -270,25 +276,29 @@ function Library({
     },
     {
       key: 'mode',
+      sortKey: 'mode',
       header: t('assessments.mode'),
       secondary: true,
       cell: (row) => t(row.mode === 'online' ? 'assessments.modeOnline' : 'assessments.modePhysical'),
     },
     {
       key: 'level',
+      sortKey: 'level',
       header: t('assessments.level'),
       secondary: true,
       cell: (row) => row.level_name,
     },
     {
       key: 'subject',
+      sortKey: 'subject',
       header: t('assessments.subject'),
       secondary: true,
       cell: (row) => row.subject_name ?? '—',
     },
-    { key: 'date', header: t('assessments.date'), secondary: true, cell: (row) => row.date },
+    { key: 'date', sortKey: 'date', header: t('assessments.date'), secondary: true, cell: (row) => row.date },
     {
       key: 'questions',
+      sortKey: 'questions',
       header: t('assessments.colQuestions'),
       numeric: true,
       secondary: true,
@@ -296,12 +306,14 @@ function Library({
     },
     {
       key: 'submissions',
+      sortKey: 'submissions',
       header: t('assessments.colSubmissions'),
       numeric: true,
       cell: (row) => row.submission_count,
     },
     {
       key: 'scale',
+      sortKey: 'scale',
       header: t('assessments.colScale'),
       numeric: true,
       secondary: true,
@@ -371,6 +383,8 @@ function Library({
               />
             </>
           }
+          sort={sort}
+          onSort={setSort}
           pagination={{ page, pageSize: 20, total, onPage: setPage }}
           actions={
             canWrite

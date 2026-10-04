@@ -332,6 +332,9 @@ export interface AssessmentListFilters {
   q?: string;
   page?: number;
   page_size?: number;
+  /** R198 §6 — a header's sort (`ASSESSMENT_SORT_FIELDS` on the server). */
+  sort_by?: string;
+  sort_dir?: 'asc' | 'desc';
 }
 
 /**

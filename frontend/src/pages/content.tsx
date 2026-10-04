@@ -269,6 +269,8 @@ interface LibraryRow {
   subject_id: string | null;
   academic_year_id: string;
   branch_id: string | null;
+  /** R198 §2 — the item's OTHER branches; `branch_id` is its home. */
+  additional_branches?: { id: string; name: string }[];
   mime_type: string;
   size_bytes: number;
   created_at: string;
@@ -319,6 +321,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
      */
     mode: 'filter',
     defaultCurrentYear: true,
+    // R198 §2 — «بدون فرع» narrows to Global items: a legal value the
+    // branch list cannot contain, so rule 2 must not clear it (it did).
+    sentinels: { branchId: [GLOBAL] },
   });
   const { levelId, subjectId, academicYearId, branchId } = scope.value;
 
@@ -367,7 +372,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         branchId === ''
           ? body.data
           : body.data.filter((r) =>
-              branchId === GLOBAL ? r.branch_id === null : r.branch_id === branchId,
+              branchId === GLOBAL
+                ? r.branch_id === null
+                : r.branch_id === branchId || (r.additional_branches ?? []).some((b) => b.id === branchId),
             );
       setRows(filtered);
       setTotal(body.meta.total);
@@ -436,11 +443,13 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     { key: 'title', sortKey: 'title', header: t('content.col.title'), cell: (r) => r.title },
     {
       key: 'kind',
+      sortKey: 'kind',
       header: t('content.col.kind'),
       cell: (r) => t(`content.kind.${kindOf(r.mime_type) satisfies ContentKind}`),
     },
     {
       key: 'visibility',
+      sortKey: 'visibility',
       header: t('content.col.visibility'),
       // R170 §3 — the warning travels with the tier it warns about, in words.
       cell: (r) => (
@@ -461,7 +470,10 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       header: t('content.col.branch'),
       secondary: true,
       // `null` is Global, a real scope — never "unknown" (§4.9, BR-20).
-      cell: (r) => r.branch_name ?? t('content.globalScope'),
+      cell: (r) =>
+        r.branch_name === null
+          ? t('content.globalScope')
+          : [r.branch_name, ...(r.additional_branches ?? []).map((b) => b.name)].join('، '),
     },
     {
       key: 'size',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { facetsOf, reconcile, type FacetFacts, type FacetOptions, type FacetValue } from './scope-facets.js';
 import HOOK from './use-scope-options.ts?raw';
 import SELECTORS from '../components/scope/scope-selectors.tsx?raw';
 import CONTENT from '../pages/content.tsx?raw';
@@ -17,70 +18,139 @@ function code(source: string): string {
 }
 
 /**
- * **A filter may ask about a Subject with no Level; a form may not.**
+ * **SRS Revision 198 §3 — every selector narrows every other one.** The rules
+ * live in `scope-facets.ts` as pure functions, so they are tested as rules:
+ * the curriculum below is two Categories, three Levels, three Subjects.
  *
- * The `subjectId → levelId` edge exists so a **form** cannot offer a pair the
- * server refuses (`SUBJECT_NOT_AT_LEVEL`, §4.4b) — that is the defect
- * `useScopeOptions` was extracted for and it is unchanged. But `مكتبة المحتوى`
- * disabled its Subject filter behind *«اختاري المستوى أولًا»*, asking a question
- * the contract never required: `GET /library` takes `level_id` and `subject_id`
- * as **independent optionals**.
- *
- * These are source assertions, and deliberately so: the property is *which read
- * runs* and *which dependency is consulted*, neither of which a statically
- * rendered tree shows. The behaviour itself is verified against the running API
- * and in the browser.
+ *   C1: L1 (S1, Surahs 1 and 2), L2 (S2, Surah 3) — S3 taught to C1 whole
+ *   C2: L3 (S1, Surah 2)
+ *   S1 is taught by Surah; S2 and S3 are not.
  */
-describe('the Subject filter does not require a Level', () => {
-  it('offers every Subject when no Level is chosen, and the Level’s when one is', () => {
-    /**
-     * **RESTATED for NEW D — the property is the same, the mechanism is not.**
-     *
-     * This used to assert two endpoints chosen between, `listSubjects` and
-     * `listLevelSubjects`. Both are Admin-only, which is precisely why a
-     * مؤطِّرة's Subject control was empty in a filter and refused the moment she
-     * chose a Level. The hook now derives both answers from the one
-     * caller-scoped read, so the calls are gone — **but the rule they
-     * implemented is unchanged and is what this pins**: no Level chosen means
-     * every Subject in a filter and none in a form; a Level chosen means that
-     * Level's.
-     */
-    expect(code(HOOK)).toContain('if (subjectsUnscoped) return allSubjects;');
-    // R169 §7 — a FORM in which «no Level» is a real answer offers the Subjects
-    // some Level teaches; every other form still offers none.
-    expect(code(HOOK)).toContain('if (!subjectsTaughtAnywhere) return [];');
-    expect(code(HOOK)).toContain('[...levelSubjects.values()].flat()');
-    expect(code(HOOK)).toContain('levelSubjects.get(value.levelId)');
-    /**
-     * **RESTATED AGAIN 2026-08-27 — and the second half is now load-bearing.**
-     *
-     * The list is DERIVED during render rather than written to state by an
-     * effect. That is not a style preference: as an effect it left a one-commit
-     * window in which `options` was memoised from an empty `subjects` while
-     * `ready` had already flipped true, so rule 2 cleared a Subject the caller
-     * had deliberately seeded. مكتبة المحتوى's upload dialog lost the Subject
-     * its page filter had set, every time.
-     *
-     * A future author restoring `setSubjects` in an effect would restore the
-     * defect, so the absence is pinned, not just the rule.
-     */
-    expect(code(HOOK)).toContain('const subjects = useMemo');
-    expect(code(HOOK)).not.toContain('setSubjects(');
+const FACTS: FacetFacts = {
+  categoryIds: ['C1', 'C2'],
+  levels: [
+    { id: 'L1', category_id: 'C1' },
+    { id: 'L2', category_id: 'C1' },
+    { id: 'L3', category_id: 'C2' },
+  ],
+  subjectIds: ['S1', 'S2', 'S3', 'S9'],
+  levelSubjects: new Map([
+    ['L1', ['S1']],
+    ['L2', ['S2']],
+    ['L3', ['S1']],
+  ]),
+  categorySubjects: new Map([['C1', ['S3']]]),
+  levelSurahIds: { L1: [1, 2], L2: [3], L3: [2] },
+  subjectsBySurah: new Set(['S1']),
+  groups: [
+    { id: 'G1', level_id: 'L1', branch_id: 'B1' },
+    { id: 'G2', level_id: 'L1', branch_id: 'B2' },
+    { id: 'G3', level_id: 'L3', branch_id: 'B1' },
+  ],
+};
+const FORM: FacetOptions = { subjectsUnscoped: false, offerWholeCategory: false, sentinels: {} };
+const FILTER: FacetOptions = { ...FORM, subjectsUnscoped: true };
+const NONE: FacetValue = { categoryId: '', levelId: '', subjectId: '', branchId: '', surahId: '', groupId: '' };
+const v = (patch: Partial<FacetValue>): FacetValue => ({ ...NONE, ...patch });
+
+describe('R198 §3 — the lists narrow each other, whichever is chosen first', () => {
+  it('with nothing chosen, a form offers every Subject some Level teaches, a filter every Subject', () => {
+    expect(facetsOf(NONE, FACTS, FORM).subjectId).toEqual(['S1', 'S2', 'S3']);
+    expect(facetsOf(NONE, FACTS, FILTER).subjectId).toEqual(['S1', 'S2', 'S3', 'S9']);
+    expect(facetsOf(NONE, FACTS, FORM).levelId).toEqual(['L1', 'L2', 'L3']);
+    expect(facetsOf(NONE, FACTS, FORM).surahId).toEqual(['1', '2', '3']);
   });
 
+  it('a Subject chosen FIRST narrows the Levels and Categories to those that teach it', () => {
+    const f = facetsOf(v({ subjectId: 'S2' }), FACTS, FORM);
+    expect(f.levelId).toEqual(['L2']);
+    expect(f.categoryId).toEqual(['C1']);
+    // …and a Subject not taught by Surah has no Surah to offer.
+    expect(f.surahId).toEqual([]);
+  });
+
+  it('a Level offers its own Subjects and its Category’s (R178 §1), and its syllabus', () => {
+    const f = facetsOf(v({ levelId: 'L1', categoryId: 'C1' }), FACTS, FORM);
+    expect(f.subjectId).toEqual(['S1', 'S3']);
+    expect(f.surahId).toEqual(['1', '2']);
+  });
+
+  it('a Surah narrows the Levels to those whose syllabus holds it, and the Subjects to Surah ones', () => {
+    const f = facetsOf(v({ surahId: '2' }), FACTS, FORM);
+    expect(f.levelId).toEqual(['L1', 'L3']);
+    expect(f.subjectId).toEqual(['S1']);
+    expect(f.categoryId).toEqual(['C1', 'C2']);
+  });
+
+  it('a Category narrows the Levels, Subjects and Surahs — and is not itself narrowed by its Level', () => {
+    const f = facetsOf(v({ categoryId: 'C2' }), FACTS, FORM);
+    expect(f.levelId).toEqual(['L3']);
+    expect(f.subjectId).toEqual(['S1']);
+    expect(f.surahId).toEqual(['2']);
+    // Another Category stays choosable with a Level chosen: that is how it changes.
+    expect(facetsOf(v({ categoryId: 'C1', levelId: 'L1' }), FACTS, FORM).categoryId).toEqual(['C1', 'C2']);
+  });
+
+  it('«كل مستويات الفئة» travels in the Level slot and offers the Subjects taught to the Category whole', () => {
+    const whole = { ...FORM, offerWholeCategory: true };
+    expect(facetsOf(NONE, FACTS, whole).levelId).toEqual(['category:C1', 'category:C2', 'L1', 'L2', 'L3']);
+    expect(facetsOf(v({ levelId: 'category:C1' }), FACTS, whole).subjectId).toEqual(['S3']);
+  });
+
+  it('groups are narrowed by Level, Branch and Category, whichever are chosen', () => {
+    expect(facetsOf(NONE, FACTS, FORM).groupId).toEqual(['G1', 'G2', 'G3']);
+    expect(facetsOf(v({ branchId: 'B1' }), FACTS, FORM).groupId).toEqual(['G1', 'G3']);
+    expect(facetsOf(v({ levelId: 'L1', branchId: 'B2' }), FACTS, FORM).groupId).toEqual(['G2']);
+    expect(facetsOf(v({ categoryId: 'C2' }), FACTS, FORM).groupId).toEqual(['G3']);
+  });
+
+  it('a declared sentinel («كل المواد», R195) constrains nothing', () => {
+    const opts = { ...FORM, sentinels: { subjectId: ['*'] } };
+    expect(facetsOf(v({ subjectId: '*' }), FACTS, opts).levelId).toEqual(['L1', 'L2', 'L3']);
+  });
+});
+
+describe('R198 §3 — one change, and the others follow', () => {
+  it('a Level sets its Category', () => {
+    expect(reconcile(NONE, 'levelId', 'L3', FACTS, FORM).categoryId).toBe('C2');
+    expect(reconcile(NONE, 'levelId', 'category:C1', FACTS, { ...FORM, offerWholeCategory: true }).categoryId).toBe('C1');
+  });
+
+  it('another Category clears a Level of the old one, and keeps a Subject it still teaches', () => {
+    const next = reconcile(v({ categoryId: 'C1', levelId: 'L1', subjectId: 'S1' }), 'categoryId', 'C2', FACTS, FORM);
+    expect(next).toMatchObject({ categoryId: 'C2', levelId: '', subjectId: 'S1' });
+  });
+
+  it('clearing the Category retracts its Level', () => {
+    expect(reconcile(v({ categoryId: 'C1', levelId: 'L1' }), 'categoryId', '', FACTS, FORM).levelId).toBe('');
+  });
+
+  it('moving to a Level that does not teach the Subject clears the Subject and the Surah', () => {
+    const next = reconcile(v({ categoryId: 'C1', levelId: 'L1', subjectId: 'S1', surahId: '1' }), 'levelId', 'L2', FACTS, FORM);
+    expect(next).toMatchObject({ levelId: 'L2', subjectId: '', surahId: '' });
+  });
+
+  it('clearing the Level keeps a Subject that is still offered (a widened question)', () => {
+    expect(reconcile(v({ categoryId: 'C1', levelId: 'L1', subjectId: 'S1' }), 'levelId', '', FACTS, FILTER).subjectId).toBe('S1');
+  });
+
+  it('a group sets its Level, Category and Branch', () => {
+    expect(reconcile(NONE, 'groupId', 'G3', FACTS, FORM)).toMatchObject({ levelId: 'L3', categoryId: 'C2', branchId: 'B1' });
+  });
+
+  it('another Branch clears a group of a different premises', () => {
+    expect(reconcile(v({ levelId: 'L1', categoryId: 'C1', branchId: 'B1', groupId: 'G1' }), 'branchId', 'B2', FACTS, FORM).groupId).toBe('');
+  });
+});
+
+describe('the shared hook and selectors', () => {
   it('NEVER reaches for an Admin reference read — that WAS the defect (NEW D)', () => {
     /**
-     * **The regression guard for NEW D itself.**
-     *
      * `/admin/levels`, `/admin/subjects`, `/admin/academic-years` and
      * `/admin/levels/{id}/subjects` all answer **403** for a مؤطِّرة by design
-     * (R30), and this hook is shared by مكتبة المحتوى, الجدولة, the groups
-     * screen and the upload form — so one of these calls reappearing here
-     * breaks a Teacher workflow on every screen at once, and does it silently:
-     * an Admin developer would never see it.
-     *
-     * The narrow read is `/me/scope-options` (R93.4's pattern). Anything else
-     * belongs to a screen that has already established the caller is an Admin.
+     * (R30), and this hook is shared by every screen with a scope selector —
+     * so one of these calls reappearing breaks a Teacher workflow everywhere,
+     * silently. The narrow read is `/me/scope-options` (R93.4's pattern).
      */
     const c = code(HOOK);
     for (const forbidden of [
@@ -91,36 +161,26 @@ describe('the Subject filter does not require a Level', () => {
       'listCategories(',
       'listBranches(',
     ]) {
-      expect(c, `${forbidden} is Admin-only and must not return to the shared hook`).not.toContain(
-        forbidden,
-      );
+      expect(c, `${forbidden} is Admin-only and must not return to the shared hook`).not.toContain(forbidden);
     }
     expect(c).toContain('fetchScopeOptions(token)');
   });
 
-  it('is driven by `mode`, and defaults to the strict one', () => {
-    // A form must not offer a Subject the chosen Level does not teach, so a
-    // caller that says nothing gets that behaviour rather than the permissive one.
+  it('derives every list during render, never from an effect (the seeded-Subject race)', () => {
+    // As an effect, `options` was once memoised from an empty list in the
+    // very commit `ready` flipped true, and rule 2 cleared a seeded Subject.
+    expect(code(HOOK)).toContain('const facets = useMemo(() => facetsOf(');
+    expect(code(HOOK)).not.toContain('setSubjects(');
+  });
+
+  it('is driven by `mode`, and defaults to the form one', () => {
     expect(code(HOOK)).toMatch(/mode\s*=\s*'form'/);
     expect(code(HOOK)).toContain("const subjectsUnscoped = mode === 'filter'");
   });
 
   it('every page tells the HOOK the same mode it tells the SELECTORS', () => {
-    /**
-     * **The guard for the defect that produced this rule.**
-     *
-     * It began as a `subjectsUnscoped` boolean — opt-in, per caller — so
-     * `مكتبة المحتوى` received it and `الجدولة` did not: the Subject control
-     * rendered enabled and empty, reading «لا مواد مسندة إلى هذا المستوى» with no
-     * Level chosen. One screen right, the next wrong, which is exactly the drift
-     * `useScopeOptions` was extracted to prevent.
-     *
-     * `mode` is now one fact the caller already knew. What can still go wrong is
-     * saying it **twice and differently** — `mode="filter"` on the selectors and
-     * nothing on the hook — so that is what is asserted: any file rendering
-     * `ScopeSelectors` with `mode="filter"` must also construct its scope with
-     * `mode: 'filter'`.
-     */
+    // Saying it twice and differently — `mode="filter"` on the selectors and
+    // nothing on the hook — is what this guards.
     const offenders = Object.entries(PAGES)
       .filter(([, text]) => {
         const c = code(text);
@@ -131,88 +191,33 @@ describe('the Subject filter does not require a Level', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the shared selector ignores the dependency only in filter mode', () => {
-    expect(code(SELECTORS)).toContain("mode === 'filter'");
-    // The edge itself stays — it is true of forms, which is where it works.
-    expect(code(SELECTORS)).toContain('subjectId: [{ field: ');
+  it('no selector waits for another (R198 §3 — «يُرجى اختيار المستوى أولًا» withdrawn)', () => {
+    expect(code(SELECTORS)).not.toContain('chooseFirst');
+    expect(code(SELECTORS)).not.toContain('REQUIRES');
   });
 
-  it('the content library declares itself a filter', () => {
+  it('the content library declares itself a filter, and its «بدون فرع» a sentinel', () => {
     expect(code(CONTENT)).toContain("mode: 'filter'");
+    expect(code(CONTENT)).toContain('sentinels: { branchId: [GLOBAL] }');
   });
 
-  it('clearing the Level keeps the Subject, but moving Level clears it', () => {
-    /**
-     * Widening a filter is not retracting the Subject: a reader who asked for
-     * تفسير and then removed the Level constraint did not un-ask for تفسير.
-     * Moving to *another* Level still clears it, because that Level may not teach
-     * it and a stale id is what reaches the server as an impossible pair.
-     */
-    expect(code(HOOK)).toContain("const wideningAFilter = next === '' && unscopedSubjectsRef.current");
-    expect(code(HOOK)).toContain('if (!wideningAFilter) updated.subjectId');
-  });
-
-  it('reads the flag through a ref, so `set` stays referentially stable', () => {
-    // This hook's own docstring records what an unstable callback costs here:
-    // a `useCallback` keyed on the flag would change identity and re-run every
-    // effect that depends on it.
-    expect(code(HOOK)).toContain('unscopedSubjectsRef');
+  it('reads the facts through a ref, so `set` stays referentially stable', () => {
+    expect(code(HOOK)).toContain('factsRef.current');
   });
 });
 
-/**
- * **SRS Revision 172 §1 — a Subject taught to a WHOLE Category, and a FORM's
- * Subject with no Level in play.**
- */
-describe('R172 §1 — whole-Category Subjects, and the Level-free Subject', () => {
-  it('«كل مستويات الفئة» travels in the Level slot as `category:<id>`, and only there', async () => {
+describe('R172 §1 — «كل مستويات الفئة» in the Level slot', () => {
+  it('travels as `category:<id>`, and defaults as any of its Levels does', async () => {
     const { wholeCategoryValue, wholeCategoryOf, defaultVisibilityForLevel } = await import(
       './use-scope-options.js'
     );
     expect(wholeCategoryOf(wholeCategoryValue('c1'))).toBe('c1');
     expect(wholeCategoryOf('a-real-level-id')).toBeNull();
-    // A whole Category defaults as any of its Levels does (§15.1).
     const levels = [
       { id: 'l1', category_id: 'c1', default_visibility: 'private' },
       { id: 'l2', category_id: 'c2', default_visibility: 'public' },
     ] as never;
     expect(defaultVisibilityForLevel(levels, wholeCategoryValue('c1'))).toBe('private');
     expect(defaultVisibilityForLevel(levels, wholeCategoryValue('c9'))).toBeNull();
-  });
-
-  it('the Subject choices follow the Category when the whole Category is chosen', () => {
-    const source = code(HOOK);
-    expect(source).toContain('const wholeOf = wholeCategoryOf(value.levelId);');
-    expect(source).toContain('categorySubjects.get(wholeOf)');
-    // …and the Level list itself holds one whole-Category choice per Category
-    // (the chosen one alone when one is chosen), ALWAYS — the Owner could not
-    // find the choice while no Subject was assigned to the Category whole; it
-    // now leads to the hint that says so. IN the list, not beside it: rule 2
-    // clears a Level value the list does not hold.
-    expect(source).toContain(".filter((c) => value.categoryId === '' || c.id === value.categoryId)");
-    expect(source).toContain('levelId: [...wholeCategory, ...levelPool.map(');
-    expect(source).toContain('wholeCategoryTeachesNothing:');
-  });
-
-  it('a FORM Subject the hook declares independent of the Level is not gated on one (the Owner met «اختاري المستوى أولًا» on a «الكل» class)', () => {
-    const source = code(SELECTORS);
-    expect(source).toContain("mode === 'filter' || (field === 'subjectId' && scope.subjectsIndependentOfLevel)");
-    expect(code(HOOK)).toContain('subjectsIndependentOfLevel: subjectsUnscoped || subjectsTaughtAnywhere,');
-  });
-});
-
-/**
- * R178 §1 (Owner-reported, 2026-09-29) — with a Level chosen, the Subjects
- * offered are the Level's own AND every Subject taught to its whole Category
- * (R172 §1), which is exactly what the server's curriculum policy accepts.
- * Reading `LevelSubject` alone hid a Category-wide Subject the moment a Level
- * was in play — and on «تعديل العنصر» it emptied the locked Subject of the
- * class being edited, which then refused to save with «اختاري المادة.».
- */
-describe('a Level offers its Category-wide Subjects too (R178 §1)', () => {
-  it('unions the Level’s Subjects with its Category’s', () => {
-    const source = code(HOOK);
-    expect(source).toContain('...(levelSubjects.get(value.levelId) ?? []),');
-    expect(source).toContain("...(categorySubjects.get(levels.find((l) => l.id === value.levelId)?.category_id ?? '') ?? []),");
   });
 });

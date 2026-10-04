@@ -70,7 +70,18 @@ export interface AdministrativeGroupInput {
 }
 
 /** What `/admin/administrative-groups` may be sorted by (R76.1). */
-export const GROUP_SORT_FIELDS: SortableFields = { name: (dir) => [{ name: dir }] };
+export const GROUP_SORT_FIELDS: SortableFields = {
+  name: (dir) => [{ name: dir }],
+  // R198 §6 — the Level in the Super Admin's order (its Category's place
+  // first, §2.2), the branch by name, and the member count.
+  level: (dir) => [
+    { level: { category: { displayOrder: { sort: dir, nulls: 'last' } } } },
+    { level: { displayOrder: { sort: dir, nulls: 'last' } } },
+    { level: { name: dir } },
+  ],
+  branch: (dir) => [{ branch: { name: dir } }],
+  members: (dir) => [{ enrollments: { _count: dir } }],
+};
 
 /** BR-19's order (R76.2). */
 const GROUP_DEFAULT_ORDER = [{ displayOrder: 'asc' }, { name: 'asc' }];

@@ -87,16 +87,17 @@ export interface LibraryFilters extends PageParams {
  * collated columns (TD-6a), so Arabic orders correctly with no per-query
  * COLLATE (§20 rule 13).
  *
- * **`kind` and `visibility` are absent deliberately.** Both are enums whose
- * alphabetical order is not their meaningful one — the same reasoning that kept
- * `account_status` off المستخدمون — and both already have a filter, which is
- * the control a reader actually wants.
+ * **`kind` and `visibility` sort too since R198 §6** (the Owner: every header
+ * sorts). Neither by its label's alphabet: `visibility` by openness — عام,
+ * خاص, مخفي — and `kind` by the MIME type, which keeps each kind together.
  */
 const LIBRARY_SORT_COLUMNS: Record<string, Prisma.Sql> = {
   title: Prisma.sql`c."title"`,
   published: Prisma.sql`c."created_at"`,
   size: Prisma.sql`c."size_bytes"`,
   branch: Prisma.sql`b."name"`,
+  kind: Prisma.sql`c."mime_type"`,
+  visibility: Prisma.sql`CASE c."visibility" WHEN 'public' THEN 0 WHEN 'private' THEN 1 ELSE 2 END`,
 };
 
 /**
@@ -162,6 +163,9 @@ export interface LibraryItem {
   subjectId: string | null;
   academicYearId: string;
   branchId: string | null;
+  /** R198 §2 — the item's OTHER branches, in the branches' own order;
+   *  `branchId` stays its home. `[]` for one branch or Global. */
+  additionalBranches: { id: string; name: string }[];
   mimeType: string;
   sizeBytes: bigint;
   createdAt: Date;
@@ -433,6 +437,12 @@ export async function listLibrary(
     ownBranches.length > 0
       ? Prisma.sql`CASE
           WHEN c."branch_id" IN (${Prisma.join(ownBranches.map((id) => Prisma.sql`${id}::uuid`))}) THEN 0
+          -- R198 §2 — an item filed for her branch among others is hers too.
+          WHEN EXISTS (
+            SELECT 1 FROM "educational_content_branch" ob
+            WHERE ob."content_id" = c."id"
+              AND ob."branch_id" IN (${Prisma.join(ownBranches.map((id) => Prisma.sql`${id}::uuid`))})
+          ) THEN 0
           WHEN c."branch_id" IS NULL THEN 1
           ELSE 2 END`
       : Prisma.sql`CASE WHEN c."branch_id" IS NULL THEN 1 ELSE 2 END`;
@@ -459,6 +469,13 @@ export async function listLibrary(
              c."subject_id"              AS "subjectId",
              c."academic_year_id"        AS "academicYearId",
              c."branch_id"               AS "branchId",
+             COALESCE((
+               SELECT json_agg(json_build_object('id', ab."id", 'name', ab."name")
+                               ORDER BY ab."display_order" NULLS LAST, ab."name", ab."id")
+               FROM "educational_content_branch" ob
+               JOIN "branch" ab ON ab."id" = ob."branch_id" AND ab."deleted_at" IS NULL
+               WHERE ob."content_id" = c."id"
+             ), '[]'::json)              AS "additionalBranches",
              c."mime_type"               AS "mimeType",
              c."size_bytes"              AS "sizeBytes",
              c."created_at"              AS "createdAt",

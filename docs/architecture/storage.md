@@ -157,6 +157,7 @@ The storage half of [BR-2](../reference/business-rules.md#br-2): a **warning sin
 ## Global scope is a privilege
 
 - No-branch content appears in «Global / بدون فرع» across every branch; only Admins and Super Admins may assign it; teachers are locked to branches in their own scope (group assignments); a teacher upload with a null or out-of-scope branch is refused ([BR-20](../reference/business-rules.md#br-20)).
+- An item may be filed for several branches (SRS §4.9, R198 §2): `content_meta.branch_ids`, the first its home `branch_id`, the rest `educational_content_branch` (a trigger refuses the home twice and any row on a Global item); `[]` is Global. Each branch is authorised as one is; the ticket binds `additional_branch_ids`; the library returns `additional_branches` and ranks the item first for a reader of any of its branches; a Branch purge removes its additional-branch links.
 
 ## Framing and Nginx for `/storage/`
 

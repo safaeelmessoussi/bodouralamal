@@ -322,7 +322,7 @@ describe.skipIf(!enabled)('P0.3 durable storage lifecycle on disposable PostgreS
         levelId,
         subjectId,
         academicYearId,
-        branchId: null,
+        branchIds: [],
         replacesContentId: contentId,
       },
     });

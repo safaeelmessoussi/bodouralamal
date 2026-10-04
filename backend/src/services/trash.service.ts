@@ -2,6 +2,7 @@ import { calendarDay } from '../policies/effective-staffing.js';
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
+import { resolveSort, type SortParams, type SortableFields } from '../lib/sorting.js';
 import * as scope from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -112,6 +113,7 @@ type PurgeModel =
   | 'courseScheduleStaff'
   | 'sessionStaff'
   | 'eventBranch'
+  | 'educationalContentBranch'
   | 'eventCategory'
   | 'eventLevel'
   | 'eventAdministrativeGroup'
@@ -129,6 +131,8 @@ type PurgeModel =
 interface ChildWhereByModel {
   administrativeGroup: Prisma.AdministrativeGroupWhereInput;
   eventBranch: Prisma.EventBranchWhereInput;
+  // R198 §2 — an item's additional branch, a link that goes with the Branch.
+  educationalContentBranch: Prisma.EducationalContentBranchWhereInput;
   eventCategory: Prisma.EventCategoryWhereInput;
   eventLevel: Prisma.EventLevelWhereInput;
   eventAdministrativeGroup: Prisma.EventAdministrativeGroupWhereInput;
@@ -527,7 +531,15 @@ const RESTORABLE: Record<
 const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] }> = {
   // No owned children: a Branch's rooms, groups and schedules are all records of
   // their own, so a Branch with any of them left LIVE is refused rather than emptied.
-  Branch: { model: 'branch', children: [{ model: 'eventBranch', fk: 'branchId' }] },
+  // R198 §2 — an item's ADDITIONAL branch is a link, not a record: it goes
+  // with the Branch and the item keeps its home branch.
+  Branch: {
+    model: 'branch',
+    children: [
+      { model: 'eventBranch', fk: 'branchId' },
+      { model: 'educationalContentBranch', fk: 'branchId' },
+    ],
+  },
   /**
    * **A curriculum link is PART of what it links** (R192 §1). `LevelSubject`,
    * `LevelSurah` and `CategorySubject` say «this Level teaches that Subject /
@@ -805,6 +817,7 @@ const TABLE_ENTITY: Record<string, string> = {
   course_schedule_teaching_group: 'RecurringCourseSchedule',
   educational_content: 'EducationalContent',
   educational_content_level: 'EducationalContent',
+  educational_content_branch: 'EducationalContent',
   enrollment: 'Enrollment',
   event: 'Event',
   event_administrative_group: 'Event',
@@ -919,7 +932,19 @@ export interface TrashRow {
   purgeBlockedReason: string | null;
 }
 
-export interface TrashFilters extends PageParams {
+/**
+ * What `/admin/trash` may be sorted by (R76.1; R198 §6 — every header sorts).
+ * The record's own label lives in a per-entity JSONB key and is searched, not
+ * sorted, on the server; the table sorts it when one page holds everything.
+ */
+export const TRASH_SORT_FIELDS: SortableFields = {
+  entity: (dir) => [{ targetEntity: dir }],
+  deleted_at: (dir) => [{ deletedAt: dir }],
+  deleted_by: (dir) => [{ deletedBy: { nameArabic: dir } }],
+  purge_after: (dir) => [{ purgeAfter: dir }],
+};
+
+export interface TrashFilters extends PageParams, SortParams {
   entity?: string;
   deletedById?: string;
   from?: Date;
@@ -985,7 +1010,7 @@ export async function listTrash(
       where,
       // Most recently deleted first: the record somebody is looking for is
       // almost always the one they just lost.
-      orderBy: [{ deletedAt: 'desc' }, { id: 'asc' }],
+      orderBy: resolveSort(TRASH_SORT_FIELDS, filters, [{ deletedAt: 'desc' }]) as never,
       skip: window.skip,
       take: window.take,
       include: { deletedBy: { select: { id: true, nameArabic: true } } },

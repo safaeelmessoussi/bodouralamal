@@ -192,8 +192,11 @@ function SurahView({ tabs }: { tabs: ReactNode }): ReactNode {
 interface Ranking {
   category: Map<string, number>;
   level: Map<string, number>;
+  // R198 §5 — «الفروع» and «المواد» in their order too, never alphabetical.
+  branch: Map<string, number>;
+  subject: Map<string, number>;
 }
-const NO_RANKING: Ranking = { category: new Map(), level: new Map() };
+const NO_RANKING: Ranking = { category: new Map(), level: new Map(), branch: new Map(), subject: new Map() };
 const rankOf = (map: Map<string, number>, id: string): number => map.get(id) ?? Number.MAX_SAFE_INTEGER;
 
 /** The whole library, filtered on every axis (the Owner, 2026-09-25). */
@@ -242,6 +245,8 @@ function LibraryView({
         setRanking({
           category: new Map(bootstrap.categories.map((c, i) => [c.id, i])),
           level: new Map(bootstrap.levels.map((l, i) => [l.id, i])),
+          branch: new Map(bootstrap.branches.map((b, i) => [b.id, i])),
+          subject: new Map(bootstrap.subjects.map((x, i) => [x.id, i])),
         });
       })
       .catch(() => undefined);
@@ -305,8 +310,10 @@ function LibraryView({
             a[1].label.localeCompare(b[1].label, 'ar'),
         ),
       years: [...years].sort((a, b) => b[1].localeCompare(a[1])),
-      branches: [...branches].sort(byName),
-      subjects: [...subjects].sort(byName),
+      branches: [...branches].sort(
+        (a, b) => Number(b[0] === GLOBAL_BRANCH) - Number(a[0] === GLOBAL_BRANCH) || rankOf(ranking.branch, a[0]) - rankOf(ranking.branch, b[0]) || byName(a, b),
+      ),
+      subjects: [...subjects].sort((a, b) => rankOf(ranking.subject, a[0]) - rankOf(ranking.subject, b[0]) || byName(a, b)),
       // Mushaf order, never alphabetical: a reader knows where البقرة is.
       surahs: [...surahs].sort((a, b) => Number(a[0]) - Number(b[0])),
     };
@@ -340,15 +347,20 @@ function LibraryView({
     type CatG = { id: string; name: string; shelves: ShelfG[] };
     const cats = new Map<string, CatG>();
     const seen = new Set<string>();
+    const counted = new Set<string>();
     for (const e of filtered) {
-      const dedupe = `${e.shelf_key}|${e.item.id}`;
+      const dedupe = `${e.shelf_key}|${e.branch_id ?? GLOBAL_BRANCH}|${e.item.id}`;
       if (seen.has(dedupe)) continue;
       seen.add(dedupe);
       let cat = cats.get(e.category_id);
       if (!cat) cats.set(e.category_id, (cat = { id: e.category_id, name: e.category_name, shelves: [] }));
       let shelf = cat.shelves.find((x) => x.key === e.shelf_key);
       if (!shelf) cat.shelves.push((shelf = { key: e.shelf_key, kind: e.shelf_kind, name: e.level_name, years: [], count: 0 }));
-      shelf.count += 1;
+      // An item filed for several branches is ONE item on its shelf (R198 §2).
+      if (!counted.has(`${e.shelf_key}|${e.item.id}`)) {
+        counted.add(`${e.shelf_key}|${e.item.id}`);
+        shelf.count += 1;
+      }
       let year = shelf.years.find((y) => y.id === e.academic_year_id);
       if (!year) shelf.years.push((year = { id: e.academic_year_id, label: e.academic_year_label, branches: [] }));
       const bkey = e.branch_id ?? GLOBAL_BRANCH;
@@ -379,9 +391,16 @@ function LibraryView({
       for (const shelf of cat.shelves) {
         shelf.years.sort((a, b) => b.label.localeCompare(a.label));
         for (const year of shelf.years) {
-          year.branches.sort((a, b) => Number(b.key === GLOBAL_BRANCH) - Number(a.key === GLOBAL_BRANCH) || a.name.localeCompare(b.name, 'ar'));
+          year.branches.sort(
+            (a, b) =>
+              Number(b.key === GLOBAL_BRANCH) - Number(a.key === GLOBAL_BRANCH) ||
+              rankOf(ranking.branch, a.key) - rankOf(ranking.branch, b.key) ||
+              a.name.localeCompare(b.name, 'ar'),
+          );
           for (const branch of year.branches) {
-            branch.subjects.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+            branch.subjects.sort(
+              (a, b) => rankOf(ranking.subject, a.key) - rankOf(ranking.subject, b.key) || a.name.localeCompare(b.name, 'ar'),
+            );
             for (const subject of branch.subjects) subject.surahs.sort((a, b) => a.id - b.id);
           }
         }

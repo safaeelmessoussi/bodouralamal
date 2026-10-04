@@ -110,3 +110,35 @@ function withTiebreak(order: OrderBy[]): OrderBy[] {
   if (last && Object.prototype.hasOwnProperty.call(last, 'id')) return order;
   return [...order, { id: 'asc' }];
 }
+
+/**
+ * **The Super Admin's order** (BR-19; SRS Revision 198 §5) — what every list a
+ * selector offers is shown in: `display_order` first (unset last), then the
+ * name, then `id` so two equal rows keep one place. Defined once so a read that
+ * fills a dropdown cannot fall back to alphabetical by forgetting it.
+ */
+export const ADMIN_ORDER = [
+  { displayOrder: { sort: 'asc', nulls: 'last' } },
+  { name: 'asc' },
+  { id: 'asc' },
+] as const satisfies readonly OrderBy[];
+
+/**
+ * A Level's order is scoped WITHIN its Category (§2.2), so Levels are ordered
+ * by their Category's place first — ordered by their own `display_order`
+ * alone they interleave the Categories.
+ */
+export const LEVEL_ADMIN_ORDER = [
+  { category: { displayOrder: { sort: 'asc', nulls: 'last' } } },
+  { category: { name: 'asc' } },
+  ...ADMIN_ORDER,
+] as const satisfies readonly OrderBy[];
+
+/** A group sits under its Level, so it follows the Level's order, then its own. */
+export const GROUP_ADMIN_ORDER = [
+  { level: { category: { displayOrder: { sort: 'asc', nulls: 'last' } } } },
+  { level: { category: { name: 'asc' } } },
+  { level: { displayOrder: { sort: 'asc', nulls: 'last' } } },
+  { level: { name: 'asc' } },
+  ...ADMIN_ORDER,
+] as const satisfies readonly OrderBy[];

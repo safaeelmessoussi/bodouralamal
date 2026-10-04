@@ -49,6 +49,9 @@ export interface TrashQuery {
   from?: string;
   to?: string;
   q?: string;
+  /** R198 §6 — a header's sort (`TRASH_SORT_FIELDS` on the server). */
+  sort_by?: string;
+  sort_dir?: 'asc' | 'desc';
 }
 
 export async function listTrash(

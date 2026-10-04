@@ -236,7 +236,9 @@ export interface InitiateInput {
     /** R195 — `null` is «عام»: material of a class of all its Level's Subjects. */
     subjectId: string | null;
     academicYearId: string;
-    branchId: string | null;
+    /** R198 §2 — the branches the item is filed for, home first; `[]` is
+     *  Global (§4.9). */
+    branchIds: string[];
     visibility?: string;
     /** R99.12 — *this is a class recording*, stated at the boundary. Defaults to
      *  `uploaded`, and never widens what may be uploaded. */
@@ -302,7 +304,15 @@ export async function initiateUpload(
     });
   }
 
-  await assertUploadScope(prisma, actor, input.meta.branchId);
+  // R198 §2 — every branch named is authorised as the one branch was; none
+  // named is Global, with §4.9's own rule.
+  const branchIds = [...new Set(input.meta.branchIds)];
+  if (branchIds.length === 0) await assertUploadScope(prisma, actor, null);
+  for (const branchId of branchIds) await assertUploadScope(prisma, actor, branchId);
+  if (branchIds.length > 0) {
+    const live = await prisma.branch.count({ where: { id: { in: branchIds }, deletedAt: null } });
+    if (live !== branchIds.length) throw new AppError('NOT_FOUND', 'no such branch');
+  }
 
   /**
    * **R172 §1 — a whole Category, with no Level chosen.** The item is filed
@@ -400,7 +410,8 @@ export async function initiateUpload(
       level_id: levelId,
       subject_id: input.meta.subjectId,
       academic_year_id: input.meta.academicYearId,
-      branch_id: input.meta.branchId,
+      branch_id: branchIds[0] ?? null,
+      ...(branchIds.length > 1 ? { additional_branch_ids: branchIds.slice(1) } : {}),
       visibility,
       origin: input.meta.origin ?? 'uploaded',
       ...(wholeCategory ? { whole_category: true } : {}),
@@ -789,6 +800,14 @@ async function createContentFromFinalization(
         subjectId: claims.subject_id,
         academicYearId: claims.academic_year_id,
         branchId: claims.branch_id,
+        // R198 §2 — the item's other branches, decided at initiation.
+        ...(claims.branch_id !== null && (claims.additional_branch_ids?.length ?? 0) > 0
+          ? {
+              additionalBranches: {
+                create: (claims.additional_branch_ids ?? []).map((branchId) => ({ branchId })),
+              },
+            }
+          : {}),
         // R177 §7 — decided at initiation, like every other fact here.
         surahId: claims.surah_id ?? null,
         storageBucket: claims.bucket,
@@ -814,6 +833,7 @@ async function createContentFromFinalization(
         size_bytes: size,
         visibility: claims.visibility,
         branch_id: claims.branch_id,
+        ...(claims.additional_branch_ids?.length ? { additional_branch_ids: claims.additional_branch_ids } : {}),
         staging_coordinate_id: storageCoordinateId(claims.bucket, claims.key),
         canonical_coordinate_id: storageCoordinateId(claims.bucket, canonicalKey),
         content_sha256: contentSha256,

@@ -148,5 +148,8 @@ export const assessmentListSchema = z
     q: z.string().trim().max(120).optional(),
     page: z.coerce.number().int().min(1).optional(),
     page_size: z.coerce.number().int().min(1).max(100).optional(),
+    // R198 §6 — resolved against `ASSESSMENT_SORT_FIELDS`.
+    sort_by: z.string().trim().max(40).optional(),
+    sort_dir: z.string().trim().max(4).optional(),
   })
   .strict();

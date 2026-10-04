@@ -52,6 +52,8 @@ const YEAR_LABEL = "2097-2098";
 const ITEM_KEYS = [
   "academic_year_id",
   "academic_year_label",
+  // R198 §2 — the item's OTHER branches (`branch_id` is its home).
+  "additional_branches",
   // R169 §10 — the item's OTHER Levels (`level_id` is its home).
   "additional_levels",
   "branch_id",

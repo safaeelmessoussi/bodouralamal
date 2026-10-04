@@ -184,6 +184,9 @@ export const TEACHING_GROUP_SORT_FIELDS: SortableFields = {
   name: (dir) => [{ name: dir }],
   level: (dir) => [{ level: { name: dir } }],
   subject: (dir) => [{ subject: { name: dir } }],
+  // R198 §6 — where the circle lives and how many it holds.
+  branch: (dir) => [{ branch: { name: dir } }],
+  members: (dir) => [{ members: { _count: dir } }],
 };
 
 /**

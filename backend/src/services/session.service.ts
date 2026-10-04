@@ -38,6 +38,7 @@ import {
 import type { Actor } from "../policies/actor.js";
 import { enqueueConsentReevaluationForSessions } from "./consent-reevaluation.service.js";
 import { assertStaffAccountsAvailable } from "./staffing-integrity.service.js";
+import { ADMIN_ORDER, GROUP_ADMIN_ORDER, LEVEL_ADMIN_ORDER } from "../lib/sorting.js";
 
 /**
  * Sessions — the materialized dated occurrence (SRS §4.4, TD-1, TD-8,
@@ -1299,27 +1300,27 @@ export async function readSessionRoster(
       prisma.branch.findMany({
         where: { id: { in: branchIds }, deletedAt: null },
         select: { id: true, name: true },
-        orderBy: { name: "asc" },
+        orderBy: [...ADMIN_ORDER],
       }),
       prisma.category.findMany({
         where: { id: { in: effective.categoryIds }, deletedAt: null },
         select: { id: true, name: true },
-        orderBy: { name: "asc" },
+        orderBy: [...ADMIN_ORDER],
       }),
       prisma.level.findMany({
         where: { id: { in: effective.levelIds }, deletedAt: null },
         select: { id: true, name: true },
-        orderBy: { name: "asc" },
+        orderBy: [...LEVEL_ADMIN_ORDER],
       }),
       prisma.administrativeGroup.findMany({
         where: { id: { in: effective.administrativeGroupIds }, deletedAt: null },
         select: { id: true, name: true },
-        orderBy: { name: "asc" },
+        orderBy: [...GROUP_ADMIN_ORDER],
       }),
       prisma.teachingGroup.findMany({
         where: { id: { in: effective.teachingGroupIds }, deletedAt: null },
         select: { id: true, name: true },
-        orderBy: { name: "asc" },
+        orderBy: [...GROUP_ADMIN_ORDER],
       }),
       prisma.session.findUniqueOrThrow({
         where: { id: sessionId },

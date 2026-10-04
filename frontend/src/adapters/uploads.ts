@@ -28,9 +28,11 @@ export interface UploadMeta {
    *  Level's Subjects. Required and explicitly nullable, like `branch_id`. */
   subject_id: string | null;
   academic_year_id: string;
-  /** `null` is the Global / بدون فرع scope (§4.9) — a real value only an Admin
-   *  may choose, never a stand-in for "not set". */
-  branch_id: string | null;
+  /** `null` is the Global scope (§4.9) — a real value only an Admin may
+   *  choose, never a stand-in for "not set". Name this OR `branch_ids`. */
+  branch_id?: string | null;
+  /** R198 §2 — the branches the item is filed for, home first; `[]` is Global. */
+  branch_ids?: string[];
   visibility?: 'public' | 'private' | 'hidden';
   /** R177 §7 — the one Surah the item is about (1–114); absent means none. */
   surah_id?: number;

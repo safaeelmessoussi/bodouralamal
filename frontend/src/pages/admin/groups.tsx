@@ -161,13 +161,15 @@ export function GroupsPage(): ReactNode {
     { key: 'name', header: t('admin.groups.colName'), sortKey: 'name', cell: (r) => r.name },
     {
       key: 'members',
+      sortKey: 'members',
       header: t('admin.groups.colMembers'),
-      // Not sortable: the server sorts by stored columns (R76.1) and this one
-      // is derived, so offering it would sort a page rather than the set.
+      // R198 §6 — sorted by the SERVER's count of live members, so the order
+      // is the whole set's, never one page's.
       cell: (r) => String(r.member_count),
     },
     {
       key: 'level',
+      sortKey: 'level',
       header: t('admin.groups.colLevel'),
       // The shared label, so the column reads what the selector offers.
       cell: (r) => {
@@ -177,6 +179,7 @@ export function GroupsPage(): ReactNode {
     },
     {
       key: 'branch',
+      sortKey: 'branch',
       header: t('admin.groups.colBranch'),
       secondary: true,
       cell: (r) => nameOf(branches, r.branch_id),

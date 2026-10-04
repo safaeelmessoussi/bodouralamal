@@ -389,7 +389,40 @@ export function SchedulingPage(): ReactNode {
     token: accessToken,
     fields: LIST_SCOPE,
     mode: 'filter',
+    // R198 §3 — seeded from the URL-backed filters, then the hook narrows
+    // every list by the others and the filters follow it (below).
+    initial: Object.fromEntries(LIST_SCOPE.map((f) => [f, filters.value[f] ?? ''])),
   });
+
+  /**
+   * **The hook decides, the URL remembers** (R198 §3). This row used to read
+   * the hook's option lists while writing only the URL state, so the hook
+   * never knew what was chosen and nothing narrowed anything. A choice in
+   * one of the hook's fields now goes to the hook — which sets a Level's
+   * Category, a group's Level and Branch, and clears what no longer fits —
+   * and its value is mirrored into the filters, in the order they depend.
+   */
+  useEffect(() => {
+    for (const field of LIST_SCOPE) {
+      const next = listScope.value[field];
+      if ((filters.value[field] ?? '') !== next) filters.set(field, next === '' ? null : next);
+    }
+    // `filters.set` is stable; the URL state follows the hook, never the reverse.
+  }, [listScope.value]);
+  const scopedFilters = useMemo(
+    () => ({
+      ...filters,
+      set: (field: Parameters<typeof filters.set>[0], next: string | null) =>
+        (LIST_SCOPE as readonly string[]).includes(field)
+          ? listScope.set(field as (typeof LIST_SCOPE)[number], next ?? '')
+          : filters.set(field, next),
+      clear: () => {
+        listScope.setMany({ branchId: '', categoryId: '', levelId: '', subjectId: '', groupId: '' });
+        filters.clear();
+      },
+    }),
+    [filters, listScope.set, listScope.setMany],
+  );
 
   /**
    * **The filter row itself, built once and rendered by BOTH views** (R84).
@@ -400,7 +433,7 @@ export function SchedulingPage(): ReactNode {
    */
   const filterRow = (
     <CalendarFilters
-      filters={filters}
+      filters={scopedFilters}
       branches={listScope.options.branchId.map((o) => ({ id: o.value, name: o.label }))}
       // The shared row takes the calendar's reference shapes; `useScopeOptions`
       // speaks `{value,label}`, and mapping here keeps ONE loader for the page
@@ -740,7 +773,7 @@ export function SchedulingPage(): ReactNode {
             actions={actions}
             onRetry={() => void load()}
             filtered={filters.active}
-            onClearFilters={() => filters.clear()}
+            onClearFilters={() => scopedFilters.clear()}
           />
           {/* Stated rather than hidden: merging two independently paginated
               sources cannot produce a correct combined page without reading

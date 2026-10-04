@@ -342,7 +342,10 @@ async function replaceScenarioFile(
     size: bytes.length,
     mime: 'application/pdf',
     meta: {
-      ...metadata,
+      levelId: metadata.levelId,
+      subjectId: metadata.subjectId,
+      academicYearId: metadata.academicYearId,
+      branchIds: metadata.branchId === null ? [] : [metadata.branchId],
       visibility: 'public',
       origin: 'session_recording',
       replacesContentId: s.contentId,
@@ -774,7 +777,7 @@ describe('B-01 consent safeguarding', () => {
           academicYearId: (
             await prisma.academicYear.findFirstOrThrow({ select: { id: true } })
           ).id,
-          branchId: s.branchId,
+          branchIds: [s.branchId],
           visibility: 'public',
           origin: 'session_recording',
         },

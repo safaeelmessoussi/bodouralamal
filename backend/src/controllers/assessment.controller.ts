@@ -37,6 +37,7 @@ import {
   studentAssessmentDto,
 } from './dto.js';
 import { pageParamsFrom } from '../lib/pagination.js';
+import { sortParamsFrom } from '../lib/sorting.js';
 import { idParam, parse } from './parse.js';
 
 /**
@@ -68,6 +69,8 @@ export function list(prisma: PrismaClient) {
       ...(q.mode ? { mode: q.mode } : {}),
       ...(q.q ? { q: q.q } : {}),
       ...pageParamsFrom(req.query as Record<string, unknown>),
+      // R198 §6 — the headers sort.
+      ...sortParamsFrom(req.query as Record<string, unknown>),
     });
     res.json({ data: result.data.map(assessmentListRowDto), meta: result.meta });
   };

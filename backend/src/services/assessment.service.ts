@@ -19,7 +19,7 @@ import {
   teacherEventScope,
 } from '../policies/roster-resolution.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
-import type { SortParams } from '../lib/sorting.js';
+import { resolveSort, type SortParams, type SortableFields } from '../lib/sorting.js';
 
 /**
  * **A simple online assessment — the paper, its audience, and the answers**
@@ -2244,6 +2244,27 @@ export interface AssessmentListRow {
   reusedCount: number;
 }
 
+/**
+ * What `GET /assessments` may be sorted by (R198 §6 — every header sorts).
+ * The Level in the Super Admin's order (its Category's place first, §2.2);
+ * the counts by `_count`; the mode by its declared order.
+ */
+export const ASSESSMENT_SORT_FIELDS: SortableFields = {
+  title: (dir) => [{ title: dir }],
+  date: (dir) => [{ date: dir }],
+  mode: (dir) => [{ mode: dir }],
+  status: (dir) => [{ status: dir }],
+  level: (dir) => [
+    { level: { category: { displayOrder: { sort: dir, nulls: 'last' } } } },
+    { level: { displayOrder: { sort: dir, nulls: 'last' } } },
+    { level: { name: dir } },
+  ],
+  subject: (dir) => [{ subject: { name: dir } }],
+  questions: (dir) => [{ questions: { _count: dir } }],
+  submissions: (dir) => [{ submissions: { _count: dir } }],
+  scale: (dir) => [{ maxGrade: dir }],
+};
+
 export interface AssessmentListFilters extends PageParams, SortParams {
   levelId?: string;
   subjectId?: string;
@@ -2356,7 +2377,7 @@ export async function listAssessments(
       // **Newest first, unlike the sitting list.** `GET /exams` is soonest-first
       // because a sitting is something coming up; a library is something you
       // return to, and what you return to is what you were last working on.
-      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      orderBy: resolveSort(ASSESSMENT_SORT_FIELDS, filters, [{ date: 'desc' }, { id: 'desc' }]) as never,
       select: {
         id: true,
         title: true,

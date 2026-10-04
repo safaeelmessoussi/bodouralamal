@@ -16,6 +16,7 @@ import {
 } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
+import { LEVEL_ADMIN_ORDER } from '../lib/sorting.js';
 
 /**
  * **Quran memorization tracking (§4.5, BR-11, BR-13; M4a, SRS R73/R107).**
@@ -706,7 +707,7 @@ export async function listQuranStudents(
         orderBy: { surahId: 'asc' },
       },
     },
-    orderBy: { name: 'asc' },
+    orderBy: [...LEVEL_ADMIN_ORDER],
   });
 
   return {

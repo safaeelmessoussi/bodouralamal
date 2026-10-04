@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { isValidElement, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
 import { Button } from './button.js';
@@ -189,11 +189,29 @@ export function DataTable<T>({
   // The platform's one ordering rule — see `orderActions`.
   const ordered = orderActions(actions);
 
-  const reorder = useReorder(rows, rowKey, onReorder ?? undefined, sort !== null, pagination?.total, onReorder !== null);
-  // R177 §6 — a local sort exists only where it is exact (the whole collection
-  // is on screen) and honest (no manual order to contradict).
-  const localSortable = pagination === undefined && onReorder === undefined;
+  /**
+   * **Every header sorts** (SRS Revision 198 §6, the Owner, 2026-10-04: «all
+   * the tables in the platform should all allow ordering by all headers»).
+   * A local sort exists where it is exact — the whole collection on screen —
+   * and, since R198, on a drag-to-reorder table too (R177 §6 withheld it
+   * there): the manual order is then simply not the one shown, so dragging
+   * waits until the reader returns to it (`ReorderStatus`).
+   */
+  // A paged table whose one page holds the whole collection is exact too.
+  const localSortable = pagination === undefined || pagination.total <= rows.length;
   const [localSort, setLocalSort] = useState<SortState | null>(null);
+  const reorder = useReorder(
+    rows,
+    rowKey,
+    onReorder ?? undefined,
+    sort !== null || localSort !== null,
+    pagination?.total,
+    onReorder !== null,
+  );
+  const clearSort = (): void => {
+    setLocalSort(null);
+    if (sort !== null) onSort?.(null);
+  };
   const displayed = useMemo(
     () => (localSortable && localSort ? sortLocally(reorder.rows, columns, localSort) : reorder.rows),
     [localSortable, localSort, reorder.rows, columns],
@@ -251,7 +269,6 @@ export function DataTable<T>({
                       offered: localSortable && offersLocalSort(column, rows),
                       active: localSort,
                       onToggle: setLocalSort,
-                      reorderable: onReorder !== undefined,
                     })}
                   </th>
                 ))}
@@ -384,7 +401,13 @@ export function DataTable<T>({
       )}
 
       {showGrip && status === 'ready' && rows.length > 0 ? (
-        <ReorderStatus block={reorder.block} busy={reorder.busy} error={reorder.error} />
+        <ReorderStatus
+          block={reorder.block}
+          busy={reorder.busy}
+          error={reorder.error}
+          sorted={sort !== null || localSort !== null}
+          onClearSort={clearSort}
+        />
       ) : null}
 
       {pagination && status === 'ready' && rows.length > 0 ? (
@@ -583,11 +606,27 @@ function ReorderStatus({
   block,
   busy,
   error,
+  sorted,
+  onClearSort,
 }: {
   block: ReorderBlock | null;
   busy: boolean;
   error: boolean;
+  sorted: boolean;
+  onClearSort: () => void;
 }): ReactNode {
+  // R198 §6 — a sorted reorderable table names the way back to the saved
+  // order, whatever else also stands in the way of dragging.
+  if (sorted && !busy && !error) {
+    return (
+      <p className="datatable__reorder muted" aria-live="polite">
+        {block === 'scope' ? t('common.reorder.blockedByScope') : t('common.reorder.blockedBySort')}{' '}
+        <Button variant="ghost" className="row-action" onClick={onClearSort}>
+          {t('common.reorder.clearSort')}
+        </Button>
+      </p>
+    );
+  }
   if (error) {
     return (
       <p className="datatable__reorder field__error" role="alert">
@@ -621,13 +660,31 @@ function localSortValue<T>(column: Column<T>): (row: T) => string | number | boo
   };
 }
 
-/** A column offers a local sort when it states a comparator, or when some row
- *  actually carries a primitive under its key — a computed cell with no field
- *  behind it offers none. */
+/**
+ * **The text a cell shows, as a sort value** (R198 §6) — for a column with no
+ * comparator and no field under its key, so every header sorts. A `<time>`
+ * gives its `dateTime` (chronological, not alphabetical); otherwise the
+ * strings and numbers the cell renders, in order. A component's own output is
+ * not rendered here: only what it is handed as children.
+ */
+export function textOf(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (isValidElement(node)) {
+    const props = node.props as { dateTime?: unknown; children?: ReactNode };
+    if (typeof props.dateTime === 'string') return props.dateTime;
+    return textOf(props.children);
+  }
+  return '';
+}
+
+/** A column offers a local sort when it states a comparator, when some row
+ *  carries a primitive under its key, or when its cells show any text. */
 function offersLocalSort<T>(column: Column<T>, rows: readonly T[]): boolean {
   if (column.sortValue) return true;
   const read = localSortValue(column);
-  return rows.some((row) => read(row) !== undefined);
+  return rows.some((row) => read(row) !== undefined || textOf(column.cell(row)).trim() !== '');
 }
 
 const ARABIC = new Intl.Collator('ar', { numeric: true, sensitivity: 'base' });
@@ -640,9 +697,12 @@ export function sortLocally<T>(rows: readonly T[], columns: readonly Column<T>[]
   const column = columns.find((c) => c.key === by.by);
   if (!column) return [...rows];
   const read = localSortValue(column);
-  // A column offering no comparator for a row (a computed cell with no field
-  // under its key) leaves the row where it was.
-  const keyed = rows.map((row, index) => ({ row, index, value: read(row) }));
+  // A row with no comparator value and no field under the key sorts by the
+  // text its cell shows (R198 §6).
+  const keyed = rows.map((row, index) => {
+    const own = read(row);
+    return { row, index, value: own !== undefined ? own : textOf(column.cell(row)).trim() };
+  });
   const dir = by.dir === 'asc' ? 1 : -1;
   keyed.sort((a, b) => {
     const empty = (v: unknown): boolean => v === null || v === undefined || v === '';
@@ -673,14 +733,11 @@ function renderHeader<T>(
     offered: boolean;
     active: SortState | null;
     onToggle: (next: SortState | null) => void;
-    reorderable: boolean;
   },
 ): ReactNode {
-  // R177 §6 (Owner) — a drag-to-reorder table offers NO header sorting: its
-  // order is chosen by hand, and a header that re-sorts it would contradict
-  // the one thing the table is for.
-  if (local.reorderable) return column.header;
-  if (local.offered && column.sortKey === undefined) {
+  // R198 §6 — a drag-to-reorder table sorts by its headers too (R177 §6's
+  // exclusion withdrawn); dragging waits for the saved order to be shown.
+  if (local.offered && (column.sortKey === undefined || onSort === undefined)) {
     const active = local.active !== null && local.active.by === column.key ? local.active.dir : null;
     return (
       <SortHeader

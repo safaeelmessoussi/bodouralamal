@@ -48,15 +48,61 @@ export interface FileUploaderProps {
   token: string | null;
   /** Prefilled when replacing: the record keeps its title unless changed. */
   initialTitle?: string;
-  /** R178 §4 — a composed title the field shows and follows until the person types. */
+  /** R178 §4 — a composed title each file's field shows and follows until typed in. */
   suggestedTitle?: string;
   initialDescription?: string;
   submitLabel: string;
-  onUploaded: (contentId: string) => void;
+  /** Once every chosen file is uploaded — their ids, in the order chosen. */
+  onUploaded: (contentIds: string[]) => void;
   onCancel: () => void;
-  /** Blocks submission with a stated reason — an incomplete scope above the
-   *  form, rather than a button that fails on click. */
+  /** Blocks submission with a stated reason — a curriculum state the person
+   *  must fix first (a Level that teaches nothing), never a missing choice. */
   disabledReason?: string | null;
+  /** Blocks submission silently: a required field (marked *) is still empty. */
+  incomplete?: boolean;
+  /** R53 — a replacement swaps ONE file on one record. */
+  single?: boolean;
+}
+
+/**
+ * **One chosen file, and what it will be saved as** (SRS Revision 198 §1).
+ * Each file says on its own whether it is a class recording, and carries its
+ * own title and description; the scope above is shared by all of them.
+ */
+interface Item {
+  key: number;
+  file: File | null;
+  isRecording: boolean;
+  title: string;
+  titleTouched: boolean;
+  description: string;
+  stage: UploadStage;
+  percent: number;
+  error: string | null;
+  contentId: string | null;
+}
+
+let nextKey = 1;
+function blankItem(title: string, touched: boolean, description: string): Item {
+  return {
+    key: nextKey++,
+    file: null,
+    isRecording: false,
+    title,
+    titleTouched: touched,
+    description,
+    stage: 'idle',
+    percent: 0,
+    error: null,
+    contentId: null,
+  };
+}
+
+/** The suggestion for the i-th of n files: numbered when there are several,
+ *  so two files are never proposed the same title. */
+function suggestionFor(suggestedTitle: string, index: number, count: number): string {
+  if (suggestedTitle === '') return '';
+  return count > 1 ? `${suggestedTitle} (${String(index + 1)})` : suggestedTitle;
 }
 
 export function FileUploader({
@@ -69,76 +115,113 @@ export function FileUploader({
   onUploaded,
   onCancel,
   disabledReason = null,
+  incomplete = false,
+  single = false,
 }: FileUploaderProps): ReactNode {
-  const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState(initialTitle || suggestedTitle);
-  const [titleTouched, setTitleTouched] = useState(initialTitle !== '');
-  useEffect(() => {
-    if (!titleTouched) setTitle(suggestedTitle);
-  }, [suggestedTitle, titleTouched]);
-  const [description, setDescription] = useState(initialDescription);
-  /**
-   * **R99.12 — the upload boundary must be able to say *this is a class
-   * recording*.**
-   *
-   * §4.9's MVP flow is a مؤطِّرة recording on her phone and uploading the file,
-   * and since R99.10 «التسجيلات» is decided by `origin` rather than by the MIME
-   * type. Without this control every phone recording uploaded after that
-   * revision would arrive as a *material* — a regression dressed as a
-   * refinement. It defaults to off: most uploads are materials, and a marker
-   * that defaults to on would misclassify the common case instead of the rare
-   * one.
-   */
-  const [isRecording, setIsRecording] = useState(false);
-  const [stage, setStage] = useState<UploadStage>('idle');
-  const [percent, setPercent] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  // There is always one item, so the title and description are there from
+  // the start (the composed title shows before a file is picked).
+  const [items, setItems] = useState<Item[]>(() => [
+    blankItem(initialTitle || suggestedTitle, initialTitle !== '', initialDescription),
+  ]);
+  const [running, setRunning] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const busy = stage === 'preparing' || stage === 'uploading' || stage === 'finalising';
+  // An untouched title follows the composed one as the scope above changes.
+  useEffect(() => {
+    setItems((current) =>
+      current.map((item, index) =>
+        item.titleTouched || suggestedTitle === ''
+          ? item
+          : { ...item, title: suggestionFor(suggestedTitle, index, current.length) },
+      ),
+    );
+  }, [suggestedTitle, items.length]);
 
-  function chooseFile(chosen: File | null): void {
-    setFile(chosen);
-    setError(null);
-    setStage('idle');
-    setPercent(0);
-    // The filename is the best first guess at a title and the worst thing to
-    // leave a person retyping. The extension goes: it names the format, which
-    // the card already shows.
-    if (chosen && title.trim() === '') setTitle(chosen.name.replace(/\.[^.]+$/, ''));
+  const update = (key: number, patch: Partial<Item>): void =>
+    setItems((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+
+  function chooseFiles(chosen: File[]): void {
+    if (chosen.length === 0) return;
+    setItems((current) => {
+      const picked = single ? chosen.slice(0, 1) : chosen;
+      // The empty slots take the first files; the rest are added after them.
+      const empty = current.filter((item) => item.file === null);
+      const filled = single ? [] : current.filter((item) => item.file !== null);
+      const slots = [...empty];
+      while (slots.length < picked.length) slots.push(blankItem('', false, ''));
+      const placed = picked.map((file, i) => {
+        const slot = slots[i] as Item;
+        // The filename is the best first guess when nothing is composed — and
+        // the worst thing to leave a person retyping. The extension names the
+        // format, which the card already shows.
+        const fallback = file.name.replace(/\.[^.]+$/, '');
+        return {
+          ...slot,
+          file,
+          stage: 'idle' as const,
+          percent: 0,
+          error: null,
+          title: slot.titleTouched || slot.title !== '' ? slot.title : fallback,
+        };
+      });
+      const remaining = slots.slice(picked.length).filter((slot) => slot.file !== null);
+      return [...filled, ...placed, ...remaining];
+    });
+    // The same file may be picked again after it is removed.
+    if (inputRef.current) inputRef.current.value = '';
   }
+
+  function remove(key: number): void {
+    setItems((current) => {
+      const left = current.filter((item) => item.key !== key);
+      return left.length > 0 ? left : [blankItem(suggestedTitle, false, '')];
+    });
+  }
+
+  const pending = items.filter((item) => item.contentId === null);
+  const ready =
+    pending.length > 0 &&
+    pending.every((item) => item.file !== null && item.title.trim() !== '');
 
   async function submit(): Promise<void> {
-    if (!file || title.trim() === '') return;
-    setError(null);
-    setPercent(0);
-    try {
-      const id = await uploadFile(
-        file,
-        { ...meta, ...(isRecording ? { origin: 'session_recording' as const } : {}) },
-        { title: title.trim(), description: description.trim() || null },
-        token,
-        setPercent,
-        setStage,
-      );
-      onUploaded(id);
-    } catch (e) {
-      setStage('failed');
-      setError(uploadErrorMessage(e));
+    if (!ready) return;
+    setRunning(true);
+    const ids = new Map(items.filter((i) => i.contentId !== null).map((i) => [i.key, i.contentId as string]));
+    let failed = false;
+    // One after another: each is its own initiate → PUT → complete (TD-3.5),
+    // and the per-person quota (TD-4.12) counts each.
+    for (const item of pending) {
+      if (item.file === null) continue;
+      update(item.key, { error: null, percent: 0 });
+      try {
+        const id = await uploadFile(
+          item.file,
+          { ...meta, ...(item.isRecording ? { origin: 'session_recording' as const } : {}) },
+          { title: item.title.trim(), description: item.description.trim() || null },
+          token,
+          (percent) => update(item.key, { percent }),
+          (stage) => update(item.key, { stage }),
+        );
+        ids.set(item.key, id);
+        update(item.key, { contentId: id, stage: 'done' });
+      } catch (e) {
+        failed = true;
+        update(item.key, { stage: 'failed', error: uploadErrorMessage(e) });
+      }
     }
+    setRunning(false);
+    if (!failed) onUploaded(items.map((item) => ids.get(item.key)).filter((id): id is string => id !== undefined));
   }
+
+  const anyFailed = items.some((item) => item.stage === 'failed');
 
   return (
     <div className="uploader">
-      {disabledReason ? (
-        <Feedback>
-          {disabledReason}
-        </Feedback>
-      ) : null}
+      {disabledReason ? <Feedback>{disabledReason}</Feedback> : null}
 
       <div className="field">
         <label className="field__label" htmlFor="uploader-file">
-          {t('content.upload.file')}
+          {t(single ? 'content.upload.file' : 'content.upload.files')}
         </label>
         <input
           id="uploader-file"
@@ -146,75 +229,93 @@ export function FileUploader({
           className="field__control"
           type="file"
           accept={ACCEPT}
-          disabled={busy}
-          onChange={(e) => chooseFile(e.target.files?.[0] ?? null)}
+          multiple={!single}
+          disabled={running}
+          onChange={(e) => chooseFiles([...(e.target.files ?? [])])}
         />
         <p className="field__hint">{t('content.upload.limits')}</p>
       </div>
 
-      {/* §4.9: teachers record on their phone and upload the file — the in-app
-          recorder is post-MVP, so the guidance is part of the screen. */}
+      {/* §4.9: teachers record on their phone and upload the file — the
+          guidance is part of the screen. */}
       <p className="muted">{t('content.upload.recordingGuidance')}</p>
 
-      {/* R99.12 — beside that guidance on purpose: the sentence tells a مؤطِّرة
-          to upload what she recorded on her phone, and this is where she says
-          that is what it is. */}
-      <CheckboxField
-        label={t('content.upload.isRecording')}
-        checked={isRecording}
-        onChange={setIsRecording}
-        hint={t('content.upload.isRecordingHint')}
-        disabled={busy}
-      />
+      {items.map((item) => {
+        const done = item.contentId !== null;
+        const locked = running || done;
+        return (
+          <fieldset key={item.key} className="uploader__item">
+            {item.file !== null ? (
+              <legend className="uploader__item-name">
+                <span dir="auto">{item.file.name}</span>
+                {done ? <span className="muted"> — {t('content.upload.stage.done')}</span> : null}
+              </legend>
+            ) : null}
 
-      <TextField
-        label={t('content.upload.title')}
-        value={title}
-        onChange={(next) => {
-          setTitleTouched(true);
-          setTitle(next);
-        }}
-        required
-        disabled={busy}
-        {...(suggestedTitle !== '' && !titleTouched ? { hint: t('content.upload.titleSuggested') } : {})}
-      />
-      <TextArea
-        label={t('content.upload.description')}
-        value={description}
-        onChange={setDescription}
-        rows={3}
-        disabled={busy}
-      />
+            {/* R99.12 — where she says that what she recorded on her phone is
+                a class recording; per file since R198 §1. */}
+            <CheckboxField
+              label={t('content.upload.isRecording')}
+              checked={item.isRecording}
+              onChange={(isRecording) => update(item.key, { isRecording })}
+              hint={t('content.upload.isRecordingHint')}
+              disabled={locked}
+            />
 
-      {stage !== 'idle' && stage !== 'failed' ? (
-        <div className="uploader__progress">
-          {/* A real progress element, so assistive technology reads the value
-              rather than inferring it from a styled div. */}
-          <progress value={stage === 'uploading' ? percent : undefined} max={100} />
-          <span aria-live="polite">
-            {stage === 'uploading'
-              ? `${String(percent)}٪`
-              : t(`content.upload.stage.${stage}`)}
-          </span>
-        </div>
-      ) : null}
+            <TextField
+              label={t('content.upload.title')}
+              value={item.title}
+              onChange={(title) => update(item.key, { title, titleTouched: true })}
+              required
+              disabled={locked}
+              {...(suggestedTitle !== '' && !item.titleTouched ? { hint: t('content.upload.titleSuggested') } : {})}
+            />
+            <TextArea
+              label={t('content.upload.description')}
+              value={item.description}
+              onChange={(description) => update(item.key, { description })}
+              rows={3}
+              disabled={locked}
+            />
 
-      {error ? (
-        <p className="field__error" role="alert">
-          {error}
-        </p>
-      ) : null}
+            {item.stage !== 'idle' && item.stage !== 'failed' && item.stage !== 'done' ? (
+              <div className="uploader__progress">
+                {/* A real progress element, so assistive technology reads the
+                    value rather than inferring it from a styled div. */}
+                <progress value={item.stage === 'uploading' ? item.percent : undefined} max={100} />
+                <span aria-live="polite">
+                  {item.stage === 'uploading' ? `${String(item.percent)}٪` : t(`content.upload.stage.${item.stage}`)}
+                </span>
+              </div>
+            ) : null}
+
+            {item.error ? (
+              <p className="field__error" role="alert">
+                {item.error}
+              </p>
+            ) : null}
+
+            {!single && !locked && (item.file !== null || items.length > 1) ? (
+              <div className="form__actions">
+                <Button variant="ghost" onClick={() => remove(item.key)}>
+                  {t('content.upload.removeFile')}
+                </Button>
+              </div>
+            ) : null}
+          </fieldset>
+        );
+      })}
 
       <div className="dialog__actions">
-        <Button variant="ghost" onClick={onCancel} disabled={busy}>
+        <Button variant="ghost" onClick={onCancel} disabled={running}>
           {t('common.cancel')}
         </Button>
         <Button
           variant="primary"
           onClick={() => void submit()}
-          disabled={busy || !file || title.trim() === '' || disabledReason !== null}
+          disabled={running || !ready || disabledReason !== null || incomplete}
         >
-          {stage === 'failed' ? t('content.upload.retry') : submitLabel}
+          {anyFailed ? t('content.upload.retry') : submitLabel}
         </Button>
       </div>
     </div>

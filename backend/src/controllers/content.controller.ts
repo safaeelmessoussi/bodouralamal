@@ -47,7 +47,11 @@ export function initiate(prisma: PrismaClient, clients: StorageClients, config: 
           ...(body.content_meta.surah_id !== undefined && body.content_meta.surah_id !== null
             ? { surahId: body.content_meta.surah_id }
             : {}),
-          branchId: body.content_meta.branch_id,
+          // R198 §2 — `branch_ids` (the first is home; `[]` is Global), or the
+          // single `branch_id` it generalises.
+          branchIds:
+            body.content_meta.branch_ids ??
+            (body.content_meta.branch_id == null ? [] : [body.content_meta.branch_id]),
           ...(body.content_meta.visibility ? { visibility: body.content_meta.visibility } : {}),
           ...(body.content_meta.origin ? { origin: body.content_meta.origin } : {}),
           ...(body.content_meta.replaces_content_id

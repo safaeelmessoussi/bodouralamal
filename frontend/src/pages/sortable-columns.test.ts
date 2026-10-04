@@ -89,10 +89,10 @@ const PAGES: { label: string; path: string; sortable: string[]; never: string[] 
   {
     label: 'مكتبة المحتوى',
     path: '/src/pages/content.tsx',
-    sortable: ['title', 'branch', 'size', 'created'],
-    // Enums whose alphabetical order is not their meaningful one — the
-    // reasoning that kept `account_status` off المستخدمون. Both have filters.
-    never: ['kind', 'visibility'],
+    // R198 §6 (the Owner: every header sorts) — `kind` by MIME type and
+    // `visibility` by openness, never by their labels' alphabet.
+    sortable: ['title', 'branch', 'size', 'created', 'kind', 'visibility'],
+    never: [],
   },
   {
     label: 'نقاط الامتحانات',

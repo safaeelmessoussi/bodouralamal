@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
+import { sortParamsFrom } from '../lib/sorting.js';
 import { listTrash, purgeEntry, restoreEntry } from '../services/trash.service.js';
 import { pageOf, trashEntryDto } from './dto.js';
 import { idParam, parse } from './parse.js';
@@ -49,6 +50,8 @@ export function list(prisma: PrismaClient) {
       ...(q.view ? { view: q.view } : {}),
       ...(q.page ? { page: q.page } : {}),
       ...(q.page_size ? { pageSize: q.page_size } : {}),
+      // R198 §6 — the headers sort.
+      ...sortParamsFrom(req.query),
     });
     res.json(pageOf(result, trashEntryDto));
   };

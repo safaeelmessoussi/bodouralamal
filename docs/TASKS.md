@@ -69,7 +69,7 @@ Ends when the Moroccan VPS exists: restore there, OVH returns to Staging, the si
 | E6 | `verify-backup-restore.sh` into hosted CI; integration/backup stacks off ephemeral host ports (55438, 58083, 59005, 59006) | S |
 | E7 | «حالة النظام»: backup freshness + certificate expiry via a host-published status file (blocked on D7) | M |
 | E9 | `admin-modules.test.ts` «every ready module has a screen» failed once in a full run (dynamic import), passed alone and on re-run — make it order-independent | S |
-| E10 | Tables (R177 §6, Owner 2026-09-29): widen `sort_by` allow-lists so the paged lists (users, approvals, enrollments, teachers, scheduling, content) sort by every column; add the «maximum related details» columns per table — which columns is the Owner's per table; resizable columns recommended against | M |
+| E10 | Tables (R198 §6 built the rest): server sort still missing for columns that are sets or derived — users (e-mail, roles, branches), approvals (type, bundle, branch, requested, framing; three sources merged per page), Trash (record label in per-entity JSONB, purgeable/restorable) — they sort on screen only once one page holds the whole list; add the «maximum related details» columns per table — which columns is the Owner's per table | M |
 
 ## Launch gate (§18/§19 — when go-live is lifted)
 

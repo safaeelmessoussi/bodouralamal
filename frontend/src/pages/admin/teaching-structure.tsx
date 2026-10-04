@@ -314,6 +314,7 @@ export function TeachingStructurePage({
     },
     {
       key: 'branch',
+      sortKey: 'branch',
       header: t('admin.groups.colBranch'),
       // R172 §15 — `null` for a circle from before the column, until an edit
       // places it; the em dash is the platform's «not stated».
@@ -321,6 +322,7 @@ export function TeachingStructurePage({
     },
     {
       key: 'members',
+      sortKey: 'members',
       header: t('admin.subjectOrg.colMembers'),
       numeric: true,
       cell: (r) => r.member_count,

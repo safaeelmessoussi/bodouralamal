@@ -123,6 +123,7 @@ export function BranchesPage(): ReactNode {
     },
     {
       key: 'address',
+      sortKey: 'address',
       header: t('admin.branches.colAddress'),
       secondary: true,
       cell: (r) => r.address ?? <span className="muted">{t('common.notSet')}</span>,
@@ -157,6 +158,7 @@ export function BranchesPage(): ReactNode {
      */
     {
       key: 'phone',
+      sortKey: 'phone',
       header: t('admin.branches.phone'),
       secondary: true,
       cell: (r) => r.phone ?? <span className="muted">{t('common.notSet')}</span>,
@@ -170,18 +172,21 @@ export function BranchesPage(): ReactNode {
        * database gives it its own column rather than overloading `phone`.
        */
       key: 'phone_secondary',
+      sortKey: 'phone_secondary',
       header: t('admin.branches.phoneSecondary'),
       cell: (r) =>
         r.phone_secondary ?? <span className="muted">{t('common.notSet')}</span>,
     },
     {
       key: 'email',
+      sortKey: 'email',
       header: t('admin.branches.email'),
       secondary: true,
       cell: (r) => r.email ?? <span className="muted">{t('common.notSet')}</span>,
     },
     {
       key: 'hours',
+      sortKey: 'opening_hours',
       header: t('admin.branches.openingHours'),
       secondary: true,
       cell: (r) => r.opening_hours_ar ?? <span className="muted">{t('common.notSet')}</span>,
@@ -190,6 +195,7 @@ export function BranchesPage(): ReactNode {
       // A URL is unreadable as text and useful as a link, so the cell renders
       // the affordance rather than 90 characters of query string.
       key: 'map',
+      sortKey: 'maps_url',
       header: t('admin.branches.mapsUrl'),
       secondary: true,
       cell: (r) =>

@@ -1094,6 +1094,9 @@ export interface LibraryItemDto {
   academic_year_id: string;
   /** `null` is **Global**, not unknown (§7) — it renders as its own container. */
   branch_id: string | null;
+  /** R198 §2 — the item's OTHER branches, in the branches' own order;
+   *  `branch_id` is its home. `[]` for one branch or Global. */
+  additional_branches: { id: string; name: string }[];
   mime_type: string;
   size_bytes: number;
   /** An instant, correctly — an upload happens at a moment (cf. TD-11). */
@@ -1148,6 +1151,7 @@ export function libraryItemDto(row: {
   subjectId: string | null;
   academicYearId: string;
   branchId: string | null;
+  additionalBranches: { id: string; name: string }[];
   mimeType: string;
   sizeBytes: bigint;
   createdAt: Date;
@@ -1178,6 +1182,7 @@ export function libraryItemDto(row: {
     subject_id: row.subjectId,
     academic_year_id: row.academicYearId,
     branch_id: row.branchId,
+    additional_branches: row.additionalBranches,
     mime_type: row.mimeType,
     // `BigInt` has no JSON representation and would throw on serialisation;
     // a file size fits a double long before it reaches the TD-9 cap.

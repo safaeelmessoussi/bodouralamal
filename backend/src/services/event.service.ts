@@ -15,6 +15,7 @@ import * as trash from '../repositories/trash.repository.js';
 import type { Actor } from '../policies/actor.js';
 import { assertActivityType, assertMarkingAllowedForType } from './scheduling-type.service.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
+import { GROUP_ADMIN_ORDER } from '../lib/sorting.js';
 
 /**
  * Events — the exception/special-activity layer (SRS §4.4, §7, TD-2, TD-5, TD-11).
@@ -1186,7 +1187,7 @@ export async function listEventScopeOptions(
   const rows = await prisma.administrativeGroup.findMany({
     where: { id: { in: mine.administrativeGroupIds }, deletedAt: null },
     select: { id: true, name: true, level: { select: { name: true } } },
-    orderBy: { name: 'asc' },
+    orderBy: [...GROUP_ADMIN_ORDER],
   });
   // **`{Level} — {Group}`** (rule D): a group's name is not unique across
   // Levels, so a bare one does not identify it.

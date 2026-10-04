@@ -2077,7 +2077,7 @@ describe("R111/R133 — deleting an account keeps the ROW, not her history", () 
               levelId: curriculum.levelId,
               subjectId: curriculum.subjectId,
               academicYearId: year.id,
-              branchId,
+              branchIds: [branchId],
             },
           },
         ),

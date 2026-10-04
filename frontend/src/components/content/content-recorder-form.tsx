@@ -64,7 +64,10 @@ export function ContentRecorderForm({
   onSaved: () => void;
   onCancel: () => void;
 }): ReactNode {
-  const { fields, meta, problem, suggestedTitle } = useContentScope({ token, mayAssignGlobal, initial });
+  const { fields, meta, problem, suggestedTitle, complete } = useContentScope({ token, mayAssignGlobal, initial });
+  // A recording already made waits for its fields: said only once it is
+  // stopped and cannot be saved (the upload form marks them * instead).
+  const blockedReason = problem ?? (complete ? null : t('recorder.completeFields'));
 
   return (
     <>
@@ -82,7 +85,7 @@ export function ContentRecorderForm({
         // R178 §4 — the scope's own composed title first; the library's
         // server-side suggestion when the scope names nothing yet.
         suggestedName={suggestedTitle || suggestedName}
-        saveBlockedReason={problem}
+        saveBlockedReason={blockedReason}
         onSaved={onSaved}
         onCancel={onCancel}
       />

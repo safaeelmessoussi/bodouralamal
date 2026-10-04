@@ -229,12 +229,12 @@ export function SessionMaterialsDialog({
           token={token}
           submitLabel={t('content.upload.action')}
           onCancel={() => setUploading(false)}
-          onUploaded={(contentId) =>
+          onUploaded={(contentIds) =>
             void run(async () => {
               // Upload then link, in that order: the item exists in the library
               // regardless, and a failed link leaves a usable file rather than
-              // an orphaned upload.
-              await linkSessionContent(sessionId ?? '', contentId, token);
+              // an orphaned upload. R198 §1 — each file chosen, in turn.
+              for (const contentId of contentIds) await linkSessionContent(sessionId ?? '', contentId, token);
               setUploading(false);
             })
           }
