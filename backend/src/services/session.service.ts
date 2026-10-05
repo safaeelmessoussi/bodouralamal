@@ -748,7 +748,8 @@ export async function restoreSession(
       id: sessionId,
       expectedVersion: version,
       requireNotDeleted: true,
-      data: { status: "scheduled" },
+      // R199 §5 — an administrator's choice for this date wins over a عطلة.
+      data: { status: "scheduled", cancelledByEventId: null },
     });
     // R77.5 — an unread notice of something no longer true is withdrawn; one
     // already read is CORRECTED instead, because silently removing it would

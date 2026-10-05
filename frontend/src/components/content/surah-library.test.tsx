@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { LibraryEntry } from '../../adapters/content.js';
 import { ar } from '../../i18n/ar.js';
 import RESOURCES_SOURCE from '../../pages/resources.tsx?raw';
-import { groupBySurah, SurahLibrary } from './surah-library.js';
+import { byTitle, groupBySurah, SurahLibrary } from './surah-library.js';
 
 /** R196 — the library read by Surah. */
 const entry = (id: string, surah: number | null, mime: string, shelf = 'L1'): LibraryEntry => ({
@@ -49,8 +49,15 @@ describe('groupBySurah', () => {
   it('keeps only items about a Surah, in Mushaf order, each item once', () => {
     const groups = groupBySurah(ENTRIES);
     expect(groups.map((g) => g.id)).toEqual([2, 36]);
-    // Server order is newest first; a Surah reads oldest first.
-    expect(groups[0]!.items.map((i) => i.id)).toEqual(['e', 'c', 'b']);
+    // R199 §3 — a Surah's items in their titles' order.
+    const titles = groups[0]!.items.map((i) => i.title);
+    expect(titles).toEqual([...titles].sort((a, b) => byTitle({ title: a }, { title: b })));
+  });
+
+  it('R199 §3 — orders by title, numbers read as numbers, whatever the upload order', () => {
+    const lesson = (n: number) => ({ title: `تسجيل تفسير سورة الفاتحة — الحصة ${n}  — 2025 - 2026` });
+    const shuffled = [10, 2, 1, 11, 3].map(lesson);
+    expect(shuffled.sort(byTitle).map((x) => x.title.match(/الحصة (\d+)/)![1])).toEqual(['1', '2', '3', '10', '11']);
   });
 });
 

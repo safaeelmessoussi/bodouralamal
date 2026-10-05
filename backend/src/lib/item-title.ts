@@ -61,7 +61,9 @@ export const ALL_SUBJECTS = 'كل المواد';
 
 export function audienceTitle(circleName: string | null | undefined, groupName: string | null | undefined): string | null {
   const circle = clean(circleName);
-  if (circle !== '') return `${CIRCLE_WORD} ${circle}`;
+  // R199 §4 (the Owner) — a circle whose name already says «حلقة» is not
+  // prefixed again: «الحلقة الحلقة 1» doubled the word on every chip.
+  if (circle !== '') return circle.includes('حلقة') ? circle : `${CIRCLE_WORD} ${circle}`;
   const group = clean(groupName);
   return group === '' ? null : group;
 }

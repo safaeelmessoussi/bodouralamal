@@ -35,6 +35,9 @@ export interface Column<T> {
   /** Hidden below the narrow breakpoint — for columns that are context rather
    *  than identity. The first column should never set this. */
   secondary?: boolean;
+  /** R199 §9 — a column of running text (an audience, a list of names) that
+   *  must not be squeezed into a narrow strip. */
+  wide?: boolean;
   /**
    * **The contract field this column sorts by** (R76.1) — `sort_by=<this>`.
    *
@@ -191,12 +194,14 @@ export function DataTable<T>({
 
   /**
    * **Every header sorts** (SRS Revision 198 §6, the Owner, 2026-10-04: «all
-   * the tables in the platform should all allow ordering by all headers»).
-   * A local sort exists where it is exact — the whole collection on screen —
-   * and, since R198, on a drag-to-reorder table too (R177 §6 withheld it
-   * there): the manual order is then simply not the one shown, so dragging
-   * waits until the reader returns to it (`ReorderStatus`).
+   * the tables in the platform should all allow ordering by all headers») —
+   * **except where the rows can be dragged** (R199 §6, 2026-10-05: «remove the
+   * ordering by header from tables allowing to drag and drop»): there the
+   * saved order is the point. A table whose drag waits for a filter (Groups,
+   * circles: `onReorder: null`) sorts until the filter makes it draggable.
+   * A local sort exists where it is exact — the whole collection on screen.
    */
+  const draggable = typeof onReorder === 'function';
   // A paged table whose one page holds the whole collection is exact too.
   const localSortable = pagination === undefined || pagination.total <= rows.length;
   const [localSort, setLocalSort] = useState<SortState | null>(null);
@@ -208,6 +213,13 @@ export function DataTable<T>({
     pagination?.total,
     onReorder !== null,
   );
+  // The moment the rows become draggable, the saved order is what is shown.
+  useEffect(() => {
+    if (!draggable) return;
+    setLocalSort(null);
+    if (sort !== null) onSort?.(null);
+    // Only on becoming draggable: a sort is no longer offered while it is.
+  }, [draggable]);
   const clearSort = (): void => {
     setLocalSort(null);
     if (sort !== null) onSort?.(null);
@@ -260,13 +272,13 @@ export function DataTable<T>({
                         ? sort.dir === 'asc'
                           ? 'ascending'
                           : 'descending'
-                        : column.sortKey
+                        : column.sortKey && !draggable
                           ? 'none'
                           : undefined
                     }
                   >
-                    {renderHeader(column, sort, onSort, {
-                      offered: localSortable && offersLocalSort(column, rows),
+                    {renderHeader(column, sort, draggable ? undefined : onSort, {
+                      offered: !draggable && localSortable && offersLocalSort(column, rows),
                       active: localSort,
                       onToggle: setLocalSort,
                     })}
@@ -735,8 +747,6 @@ function renderHeader<T>(
     onToggle: (next: SortState | null) => void;
   },
 ): ReactNode {
-  // R198 §6 — a drag-to-reorder table sorts by its headers too (R177 §6's
-  // exclusion withdrawn); dragging waits for the saved order to be shown.
   if (local.offered && (column.sortKey === undefined || onSort === undefined)) {
     const active = local.active !== null && local.active.by === column.key ? local.active.dir : null;
     return (
@@ -841,7 +851,7 @@ function SortGlyph({ active }: { active: 'asc' | 'desc' | null }): ReactNode {
 }
 
 function cellClass<T>(column: Column<T>): string {
-  return [column.numeric ? 'is-numeric' : '', column.secondary ? 'is-secondary' : '']
+  return [column.numeric ? 'is-numeric' : '', column.secondary ? 'is-secondary' : '', column.wide ? 'is-wide' : '']
     .filter(Boolean)
     .join(' ');
 }

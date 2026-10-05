@@ -30,6 +30,12 @@ export interface SurahGroup {
   items: (ContentItem & { subjectName: string | null })[];
 }
 
+const TITLE_ORDER = new Intl.Collator('ar', { numeric: true, sensitivity: 'base', ignorePunctuation: true });
+/** R199 §3 — items in their titles' order, numbers compared as numbers. Stable. */
+export function byTitle(a: { title: string }, b: { title: string }): number {
+  return TITLE_ORDER.compare(a.title.replace(/\s+/g, ' ').trim(), b.title.replace(/\s+/g, ' ').trim());
+}
+
 /** The Surahs that have content, in Mushaf order, each item once. */
 export function groupBySurah(entries: readonly LibraryEntry[]): SurahGroup[] {
   const groups = new Map<number, SurahGroup>();
@@ -46,9 +52,14 @@ export function groupBySurah(entries: readonly LibraryEntry[]): SurahGroup[] {
     }
     group.items.push({ ...entry.item, subjectName: entry.subject_name });
   }
-  // The library answers newest first; a Surah is studied from its first
-  // lesson on, so each Surah's items read oldest first.
-  for (const group of groups.values()) group.items.reverse();
+  // R199 §3 (the Owner) — a Surah's recordings in TITLE order, numbers read
+  // as numbers («الحصة 2» before «الحصة 10»), so the order is the one the
+  // titles say whatever order the files were uploaded in; equal titles keep
+  // the oldest first (the library answers newest first).
+  for (const group of groups.values()) {
+    group.items.reverse();
+    group.items.sort(byTitle);
+  }
   return [...groups.values()].sort((a, b) => a.id - b.id);
 }
 

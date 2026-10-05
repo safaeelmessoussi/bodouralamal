@@ -2187,6 +2187,11 @@ model Session {
 
   /// Mandatory on cancel (TD-8 `session.cancel`).
   cancellationReason String? @map("cancellation_reason") @db.VarChar(500)
+  /// R199 §5 — the عطلة that cancelled this occurrence, or NULL when a person
+  /// did. What lets the holiday's edit, deletion or restore undo exactly its
+  /// own cancellations (CHECK: only while `cancelled`).
+  cancelledByEventId String? @map("cancelled_by_event_id") @db.Uuid
+  cancelledByEvent   Event?  @relation("HolidayCancellations", fields: [cancelledByEventId], references: [id], onDelete: SetNull)
 
   version Int @default(0)
 
@@ -3169,6 +3174,8 @@ model Event {
 
   /// R82 — the notices sent about this event, if the actor chose to send any.
   notifications Notification[]
+  /// R199 §5 — the occurrences this عطلة cancelled.
+  cancelledSessions Session[] @relation("HolidayCancellations")
 
   @@index([startDate, visibility])
   @@map("event")

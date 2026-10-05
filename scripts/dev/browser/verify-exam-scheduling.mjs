@@ -549,11 +549,11 @@ if (physicalDraftId) {
 
   const paperBefore = await fieldSnapshot('ورقة الاختبار');
   check(
-    'C3 · the physical paper picker is OPTIONAL — no required mark, «بلا ورقة مُعدَّة» offered',
+    'C3 · the physical paper picker is OPTIONAL — no required mark, «بدون» offered',
     paperBefore.present === true &&
       paperBefore.required === false &&
       paperBefore.hasAsterisk === false &&
-      (paperBefore.optionTexts ?? []).includes('بلا ورقة مُعدَّة'),
+      (paperBefore.optionTexts ?? []).includes('بدون'),
     JSON.stringify(paperBefore),
   );
 
@@ -685,7 +685,7 @@ if (physicalDraftId) {
   check('D3 · طريقة الأداء is (still) حضوري by default', mode.present === true && mode.selectedText === 'حضوري', JSON.stringify(mode));
 
   const paper = await fieldSnapshot('ورقة الاختبار');
-  check('D4 · the paper picker starts at «بلا ورقة مُعدَّة» — no source chosen', paper.present === true && paper.value === '', JSON.stringify(paper));
+  check('D4 · the paper picker starts at «بدون» — no source chosen', paper.present === true && paper.value === '', JSON.stringify(paper));
 
   // SRS Revision 166 §3 — a bare sitting is no longer GIVEN a title: the form
   // does not ask for one, and the server calls it what it is. «الوصف» is where

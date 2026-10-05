@@ -235,6 +235,11 @@
   gap: var(--space-4);
 }
 
+/* R199 §9 — running text (an audience) keeps a readable width. */
+.admin-table .is-wide {
+  min-inline-size: 14rem;
+}
+
 .admin-table .is-numeric {
   text-align: end;
   font-variant-numeric: tabular-nums;

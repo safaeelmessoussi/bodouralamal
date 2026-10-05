@@ -50,13 +50,13 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 - Exception: cells holding live form controls bound to per-row draft state — grade sheet, Quran log editor, Hijri month editor — allowlisted in the guard; a fourth means build an editable-table primitive. A calendar month grid is a `<table>`, not a list.
 
 ## AF · Ordering a list: sort is a question, drag is a decision
-- Column sort is a temporary view: header is a `<button>`, asc → desc → asc (never back to unsorted), `aria-sort` on the `<th>`, every column sorts (SRS §14.3b, R198 §6), never actions; a paged list sorts on the server (`?sort_by=&sort_dir=`).
+- Column sort is a temporary view: header is a `<button>`, asc → desc → asc (never back to unsorted), `aria-sort` on the `<th>`, every column sorts (SRS §14.3b, R198 §6) — none where the rows can be dragged (R199 §6: `onReorder` a function; a table whose drag waits for a filter, `onReorder: null`, sorts and drops its sort when it becomes draggable) — never actions; a paged list sorts on the server (`?sort_by=&sort_dir=`).
 - Drag is a persisted decision: «الترتيب» is no longer a typed number; the grip is a `<button>` with ↑/↓ (native drag is mouse-only); the client sends the sequence, the server assigns `display_order`; the optimistic order holds until the returned rows agree.
 - `DataTable` derives the blocks itself and a blocked handle is disabled and explained, never hidden: `sorted` (visible order is not the business one; the status line offers «العودة إلى الترتيب المحفوظ») · `paged` (the server takes the exact live set) · `scope` (`Level` and `AdministrativeGroup` order within a parent, §2.2).
 
 ### Which tables sort, and which deliberately do not
 - Server-side wherever the list is paged (R76.1): a sortable column is an endpoint contract (`sortKey`).
-- Local, exact, wherever the table holds the whole collection (R177 §6, R198 §6): an unpaged `DataTable` — or a paged one whose page holds the whole list — sorts the rows on screen by any column: its `sortValue`, else a primitive row field under its key, else the text its cell shows (`textOf`; a `<time>` by `dateTime`); Arabic collation, empties last, stable. Drag-to-reorder tables sort too; dragging waits for the saved order.
+- Local, exact, wherever the table holds the whole collection (R177 §6, R198 §6): an unpaged `DataTable` — or a paged one whose page holds the whole list — sorts the rows on screen by any column: its `sortValue`, else a primitive row field under its key, else the text its cell shows (`textOf`; a `<time>` by `dateTime`); Arabic collation, empties last, stable. Never where the rows can be dragged (R199 §6); dragging waits for the saved order.
 - Server-only gaps (a set or a derived value): users' e-mail/roles/branches, approvals' type/bundle/branch/requested/framing, Trash's record label and purgeable/restorable — sortable once one page holds the whole list (`docs/TASKS.md` E10).
 
 | Sorts | Fields |

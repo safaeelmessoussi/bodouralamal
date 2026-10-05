@@ -80,6 +80,8 @@ interface Item {
   percent: number;
   error: string | null;
   contentId: string | null;
+  /** R199 §1 — the connection dropped and the upload is being retried on its own. */
+  retrying: boolean;
 }
 
 let nextKey = 1;
@@ -95,6 +97,7 @@ function blankItem(title: string, touched: boolean, description: string): Item {
     percent: 0,
     error: null,
     contentId: null,
+    retrying: false,
   };
 }
 
@@ -192,21 +195,24 @@ export function FileUploader({
     // and the per-person quota (TD-4.12) counts each.
     for (const item of pending) {
       if (item.file === null) continue;
-      update(item.key, { error: null, percent: 0 });
+      update(item.key, { error: null, percent: 0, retrying: false });
       try {
         const id = await uploadFile(
           item.file,
           { ...meta, ...(item.isRecording ? { origin: 'session_recording' as const } : {}) },
           { title: item.title.trim(), description: item.description.trim() || null },
           token,
-          (percent) => update(item.key, { percent }),
-          (stage) => update(item.key, { stage }),
+          (percent) => update(item.key, { percent, retrying: false }),
+          (stage) => update(item.key, { stage, retrying: false }),
+          // R199 §1 — a dropped connection is retried here, with a growing
+          // wait (about three minutes in all), never left to the person.
+          { attempts: 8, onRetry: () => update(item.key, { retrying: true }) },
         );
         ids.set(item.key, id);
-        update(item.key, { contentId: id, stage: 'done' });
+        update(item.key, { contentId: id, stage: 'done', percent: 100, retrying: false });
       } catch (e) {
         failed = true;
-        update(item.key, { stage: 'failed', error: uploadErrorMessage(e) });
+        update(item.key, { stage: 'failed', error: uploadErrorMessage(e), retrying: false });
       }
     }
     setRunning(false);
@@ -214,6 +220,8 @@ export function FileUploader({
   }
 
   const anyFailed = items.some((item) => item.stage === 'failed');
+  const withFiles = items.filter((item) => item.file !== null);
+  const doneCount = withFiles.filter((item) => item.contentId !== null).length;
 
   return (
     <div className="uploader">
@@ -248,7 +256,6 @@ export function FileUploader({
             {item.file !== null ? (
               <legend className="uploader__item-name">
                 <span dir="auto">{item.file.name}</span>
-                {done ? <span className="muted"> — {t('content.upload.stage.done')}</span> : null}
               </legend>
             ) : null}
 
@@ -278,13 +285,34 @@ export function FileUploader({
               disabled={locked}
             />
 
-            {item.stage !== 'idle' && item.stage !== 'failed' && item.stage !== 'done' ? (
+            {/* R199 §1 — every file has its bar from the moment the upload
+                starts: waiting, moving, retrying on its own, or done. */}
+            {item.file !== null && (running || item.stage !== 'idle') ? (
               <div className="uploader__progress">
                 {/* A real progress element, so assistive technology reads the
                     value rather than inferring it from a styled div. */}
-                <progress value={item.stage === 'uploading' ? item.percent : undefined} max={100} />
+                <progress
+                  value={
+                    item.stage === 'preparing' || item.stage === 'finalising' || item.retrying
+                      ? undefined
+                      : done
+                        ? 100
+                        : item.percent
+                  }
+                  max={100}
+                />
                 <span aria-live="polite">
-                  {item.stage === 'uploading' ? `${String(item.percent)}٪` : t(`content.upload.stage.${item.stage}`)}
+                  {item.retrying
+                    ? t('content.upload.retrying')
+                    : done
+                      ? t('content.upload.stage.done')
+                      : item.stage === 'uploading'
+                        ? `${String(item.percent)}٪`
+                        : item.stage === 'idle' || item.stage === 'failed'
+                          ? item.stage === 'idle'
+                            ? t('content.upload.stage.queued')
+                            : ''
+                          : t(`content.upload.stage.${item.stage}`)}
                 </span>
               </div>
             ) : null}
@@ -305,6 +333,12 @@ export function FileUploader({
           </fieldset>
         );
       })}
+
+      {withFiles.length > 1 && (running || doneCount > 0) ? (
+        <p className="muted" aria-live="polite">
+          {t('content.upload.overall').replace('{done}', String(doneCount)).replace('{total}', String(withFiles.length))}
+        </p>
+      ) : null}
 
       <div className="dialog__actions">
         <Button variant="ghost" onClick={onCancel} disabled={running}>

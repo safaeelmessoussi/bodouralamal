@@ -131,7 +131,9 @@ describe('the roster is shown, not inferred', () => {
   });
 
   it('and the count and override state are stated in words', () => {
-    expect(ar.admin.sessions.audienceCount).toContain('{n}');
+    // R199 §8 — four forms, the number where it stands.
+    expect(ar.admin.sessions.audienceCount.many).toContain('{n}');
+    expect(ar.admin.sessions.audienceCount.few).toContain('مستفيدات');
     expect(ar.admin.sessions.audienceOverridden.length).toBeGreaterThan(5);
   });
 });

@@ -17,6 +17,7 @@ import { isDirty } from '../../lib/form-dirty.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { t } from '../../i18n/index.js';
+import { counted } from '../../lib/arabic-years.js';
 
 /**
  * **الحضور — who is expected at THIS occurrence, along five dimensions**
@@ -249,7 +250,7 @@ export function SessionAudienceFields({
       {roster ? (
         <p className="staff-picker__warnings">
           <Badge tone={roster.overridden ? 'warn' : 'neutral'}>
-            {t('admin.sessions.audienceCount').replace('{n}', String(roster.students.length))}
+            {counted('admin.sessions.audienceCount', roster.students.length)}
           </Badge>
           {roster.overridden ? (
             <Badge tone="warn">{t('admin.sessions.audienceOverridden')}</Badge>

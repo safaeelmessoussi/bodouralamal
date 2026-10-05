@@ -16,6 +16,7 @@ import type { Actor } from '../policies/actor.js';
 import { assertActivityType, assertMarkingAllowedForType } from './scheduling-type.service.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 import { GROUP_ADMIN_ORDER } from '../lib/sorting.js';
+import { applyHoliday } from './holiday-cancellation.service.js';
 
 /**
  * Events — the exception/special-activity layer (SRS §4.4, §7, TD-2, TD-5, TD-11).
@@ -335,6 +336,8 @@ export async function createEvent(
 
     // §4.4: written HERE, at creation. Never a wildcard resolved at read time.
     await writeEventScope(tx, event.id, { branchIds, categoryIds, levelIds, groupIds });
+    // R199 §5 — a عطلة cancels the classes it covers (a no-op for any other kind).
+    const holiday = await applyHoliday(tx, event.id);
 
     // **R71.3 — creating an event is what makes a مؤطرة answerable for it.**
     // Structural, not a grant: assigning staff is otherwise Admin-and-above, and
@@ -360,6 +363,7 @@ export async function createEvent(
       targetEntity: 'Event',
       targetId: event.id,
       detail: {
+        ...(holiday.cancelled > 0 ? { holiday_cancelled_sessions: holiday.cancelled } : {}),
         visibility: input.visibility,
         recurrence: input.recurrenceType,
         global: input.global === true,
@@ -583,6 +587,8 @@ export async function updateEvent(
       merged.visibility,
       actor.userId,
     );
+    // R199 §5 — a عطلة re-applied: new days, scope or type cancel or restore.
+    const holiday = await applyHoliday(tx, id);
 
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -592,6 +598,9 @@ export async function updateEvent(
       targetId: id,
       detail: {
         fields_changed: Object.keys(patch),
+        ...(holiday.cancelled + holiday.restored > 0
+          ? { holiday_cancelled_sessions: holiday.cancelled, holiday_restored_sessions: holiday.restored }
+          : {}),
         ...(replacement
           ? {
               scope_replaced: {
@@ -914,6 +923,8 @@ export async function deleteEvent(
       where: { id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
     });
+    // R199 §5 — a deleted عطلة gives back every class it cancelled.
+    const holiday = await applyHoliday(tx, id);
     // TD-5/BR-15: a soft delete without a snapshot is a row nobody can find and
     // nobody can restore — the Trash is where a deletion becomes answerable, and
     // an entity that skips it is invisible to the one screen that exists to
@@ -941,7 +952,7 @@ export async function deleteEvent(
       // The target id is the durable coordinate. Event titles are free text and
       // may contain a person's identity; copying one here would put it under a
       // broader/indefinite audit retention rule for no accountability gain.
-      detail: {},
+      detail: holiday.restored > 0 ? { holiday_restored_sessions: holiday.restored } : {},
     });
   });
 }

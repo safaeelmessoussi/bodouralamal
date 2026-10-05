@@ -1,4 +1,4 @@
-import { api } from '../lib/api.js';
+import { api, ApiError } from '../lib/api.js';
 
 /**
  * The TD-3.5 upload flow, from the client's side (§4.9, TD-9, R53).
@@ -58,6 +58,59 @@ interface InitiateResponse {
 }
 
 /**
+ * **R199 §1 — a dropped connection is retried here, not by the person.**
+ *
+ * The Owner uploaded twenty recordings on a phone connection and had to press
+ * «إعادة المحاولة» again and again. Each phase now retries on its own while
+ * the failure is the network's (no response, or a 5xx from the edge), with a
+ * growing wait, and waits for the browser to be online again first: initiate
+ * is safe to repeat (a new ticket), the PUT repeats onto the same presigned
+ * URL (a fresh ticket once that URL is refused), and completion repeats with
+ * the SAME ticket — the server finalises a ticket once (`publishedFinalization`),
+ * so a reply lost after success can never create the item twice. A refusal
+ * (4xx: type, size, scope, quota) is not retried: it would refuse again.
+ */
+export interface RetryPolicy {
+  /** Tries per phase, the first included. */
+  attempts: number;
+  /** Told before each wait, so the screen can say what is happening. */
+  onRetry?: (attempt: number, waitMs: number) => void;
+}
+
+const NO_RETRY: RetryPolicy = { attempts: 1 };
+
+function retryable(error: unknown): boolean {
+  if (error instanceof ApiError) return error.status === 0 || error.status >= 500;
+  return true;
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Resolves once the browser reports a connection (at once when it already does). */
+function online(): Promise<void> {
+  if (typeof navigator === 'undefined' || navigator.onLine !== false) return Promise.resolve();
+  return new Promise((resolve) => window.addEventListener('online', () => resolve(), { once: true }));
+}
+
+async function retrying<T>(run: () => Promise<T>, policy: RetryPolicy, beforeRetry?: (error: unknown) => Promise<void>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      if (!retryable(error) || attempt >= policy.attempts) throw error;
+      const waitMs = Math.min(30_000, 2_000 * 2 ** (attempt - 1));
+      policy.onRetry?.(attempt, waitMs);
+      await sleep(waitMs);
+      await online();
+      if (beforeRetry) await beforeRetry(error);
+    }
+  }
+}
+
+/** The PUT was answered with a refusal — most often a presigned URL that expired. */
+class StorageRefused extends Error {}
+
+/**
  * Uploads one file and returns the content id.
  *
  * `onProgress` receives 0–100 for the PUT only. The two API calls around it are
@@ -71,26 +124,42 @@ export async function uploadFile(
   token: string | null,
   onProgress: (percent: number) => void,
   onStage: (stage: UploadStage) => void,
+  retry: RetryPolicy = NO_RETRY,
 ): Promise<string> {
   onStage('preparing');
-  const initiated = await api<InitiateResponse>('/uploads/initiate', {
-    token,
-    method: 'POST',
-    body: {
-      filename: file.name,
-      size: file.size,
-      // A browser that cannot identify the file sends `''`. Passing it through
-      // lets the server refuse it against TD-9's whitelist with a message about
-      // the type, rather than the client inventing one and failing the
-      // magic-byte check later for a reason nobody can act on.
-      mime: file.type,
-      content_meta: meta,
-    },
-  });
+  const initiate = (): Promise<InitiateResponse> =>
+    api<InitiateResponse>('/uploads/initiate', {
+      token,
+      method: 'POST',
+      body: {
+        filename: file.name,
+        size: file.size,
+        // A browser that cannot identify the file sends `''`. Passing it through
+        // lets the server refuse it against TD-9's whitelist with a message about
+        // the type, rather than the client inventing one and failing the
+        // magic-byte check later for a reason nobody can act on.
+        mime: file.type,
+        content_meta: meta,
+      },
+    });
+  let initiated = await retrying(initiate, retry);
 
   onStage('uploading');
   try {
-    await putWithProgress(initiated.put_url, file, onProgress);
+    await retrying(
+      async () => {
+        onProgress(0);
+        await putWithProgress(initiated.put_url, file, onProgress);
+      },
+      retry,
+      async (error) => {
+        // A refused PUT (an expired URL): the next try gets a fresh ticket.
+        if (error instanceof StorageRefused) {
+          await abortUpload(initiated.upload_id, token);
+          initiated = await retrying(initiate, retry);
+        }
+      },
+    );
   } catch (error) {
     // The object may be half-written; telling the server lets it clean up now
     // rather than leaving it for `upload.gc` 48 hours later.
@@ -100,9 +169,15 @@ export async function uploadFile(
   }
 
   onStage('finalising');
-  const created = await api<{ id: string }>(
-    `/uploads/${encodeURIComponent(initiated.upload_id)}/complete`,
-    { token, method: 'POST', body: fields },
+  // The SAME ticket each time: completion is idempotent per ticket.
+  const created = await retrying(
+    () =>
+      api<{ id: string }>(`/uploads/${encodeURIComponent(initiated.upload_id)}/complete`, {
+        token,
+        method: 'POST',
+        body: fields,
+      }),
+    retry,
   );
   onStage('done');
   return created.id;
@@ -181,6 +256,7 @@ function putWithProgress(
     });
     xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else if (xhr.status >= 400 && xhr.status < 500) reject(new StorageRefused(`storage responded ${xhr.status}`));
       else reject(new Error(`storage responded ${xhr.status}`));
     });
     xhr.addEventListener('error', () => reject(new Error('network error during upload')));

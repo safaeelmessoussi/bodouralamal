@@ -21,6 +21,7 @@ import { SearchInput, SelectField } from '../../components/ui/field.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
+import { counted } from '../../lib/arabic-years.js';
 
 /**
  * **إدارة المؤطِّرات — the teaching side of الشؤون التعليمية** (R88).
@@ -210,7 +211,7 @@ export function TeachersPage(): ReactNode {
               return count === 0 ? (
                 <span className="muted">{t('admin.teachers.noAvailability')}</span>
               ) : (
-                t('admin.teachers.ranges').replace('{n}', String(count))
+                counted('admin.teachers.ranges', count)
               );
             },
           },

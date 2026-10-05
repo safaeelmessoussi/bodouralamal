@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { calendarDay } from "../policies/effective-staffing.js";
+import { applyHolidaysToSessions } from './holiday-cancellation.service.js';
 import {
   atMidnightUtc,
   expandSchedule,
@@ -240,6 +241,7 @@ export async function materializeSchedule(
   );
 
   let created = 0;
+  const createdIds: string[] = [];
   for (const date of dates) {
     const key = date.toISOString().slice(0, 10);
     if (existingByDate.has(key)) continue;
@@ -270,8 +272,11 @@ export async function materializeSchedule(
       select: { id: true },
     });
     await snapshotStaff(tx, row.id, staffOn(schedule.staff, date));
+    createdIds.push(row.id);
     created += 1;
   }
+  // R199 §5 — an occurrence born on a عطلة of its Category is born cancelled.
+  await applyHolidaysToSessions(tx, createdIds);
 
   // Re-sync the occurrences that already exist and are still wanted (43.4).
   // ONLY future, un-overridden, still-`scheduled` ones: a past or `held`

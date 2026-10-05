@@ -185,7 +185,7 @@ describe('memorisationWords', () => {
         }),
         t,
       ),
-    ).toBe('مقرر الحفظ: 2 سور');
+    ).toBe('مقرر الحفظ: سورتان');
     expect(memorisationWords(level('x'), t)).toBeNull();
   });
 });

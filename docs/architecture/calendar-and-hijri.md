@@ -12,7 +12,7 @@ Organisation and delivery are separate:
 | Organisation | `TeachingGroup` | subject + level; only where a subject splits its students |
 | Delivery | `RecurringCourseSchedule` | subject · `teaching_mode` ∈ `entire_level \| administrative_group \| teaching_group` + one target · branch · room · teacher + assistants · times · recurrence |
 | Delivery | `Session` | one dated occurrence from `session.materialize` (pg-boss, eager, to the academic-year horizon); own date, time, room, teacher, status; notes, recordings, content links, (later) attendance hang here |
-| Non-teaching | `Event` | holidays, ceremonies, exams, one-off activities; never generates a `Session` |
+| Non-teaching | `Event` | holidays, ceremonies, exams, one-off activities; never generates a `Session` — a عطلة cancels the covered ones, reversibly (R199 §5, `services/holiday-cancellation.service.ts`, `Session.cancelled_by_event_id`) |
 
 - Sessions are materialised eagerly so room, teacher **and assistant** overlap checks are exact.
 - A session edit marks the row `overridden`; a schedule edit skips overridden rows and any session with a note, recording, content link or grade, and reports what it skipped.

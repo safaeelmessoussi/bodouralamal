@@ -70,21 +70,35 @@ export interface AdministrativeGroupInput {
 }
 
 /** What `/admin/administrative-groups` may be sorted by (R76.1). */
+/** The Level in the Super Admin's order (its Category's place first, §2.2). */
+const byLevel = (dir: 'asc' | 'desc') => [
+  { level: { category: { displayOrder: { sort: dir, nulls: 'last' } } } },
+  { level: { category: { name: dir } } },
+  { level: { displayOrder: { sort: dir, nulls: 'last' } } },
+  { level: { name: dir } },
+];
+const byBranch = (dir: 'asc' | 'desc') => [
+  { branch: { displayOrder: { sort: dir, nulls: 'last' } } },
+  { branch: { name: dir } },
+];
+
 export const GROUP_SORT_FIELDS: SortableFields = {
-  name: (dir) => [{ name: dir }],
-  // R198 §6 — the Level in the Super Admin's order (its Category's place
-  // first, §2.2), the branch by name, and the member count.
-  level: (dir) => [
-    { level: { category: { displayOrder: { sort: dir, nulls: 'last' } } } },
-    { level: { displayOrder: { sort: dir, nulls: 'last' } } },
-    { level: { name: dir } },
-  ],
-  branch: (dir) => [{ branch: { name: dir } }],
-  members: (dir) => [{ enrollments: { _count: dir } }],
+  name: (dir) => [{ name: dir }, ...byLevel('asc'), ...byBranch('asc')],
+  // R198 §6 / R199 §7 — within one Level (or branch, or count) the groups
+  // stay in their branch and name order: «المجموعة 1, 2, 3», never by id.
+  level: (dir) => [...byLevel(dir), ...byBranch('asc'), { name: 'asc' }],
+  branch: (dir) => [...byBranch(dir), ...byLevel('asc'), { name: 'asc' }],
+  members: (dir) => [{ enrollments: { _count: dir } }, ...byLevel('asc'), ...byBranch('asc'), { name: 'asc' }],
 };
 
-/** BR-19's order (R76.2). */
-const GROUP_DEFAULT_ORDER = [{ displayOrder: 'asc' }, { name: 'asc' }];
+/**
+ * BR-19's order (R76.2), as the Owner reads the table (R199 §7): per Level in
+ * her order, per branch, by name. Within ONE Level — the only place a group's
+ * own `display_order` means anything (§2.2) and where the rows can be dragged
+ * — the manual order leads.
+ */
+const GROUP_DEFAULT_ORDER = [...byLevel('asc'), ...byBranch('asc'), { name: 'asc' }];
+const GROUP_LEVEL_ORDER = [{ displayOrder: { sort: 'asc', nulls: 'last' } }, ...byBranch('asc'), { name: 'asc' }];
 
 export async function listAdministrativeGroups(
   prisma: PrismaClient,
@@ -112,7 +126,7 @@ export async function listAdministrativeGroups(
       take: window.take,
       // R76 — the caller's sort if given, else BR-19's, with `id` appended so
       // offset pagination stays deterministic.
-      orderBy: resolveSort(GROUP_SORT_FIELDS, filters, GROUP_DEFAULT_ORDER) as never,
+      orderBy: resolveSort(GROUP_SORT_FIELDS, filters, filters.levelId ? GROUP_LEVEL_ORDER : GROUP_DEFAULT_ORDER) as never,
       // **How many مستفيدات are in the group** — the field the management table
       // most needs and the one it could not previously show. Counted in the
       // same query rather than fetched per row, and filtered to live enrolments

@@ -510,6 +510,7 @@ export function SchedulingPage(): ReactNode {
     {
       key: 'audience',
       header: t('admin.schedules.target'),
+      wide: true,
       // An activity has no audience of that kind (§4.4) — absent, not invented.
       // A filter-built class names its whole audience server-side (SRS
       // Revision 163 §5); this column used to print the storage mode's own

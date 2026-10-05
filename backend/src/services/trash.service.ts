@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import { resolveSort, type SortParams, type SortableFields } from '../lib/sorting.js';
+import { applyHoliday } from './holiday-cancellation.service.js';
 import * as scope from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -1492,6 +1493,8 @@ export interface RestoreResult {
   /** R191 — the tombstone did not name what its deletion took; the record
    *  alone came back. Said, never guessed. */
   cascade_unknown?: boolean;
+  /** R199 §5 — the classes a restored عطلة cancelled again. */
+  holiday_cancelled_sessions?: number;
 }
 
 export async function restoreEntry(prisma: PrismaClient, actor: Actor, id: string): Promise<RestoreResult> {
@@ -1705,6 +1708,8 @@ export async function restoreEntry(prisma: PrismaClient, actor: Actor, id: strin
           break;
         case 'Event':
           consequence = await restoreEventScope(tx, entry.targetId, entry.snapshot);
+          // R199 §5 — a restored عطلة cancels its classes again.
+          consequence = { ...consequence, holiday_cancelled_sessions: (await applyHoliday(tx, entry.targetId)).cancelled };
           break;
         case 'AdministrativeGroup':
           consequence = await restoreGroupEventLinks(tx, entry.targetId, entry.snapshot);

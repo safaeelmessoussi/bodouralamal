@@ -19,7 +19,7 @@ import {
   type ContentFilterState,
 } from '../components/content/content-filters.js';
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
-import { SurahLibrary } from '../components/content/surah-library.js';
+import { byTitle, SurahLibrary } from '../components/content/surah-library.js';
 import { Button } from '../components/ui/button.js';
 import { useActiveChild } from '../contexts/active-child.js';
 import { useSession } from '../contexts/session.js';
@@ -30,6 +30,7 @@ import { Container } from '../components/ui/container.js';
 import { Icon } from '../components/ui/icon.js';
 import { levelLabel } from '../components/scope/level-select.js';
 import { t } from '../i18n/index.js';
+import { counted } from '../lib/arabic-years.js';
 
 /**
  * `/resources` — the educational library (§5.2, §4.9).
@@ -309,7 +310,8 @@ function LibraryView({
       if (keeps(e, 'categoryId', 'shelfKey')) cats.set(e.category_id, e.category_name);
       if (keeps(e, 'yearId')) years.set(e.academic_year_id, e.academic_year_label);
       if (keeps(e, 'branchId')) branches.set(e.branch_id ?? GLOBAL_BRANCH, e.branch_name ?? t('content.globalScope'));
-      if (keeps(e, 'subjectId')) subjects.set(e.subject_id || NO_SUBJECT, e.subject_name ?? t('content.noSubject'));
+      // R199 §2 — «بدون» is the list's word for no element.
+      if (keeps(e, 'subjectId')) subjects.set(e.subject_id || NO_SUBJECT, e.subject_name ?? t('common.noneChosen'));
       if (keeps(e, 'kind')) kinds.add(e.item.kind);
       if (!keeps(e, 'shelfKey')) continue;
       shelves.set(e.shelf_key, {
@@ -438,7 +440,11 @@ function LibraryView({
             branch.subjects.sort(
               (a, b) => rankOf(ranking.subject, a.key) - rankOf(ranking.subject, b.key) || a.name.localeCompare(b.name, 'ar'),
             );
-            for (const subject of branch.subjects) subject.surahs.sort((a, b) => a.id - b.id);
+            for (const subject of branch.subjects) {
+              subject.surahs.sort((a, b) => a.id - b.id);
+              // R199 §3 — a Surah's items in their titles' order.
+              for (const surah of subject.surahs) surah.items.sort(byTitle);
+            }
           }
         }
       }
@@ -529,7 +535,7 @@ function LibraryView({
             <section key={shelf.key} className="content-shelf" aria-labelledby={`shelf-${shelf.key}`}>
               <h3 id={`shelf-${shelf.key}`} className="content-shelf__title">
                 {shelf.kind === 'whole_category' ? t('content.wholeCategory.title') : shelf.name}
-                <span className="content-year__badge">{t('content.itemCount').replace('{n}', String(shelf.count))}</span>
+                <span className="content-year__badge">{counted('content.itemCount', shelf.count)}</span>
               </h3>
               {shelf.years.map((year) => (
                 <section key={year.id} className="content-year" aria-labelledby={`year-${shelf.key}-${year.id}`}>

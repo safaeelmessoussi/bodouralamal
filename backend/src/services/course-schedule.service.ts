@@ -2930,6 +2930,19 @@ export async function listCourseSchedules(
     prisma,
     rows.map((row) => row.id),
   );
+  // R199 §9 — how many live Levels each Category has, so a class addressed to
+  // every one of them says «كل مستويات {الفئة}» instead of listing them.
+  const categoryIds = [...new Set(rows.flatMap((row) => row.levelScopes.map((r) => r.level.categoryId)))];
+  const liveLevels = await prisma.level.findMany({
+    where: { deletedAt: null, categoryId: { in: categoryIds } },
+    select: { id: true, categoryId: true },
+  });
+  const levelsOfCategory = new Map<string, Set<string>>();
+  for (const level of liveLevels) {
+    const set = levelsOfCategory.get(level.categoryId) ?? new Set<string>();
+    set.add(level.id);
+    levelsOfCategory.set(level.categoryId, set);
+  }
   return page(
     rows.map((row) => ({
       ...row,
@@ -2942,7 +2955,7 @@ export async function listCourseSchedules(
         effectiveUntil: s.effectiveUntil,
       })),
       targetSummary:
-        row.teachingMode === "multi_dimension" ? dimensionSummary(row) : null,
+        row.teachingMode === "multi_dimension" ? dimensionSummary(row, levelsOfCategory) : null,
       surahIds: row.surahs.map((r) => r.surahId),
       surahNames: row.surahs.map((r) => r.surah.nameArabic),
       /**
@@ -2990,10 +3003,15 @@ export async function listCourseSchedules(
  * `count({ where })` more than forty lines below the `where` that carries its
  * `deletedAt: null`, which is the distance `trash-coverage` reads.
  */
+/** R199 §9 — what a class for every Level of a Category is called in «الهدف». */
+const WHOLE_CATEGORY_WORDS = 'كل مستويات';
+
 const DIMENSION_SCOPES_WITH_NAMES = {
   branchScopes: { select: { branchId: true, branch: { select: { name: true } } } },
   categoryScopes: { select: { categoryId: true, category: { select: { name: true } } } },
-  levelScopes: { select: { levelId: true, level: { select: { name: true } } } },
+  levelScopes: {
+    select: { levelId: true, level: { select: { name: true, categoryId: true, category: { select: { name: true } } } } },
+  },
   // `levelId` beside each name: a group or a circle is scoped to ONE Level
   // (§2.2), and that is how a class addressed by group or circle alone still
   // answers *which Level* (`representativeLevelId`, below).
@@ -3015,20 +3033,44 @@ const DIMENSION_SCOPES_WITH_NAMES = {
  * organisational filters that narrow it, in brackets. A dimension left at
  * «الكل» contributes nothing, which is what unfiltered means.
  */
-function dimensionSummary(row: {
-  branchScopes: { branch: { name: string } }[];
-  categoryScopes: { category: { name: string } }[];
-  levelScopes: { level: { name: string } }[];
-  administrativeGroupScopes: { administrativeGroup: { name: string } }[];
-  teachingGroupScopes: { teachingGroup: { name: string } }[];
-}): string {
+export function dimensionSummary(
+  row: {
+    branchScopes: { branch: { name: string } }[];
+    categoryScopes: { categoryId: string; category: { name: string } }[];
+    levelScopes: { levelId: string; level: { name: string; categoryId: string; category: { name: string } } }[];
+    administrativeGroupScopes: { administrativeGroup: { name: string } }[];
+    teachingGroupScopes: { teachingGroup: { name: string } }[];
+  },
+  levelsOfCategory: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+): string {
+  /**
+   * R199 §9 (the Owner) — a class for EVERY Level of a Category says so in
+   * one phrase, «كل مستويات {الفئة}», instead of the whole list.
+   */
+  const chosen = new Set(row.levelScopes.map((r) => r.levelId));
+  const whole = new Set(
+    [...new Set(row.levelScopes.map((r) => r.level.categoryId))].filter((categoryId) => {
+      const all = levelsOfCategory.get(categoryId);
+      return all !== undefined && all.size > 1 && [...all].every((id) => chosen.has(id));
+    }),
+  );
+  const levelNames: string[] = [];
+  const named = new Set<string>();
+  for (const r of row.levelScopes) {
+    if (!whole.has(r.level.categoryId)) levelNames.push(r.level.name);
+    else if (!named.has(r.level.categoryId)) {
+      named.add(r.level.categoryId);
+      levelNames.push(`${WHOLE_CATEGORY_WORDS} ${r.level.category.name}`);
+    }
+  }
   const population = [
-    ...row.levelScopes.map((r) => r.level.name),
+    ...levelNames,
     ...row.administrativeGroupScopes.map((r) => r.administrativeGroup.name),
     ...row.teachingGroupScopes.map((r) => r.teachingGroup.name),
   ];
   const narrowedBy = [
-    ...row.categoryScopes.map((r) => r.category.name),
+    // A Category already named as «كل مستويات …» is not repeated in brackets.
+    ...row.categoryScopes.filter((r) => !named.has(r.categoryId)).map((r) => r.category.name),
     ...row.branchScopes.map((r) => r.branch.name),
   ];
   const head = population.join("، ");

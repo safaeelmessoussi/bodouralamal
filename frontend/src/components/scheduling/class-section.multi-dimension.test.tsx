@@ -363,7 +363,7 @@ describe('R179 §3 — the frozen Subject is the row\'s, not the hook\'s', () =>
     expect(SCHEDULING_SOURCE).toContain(": { value: ALL_SUBJECTS, label: t('scheduling.subjectAll') }");
     // The hook keeps the sentinel: rule 2 would otherwise clear it as a stale id.
     expect(SCHEDULING_SOURCE).toContain('sentinels: { subjectId: [ALL_SUBJECTS] },');
-    expect(t('scheduling.subjectAll')).toBe('كل المواد');
+    expect(t('scheduling.subjectAll')).toBe('الكل');
     expect(t('scheduling.subjectAllHint')).not.toBe('scheduling.subjectAllHint');
   });
 });

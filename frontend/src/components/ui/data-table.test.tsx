@@ -552,8 +552,13 @@ describe('local sorting of an unpaged table (R177 §6)', () => {
     expect(html.match(/datatable__sort"/g)?.length).toBe(3);
   });
 
-  it('sorts a drag-to-reorder table by its headers too (R198 §6)', () => {
+  it('offers no header sorting where the rows can be dragged (R199 §6)', () => {
     const html = render({ onReorder: async () => undefined });
+    expect(html).not.toContain('datatable__sort"');
+  });
+
+  it('sorts a table whose drag waits for a filter (`onReorder: null`)', () => {
+    const html = render({ onReorder: null });
     expect(html.match(/datatable__sort"/g)?.length).toBe(3);
   });
 

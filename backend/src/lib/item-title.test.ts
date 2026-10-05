@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeItemTitle, TEACHER_HONORIFIC } from './item-title.js';
+import { audienceTitle, composeItemTitle, TEACHER_HONORIFIC } from './item-title.js';
 import { moroccoWallClockToInstant } from './morocco-clock.js';
 import { RECORDING_TITLE_LIMIT, sessionRecordingBaseName } from './recording-name.js';
 
@@ -81,5 +81,14 @@ describe('where the text is stored in VARCHAR(120)', () => {
     expect(title.length).toBeLessThanOrEqual(RECORDING_TITLE_LIMIT);
     expect(`${title} 999`.length).toBeLessThanOrEqual(120);
     expect(title.endsWith('الاثنين 21 شتنبر 2026 06:10')).toBe(true);
+  });
+});
+
+describe('R199 §4 — a circle named «الحلقة …» is not prefixed twice', () => {
+  it('prefixes a bare number, and leaves a name that already says it', () => {
+    expect(audienceTitle('1', null)).toBe('الحلقة 1');
+    expect(audienceTitle('الحلقة 3', null)).toBe('الحلقة 3');
+    expect(audienceTitle('حلقة الفجر', null)).toBe('حلقة الفجر');
+    expect(audienceTitle(null, 'المجموعة 2')).toBe('المجموعة 2');
   });
 });

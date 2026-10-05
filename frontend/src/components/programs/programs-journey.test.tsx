@@ -175,7 +175,7 @@ describe('ProgramsJourney', () => {
   it('says what a Level is: its ages, description, own Subjects, «حفظ وتفسير: N أحزاب» and its Surahs (R182 §3)', () => {
     expect(html).toContain('من 6 إلى 7 سنوات');
     expect(html).toContain('حفظ القرآن');
-    expect(html).toContain('حفظ: 1 سور');
+    expect(html).toContain('حفظ: سورة واحدة');
     expect(html).toContain('مقرر الحفظ: 5 أحزاب'); // nothing by Surah → the generic words
     expect(html).toContain('حفظ وتفسير: 10 أحزاب');
     expect(html).not.toContain('مقرر الحفظ: 10');
@@ -232,7 +232,7 @@ describe('ProgramsJourney', () => {
       html.indexOf('id="journey-level-k1"'),
       html.indexOf('id="journey-level-k2"'),
     );
-    expect(k1).toContain('حفظ: 1 سور'); // not «حفظ ومادة قصيرة بالسور»
+    expect(k1).toContain('حفظ: سورة واحدة'); // not «حفظ ومادة قصيرة بالسور»
     expect(k1).toContain('journey__cardRow journey__cardRow--seasonal');
     expect(k1.indexOf('حفظ القرآن')).toBeLessThan(k1.indexOf('دورات موسمية:'));
     expect(k1.indexOf('دورات موسمية:')).toBeLessThan(k1.indexOf('مادة قصيرة بالسور'));
@@ -347,6 +347,6 @@ describe('ProgramsTextView — the same journey, to scan', () => {
     expect(text.split('التربية الإسلامية').length - 1).toBe(1);
     expect(text).toContain('مواد مشتركة في كل المستويات:');
     expect(text.split('دورات موسمية:').length - 1).toBe(2);
-    expect(text).toContain('حفظ: 1 سور');
+    expect(text).toContain('حفظ: سورة واحدة');
   });
 });

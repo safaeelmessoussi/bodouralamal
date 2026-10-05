@@ -1,5 +1,5 @@
 import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/programs.js';
-import { ageRangeWords } from '../../lib/arabic-years.js';
+import { ageRangeWords, counted } from '../../lib/arabic-years.js';
 
 /**
  * **«برامجنا التعليمية» as a journey** (SRS Revision 180) — the one model both
@@ -168,7 +168,7 @@ export function memorisationAmount(
           : t('programs.journey.hizbMany').replace('{n}', String(hizb));
   }
   if (level.surahs.length > 0)
-    return t('programs.journey.surahAmount').replace('{n}', String(level.surahs.length));
+    return counted('programs.journey.surahAmount', level.surahs.length);
   return null;
 }
 

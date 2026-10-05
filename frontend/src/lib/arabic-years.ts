@@ -27,3 +27,14 @@ export function ageRangeWords(min: number | null, max: number | null): string | 
   if (max !== null) return t('admin.taxonomy.ageUpTo').replace('{max}', yearsWords(max));
   return null;
 }
+
+/**
+ * **Any counted noun** (R199 §8 — the Owner: «{n} مستويات» and «{n} سور» were
+ * still wrong for 11 and above). `key` names four catalogue forms — `one`,
+ * `two` (the dual, in words), `few` for 3–10 (plural) and `many` for 0 and 11
+ * and above (singular) — each carrying `{n}` where the number stands.
+ */
+export function counted(key: string, n: number): string {
+  const form = n === 1 ? 'one' : n === 2 ? 'two' : n >= 3 && n <= 10 ? 'few' : 'many';
+  return t(`${key}.${form}`).replace('{n}', String(n));
+}

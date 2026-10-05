@@ -4,6 +4,7 @@ import type { SubjectSplit, TeachingGroup } from '../../adapters/teaching-groups
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
 import { t } from '../../i18n/index.js';
+import { counted } from '../../lib/arabic-years.js';
 
 /**
  * **One Subject's circles, and BR-22's alarm** — the block `حلقات المواد` is
@@ -87,7 +88,7 @@ export function SubjectCircles({
             {split.groups.map((g) => (
               <li key={g.id}>
                 <span>
-                  {g.name} — {t('admin.subjectOrg.members').replace('{n}', String(g.member_count))}
+                  {g.name} — {counted('admin.subjectOrg.members', g.member_count)}
                 </span>
                 {canManageGroups ? (
                   <>
