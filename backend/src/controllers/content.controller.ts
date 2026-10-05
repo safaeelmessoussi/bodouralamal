@@ -111,6 +111,15 @@ const updateContentSchema = z
       .max(40)
       .refine((ids) => new Set(ids).size === ids.length, 'a level may be named once')
       .optional(),
+    // R201 — the description (`null` clears it), the year, and the branches
+    // (home first; `[]` is Global), each authorised as at upload.
+    description: z.string().trim().max(2000).nullable().optional(),
+    academic_year_id: z.uuid().optional(),
+    branch_ids: z
+      .array(z.uuid())
+      .max(40)
+      .refine((ids) => new Set(ids).size === ids.length, 'a branch may be named once')
+      .optional(),
   })
   .strict();
 
@@ -125,6 +134,9 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
       surah_id?: number | null;
       whole_category?: boolean;
       additional_level_ids?: string[];
+      description?: string | null;
+      academic_year_id?: string;
+      branch_ids?: string[];
     };
     // An empty patch is a request that asks for nothing; answering 204 would
     // report a change that did not happen.
@@ -149,6 +161,9 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
         ...(body.additional_level_ids !== undefined
           ? { additionalLevelIds: body.additional_level_ids }
           : {}),
+        ...(body.description !== undefined ? { description: body.description === '' ? null : body.description } : {}),
+        ...(body.academic_year_id !== undefined ? { academicYearId: body.academic_year_id } : {}),
+        ...(body.branch_ids !== undefined ? { branchIds: body.branch_ids } : {}),
       },
     );
     res.status(204).end();

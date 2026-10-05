@@ -9,7 +9,7 @@ import { ContentUploadForm } from '../components/content/content-upload-form.js'
 import { TeacherLayout } from '../components/teacher/teacher-layout.js';
 import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
 import { FormDialog } from '../components/ui/form-dialog.js';
-import { CheckboxField, SelectField, TextField } from '../components/ui/field.js';
+import { CheckboxField, SelectField, TextArea, TextField } from '../components/ui/field.js';
 import { VisibilityField } from '../components/scheduling/visibility-field.js';
 import { isDirty } from '../lib/form-dirty.js';
 import {
@@ -87,10 +87,21 @@ export function additionalLevelsPatch(
     : { additional_level_ids: after };
 }
 
+/** R201 — the branches, home first, sent only when the set or its home changed. */
+function branchesPatch(row: LibraryRow, next: string[]): { branch_ids?: string[] } {
+  const before = row.branch_id === null ? [] : [row.branch_id, ...(row.additional_branches ?? []).map((b) => b.id)];
+  const same =
+    before.length === next.length && before[0] === next[0] && [...before].sort().join() === [...next].sort().join();
+  return same ? {} : { branch_ids: next };
+}
+
 function ContentEditDialog({
   row,
   levels,
   subjects,
+  years,
+  branches,
+  mayAssignGlobal,
   busy,
   onCancel,
   onSave,
@@ -99,6 +110,11 @@ function ContentEditDialog({
   row: LibraryRow;
   levels: { value: string; label: string }[];
   subjects: { value: string; label: string }[];
+  /** R201 — the year and branches are editable here too. */
+  years: { value: string; label: string }[];
+  branches: { value: string; label: string }[];
+  /** §4.9 — no branch (Global) is an administrator's choice only. */
+  mayAssignGlobal: boolean;
   /** R177 §7 — which Subjects work by Surah and each Level's syllabus. */
   facts: Parameters<typeof subjectWorksBySurah>[0] & Parameters<typeof surahChoices>[0];
   busy: boolean;
@@ -112,6 +128,9 @@ function ContentEditDialog({
     wholeCategory: boolean;
     additionalLevelIds: string[];
     surahId: number | null;
+    description: string;
+    academicYearId: string;
+    branchIds: string[];
   }) => void;
 }): ReactNode {
   const pristine = {
@@ -127,10 +146,15 @@ function ContentEditDialog({
     surahId: row.surah_id ?? null,
     // R169 §10 — the item's OTHER Levels, hydrated from the row.
     additionalLevelIds: (row.additional_levels ?? []).map((level) => level.id),
+    // R201 — the description, the year and the branches (home first), from the row.
+    description: row.description ?? '',
+    academicYearId: row.academic_year_id,
+    branchIds: row.branch_id === null ? [] : [row.branch_id, ...(row.additional_branches ?? []).map((b) => b.id)],
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
   const error = form.title.trim() === '' ? t('common.required') : null;
+  const branchError = !mayAssignGlobal && form.branchIds.length === 0 ? t('common.required') : null;
 
   return (
     <FormDialog
@@ -142,8 +166,8 @@ function ContentEditDialog({
       onCancel={onCancel}
       onSubmit={() => {
         setTouched(true);
-        if (error) return;
-        onSave({ ...form, title: form.title.trim() });
+        if (error || branchError) return;
+        onSave({ ...form, title: form.title.trim(), description: form.description.trim() });
       }}
     >
       <p className="field__hint">{t('content.edit.fileUnchanged')}</p>
@@ -154,6 +178,32 @@ function ContentEditDialog({
         onChange={(v) => setForm((f) => ({ ...f, title: v }))}
         required
         error={touched ? error : null}
+      />
+
+      {/* R201 — what an upload asks, an edit corrects. */}
+      <TextArea
+        label={t('content.upload.description')}
+        value={form.description}
+        onChange={(v) => setForm((f) => ({ ...f, description: v }))}
+        rows={3}
+      />
+
+      <SelectField
+        label={t('scope.academicYear')}
+        value={form.academicYearId}
+        onChange={(v) => setForm((f) => ({ ...f, academicYearId: v }))}
+        options={years}
+        required
+      />
+
+      <MultiSelectField
+        label={t('scope.branch')}
+        options={branches}
+        selected={form.branchIds}
+        onChange={(ids) => setForm((f) => ({ ...f, branchIds: ids }))}
+        emptyLabel={t('content.upload.noBranch')}
+        required={!mayAssignGlobal}
+        error={touched ? branchError : null}
       />
 
       <SelectField
@@ -519,6 +569,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     wholeCategory: boolean;
     additionalLevelIds: string[];
     surahId: number | null;
+    description: string;
+    academicYearId: string;
+    branchIds: string[];
   }): Promise<void> {
     if (!editing) return;
     setBusy(true);
@@ -549,6 +602,12 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           // R169 §10 — sent only when the SET changed, like every field here.
           // «كل مستويات الفئة» makes naming Levels redundant, so it clears them.
           ...additionalLevelsPatch(editing, patch),
+          // R201 — sent only when changed, like every field here.
+          ...(patch.description !== (editing.description ?? '')
+            ? { description: patch.description === '' ? null : patch.description }
+            : {}),
+          ...(patch.academicYearId !== editing.academic_year_id ? { academic_year_id: patch.academicYearId } : {}),
+          ...branchesPatch(editing, patch.branchIds),
         },
         accessToken,
       );
@@ -728,6 +787,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           row={editing}
           levels={scope.options.levelId}
           subjects={scope.options.subjectId}
+          years={scope.options.academicYearId}
+          branches={scope.options.branchId}
+          mayAssignGlobal={isAdmin}
           facts={scope}
           busy={busy}
           onCancel={() => setEditing(null)}

@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint — current Revision 200 (2026-10-05); see the revision ledger below.
+**Status:** Final MVP Blueprint — current Revision 201 (2026-10-05); see the revision ledger below.
 **Revision date:** 2026-09-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** Safae El Messoussi
@@ -24,7 +24,7 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
-**Revision ledger (R1–R200):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 200** (2026-10-05).
+**Revision ledger (R1–R201):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 201** (2026-10-05).
 
 Where §4 (functional) and §12–§20 (rules/constraints) describe the same behavior, they must agree; if an implementer ever finds a conflict, **§12 Business Rules win**, and the conflict must be reported, not silently resolved.
 
@@ -567,7 +567,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
   2. **Private:** visible only to logged-in Students enrolled in the target Level (§4.4c) and Parents of such students (child context verified via `X-Active-Child-ID`, §4.3); served exclusively via short-lived presigned URLs after server-side permission checks.
   3. **Hidden:** excluded from Student/Parent directories; visible only to Admins and Teachers, who can toggle to Public or Private (subject to the consent gate).
 * **Global (No-Branch) content scope authorization:** content with `branch_id = null` surfaces in the "Global / بدون فرع" container across every branch (§5.2). **Only Super Admins and Admins may assign content to the Global scope. Teachers are strictly locked to `branch_id` values within their assigned branch scope** (resolved per §4.4c — `CourseScheduleStaff` → schedule `branch_id`, stated there directly rather than inferred); a Teacher upload with `branch_id = null` or an out-of-scope branch is rejected with `403 FORBIDDEN`. Enforced server-side per TD-2 — this prevents a single-branch teacher from accidentally publishing files platform-wide.
-  * **Revision 198 §2 — an item may be filed for SEVERAL branches.** The upload names `branch_ids`; the first is the item's home `branch_id`, the rest its additional branches (`EducationalContentBranch`); **choosing none is Global** — there is no «بدون فرع» choice to pick. Every named branch is authorised as one branch is (a Teacher must reach each; none is refused for her as `null` is). The library places the item under each of its branches and counts it once per shelf; a reader whose branch is any of them sees it in her first bucket (§5.2).
+  * **Revision 198 §2 — an item may be filed for SEVERAL branches.** The upload names `branch_ids`; the first is the item's home `branch_id`, the rest its additional branches (`EducationalContentBranch`); **choosing none is Global** — there is no «بدون فرع» choice to pick. Every named branch is authorised as one branch is (a Teacher must reach each; none is refused for her as `null` is). The library places the item under each of its branches and counts it once per shelf; a reader whose branch is any of them sees it in her first bucket (§5.2). **Revision 201 — «تعديل عنصر المحتوى» edits the description, the academic year and the branches** (`PATCH /content/{id}`: `description`, `academic_year_id`, `branch_ids`), authorised as an upload is.
 * **Consent-Gated Recording Privacy (hard constraint, not a default) (BR-2, BR-3):** *(**Superseded by Revision 170 §3**, the Owner's decision of 2026-09-21: the gate is a WARNING to staff — nothing is forced, nothing is refused, the default stays what §4.9 sets, and switching to private is the staff member's act. The sub-bullets below describe the rule as it stood; the re-evaluation engine, its triggers and its audience resolution stand, and now maintain `media_consent_missing` in both directions.)*
   * Admin configures default content visibility *per Category* (e.g., Children = private-by-default, Women/Teens = public-by-default).
   * **The gate's subject is the Session's RESOLVED AUDIENCE (Revision 43).** If **even one student in the audience a Session resolves to** (§4.4c — the Level's students at that branch, or the Administrative Group's, or the Teaching Group's) lacks effective `media_release` consent, **every recording resource attached to that Session is forced `private`**, maintained continuously by the re-evaluation engine (§4.1a). One rule covers all three teaching modes; the former per-Group wording had no subject once a Session could be for a Teaching Group or an entire Level.

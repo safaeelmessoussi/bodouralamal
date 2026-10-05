@@ -1264,6 +1264,12 @@ export interface ContentMetadataPatch {
   surahId?: number | null;
   /** R169 §10 — the item's OTHER Levels; replaces the set. */
   additionalLevelIds?: string[];
+  /** R201 — the description; `null` clears it. */
+  description?: string | null;
+  /** R201 — the academic year it is filed under. */
+  academicYearId?: string;
+  /** R201 — its branches, home first; `[]` is Global (§4.9). Replaces the set. */
+  branchIds?: string[];
 }
 
 /**
@@ -1344,6 +1350,42 @@ export async function updateContentMetadata(
       throw new AppError('VALIDATION_FAILED', 'no such subject', { reason: 'UNKNOWN_SUBJECT' });
     }
   }
+
+  // R201 — the year is a live one; the branches are authorised exactly as an
+  // upload's are (§4.9: Global only for administrators, a مؤطِّرة within her
+  // own), so an edit can never file content where the person could not upload.
+  if (patch.academicYearId !== undefined) {
+    const year = await prisma.academicYear.findFirst({
+      where: { id: patch.academicYearId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!year) throw new AppError('NOT_FOUND', 'no such academic year');
+  }
+  const branchIds = patch.branchIds === undefined ? null : [...new Set(patch.branchIds)];
+  if (branchIds !== null) {
+    if (branchIds.length === 0) await assertUploadScope(prisma, actor, null);
+    for (const branchId of branchIds) await assertUploadScope(prisma, actor, branchId);
+    if (branchIds.length > 0) {
+      const live = await prisma.branch.count({ where: { id: { in: branchIds }, deletedAt: null } });
+      if (live !== branchIds.length) throw new AppError('NOT_FOUND', 'no such branch');
+    }
+  }
+  // Around the row's update as the Levels are: cleared before the home moves,
+  // written after (the trigger compares each row with the home as it stands).
+  const clearBranches = async (tx: Prisma.TransactionClient): Promise<void> => {
+    if (branchIds !== null) await tx.educationalContentBranch.deleteMany({ where: { contentId } });
+  };
+  const writeBranches = async (tx: Prisma.TransactionClient): Promise<void> => {
+    if (branchIds === null || branchIds.length < 2) return;
+    await tx.educationalContentBranch.createMany({
+      data: branchIds.slice(1).map((branchId) => ({ contentId, branchId })),
+    });
+  };
+  const scopeData = {
+    ...(patch.description !== undefined ? { description: patch.description } : {}),
+    ...(patch.academicYearId !== undefined ? { academicYearId: patch.academicYearId } : {}),
+    ...(branchIds !== null ? { branchId: branchIds[0] ?? null } : {}),
+  };
 
   /**
    * **R169 §10 — the item's OTHER Levels.** Each must be a live Level that
@@ -1458,9 +1500,11 @@ export async function updateContentMetadata(
       const sessions = await lockRecordingSessions(tx);
       await lockEducationalContent(tx, [contentId]);
       await clearAdditionalLevels(tx);
+      await clearBranches(tx);
       const written = await tx.educationalContent.updateMany({
         where: { id: contentId, deletedAt: null, version: existing.version },
         data: {
+          ...scopeData,
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
           ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
@@ -1477,6 +1521,7 @@ export async function updateContentMetadata(
         });
       }
       await writeAdditionalLevels(tx);
+      await writeBranches(tx);
       if (recordingMetadata) await safeguardRetaggedRecordingUnderLocks(tx, contentId, sessions);
     });
     return;
@@ -1521,7 +1566,9 @@ export async function updateContentMetadata(
         }
         await hooks.beforePublish?.();
         await clearAdditionalLevels(tx);
+        await clearBranches(tx);
         await tx.educationalContent.update({ where: { id: contentId }, data: {
+          ...scopeData,
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
           ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
@@ -1532,6 +1579,7 @@ export async function updateContentMetadata(
           storageBucket: targetBucket, storageKey: destinationKey, version: { increment: 1 },
         } });
         await writeAdditionalLevels(tx);
+        await writeBranches(tx);
         if (recordingMetadata) await safeguardRetaggedRecordingUnderLocks(tx, contentId, sessions);
         await settlePlacementCopy(tx, attempt.id);
         await completeRetirement(tx, attempt.id); // canonical adoption, not deletion

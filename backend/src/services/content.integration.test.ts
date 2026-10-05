@@ -692,6 +692,49 @@ describe("R198 §2 — several branches", () => {
   });
 });
 
+/**
+ * **SRS Revision 201 — «تعديل عنصر المحتوى» edits the description, the year
+ * and the branches**, each authorised as an upload is.
+ */
+describe("R201 — editing the description, year and branches", () => {
+  it("rewrites them, home branch first, and clears the description with null", async () => {
+    const { id } = await uploadPdf(admin(), "تعديل النطاق", {});
+    const otherYear =
+      (await prisma.academicYear.findFirst({ where: { id: { not: academicYearId }, deletedAt: null }, select: { id: true } }))?.id ??
+      academicYearId;
+    await updateContentMetadata(prisma, clients, admin(), id, {
+      description: "وصف جديد",
+      academicYearId: otherYear,
+      branchIds: [otherBranchId, branchId],
+    });
+    let row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { description: true, academicYearId: true, branchId: true, additionalBranches: { select: { branchId: true } } },
+    });
+    expect(row).toMatchObject({ description: "وصف جديد", academicYearId: otherYear, branchId: otherBranchId });
+    expect(row.additionalBranches.map((b) => b.branchId)).toEqual([branchId]);
+    // The home moves onto the former additional branch, and the set shrinks.
+    await updateContentMetadata(prisma, clients, admin(), id, { branchIds: [branchId], description: null });
+    row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { description: true, academicYearId: true, branchId: true, additionalBranches: { select: { branchId: true } } },
+    });
+    expect(row).toMatchObject({ description: null, branchId });
+    expect(row.additionalBranches).toEqual([]);
+    // `[]` is Global, for an Admin.
+    await updateContentMetadata(prisma, clients, admin(), id, { branchIds: [] });
+    expect((await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { branchId: true } })).branchId).toBeNull();
+  });
+
+  it("refuses a Teacher a branch outside her scope, and Global", async () => {
+    const { id } = await uploadPdf(teacher(), "تعديل المؤطرة");
+    const outside = await failure(() => updateContentMetadata(prisma, clients, teacher(), id, { branchIds: [branchId, otherBranchId] }));
+    expect(outside.details?.["reason"]).toBe("BRANCH_OUT_OF_SCOPE");
+    const global = await failure(() => updateContentMetadata(prisma, clients, teacher(), id, { branchIds: [] }));
+    expect(global.details?.["reason"]).toBe("GLOBAL_SCOPE_FORBIDDEN");
+  });
+});
+
 describe("§4.9 upload authorization", () => {
   it("refuses a Teacher the Global scope — the named §19.2 regression", async () => {
     const e = await failure(() =>

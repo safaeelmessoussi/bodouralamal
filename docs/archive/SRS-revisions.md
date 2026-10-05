@@ -1,9 +1,11 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–200 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–201 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 201 (Document Owner, 2026-10-05 — «I want to be able to edit السنة الدراسية and الفرع and الوصف in the form تعديل عنصر المحتوى»):** **BUILT.** `PATCH /content/{id}` takes `description` (`null` clears), `academic_year_id` (a live year) and `branch_ids` (home first, the rest additional, `[]` Global; each authorised as at upload; replaces the set around the row's update, as the additional Levels are). The dialog shows «الوصف», «السنة الدراسية*» and «الفرع» (multi-select, «الكل» when none; required for a مؤطِّرة) and sends only what changed.
 
 **Revision 200 (Document Owner, 2026-10-05 — «why is this for a working mp3 recording: نوع الملف غير مقبول»):** **BUILT.** The upload accepted an MP3 only when the browser declared it `audio/mpeg`; phones and some browsers declare `audio/mp3`, `audio/x-mpeg`, nothing, or `application/octet-stream`, and `/uploads/initiate` refused them. `canonicalUploadMime` (`lib/file-types.ts`) maps those names to the listed type and reads an undeclared file by its extension; `mime` may be empty; the TD-9 list is unchanged and the completion byte check still refuses a file that is not what it says (verified: random bytes named `.mp3` refused). The dialog says «نوع الملف غير مقبول…» only for a type refusal (`TYPE_NOT_ACCEPTED`) or the byte check (409), never for another refused field.
 

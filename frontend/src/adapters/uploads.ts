@@ -219,6 +219,12 @@ export interface ContentMetadataPatch {
    *  home and may not be repeated here (`LEVEL_IS_HOME`); each must teach the
    *  item's Subject (`SUBJECT_NOT_AT_LEVEL`). */
   additional_level_ids?: string[];
+  /** R201 — the description; `null` clears it. */
+  description?: string | null;
+  /** R201 — the academic year. */
+  academic_year_id?: string;
+  /** R201 — the branches, home first; `[]` is Global; replaces the set. */
+  branch_ids?: string[];
 }
 
 export async function updateContent(
