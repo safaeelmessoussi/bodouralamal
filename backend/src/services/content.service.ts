@@ -6,6 +6,7 @@ import {
   buildStorageKey,
   buildServerFinalizationKey,
   buildUploadStagingKey,
+  canonicalUploadMime,
   isUploadableMime,
   mimeEssence,
   sizeCapFor,
@@ -290,12 +291,15 @@ export async function initiateUpload(
   actor: Actor,
   input: InitiateInput,
 ): Promise<InitiateResult> {
-  if (!isUploadableMime(input.mime)) {
+  // R200 — `audio/mp3`, `''` … are the listed type under another name.
+  const declared = canonicalUploadMime(input.mime, input.filename);
+  if (!isUploadableMime(declared)) {
     throw new AppError('VALIDATION_FAILED', 'MIME type is not on the TD-9 whitelist', {
       mime: input.mime,
+      reason: 'TYPE_NOT_ACCEPTED',
     });
   }
-  const mime: AcceptedMime = input.mime;
+  const mime: AcceptedMime = declared;
   const cap = sizeCapFor(mime);
   if (input.size > cap) {
     throw new AppError('PAYLOAD_TOO_LARGE', 'declared size exceeds the TD-9 cap', {

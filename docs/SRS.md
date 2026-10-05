@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint — current Revision 199 (2026-10-05); see the revision ledger below.
+**Status:** Final MVP Blueprint — current Revision 200 (2026-10-05); see the revision ledger below.
 **Revision date:** 2026-09-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** Safae El Messoussi
@@ -24,7 +24,7 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
-**Revision ledger (R1–R199):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 199** (2026-10-05).
+**Revision ledger (R1–R200):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 200** (2026-10-05).
 
 Where §4 (functional) and §12–§20 (rules/constraints) describe the same behavior, they must agree; if an implementer ever finds a conflict, **§12 Business Rules win**, and the conflict must be reported, not silently resolved.
 
@@ -1688,6 +1688,7 @@ Every action below writes an `AuditLog` row (actor, timestamp, action_type, targ
 * Audio recordings: max **100 MB** (Revision 12 — reduced from 500 MB: ≈14 MB/hour at 32 kbps mono speech, so 100 MB ≈ 6+ hours; shrinks the R-9 single-shot blast radius, the disk budget, and the Nginx body limit together); MIME `audio/webm`, `audio/mp4`, `audio/ogg`, `audio/mpeg`, `audio/wav`.
 * Documents/slides/images: max **50 MB**; MIME `application/pdf`, `image/jpeg`, `image/png`, `image/webp`, common office types (docx/pptx/xlsx).
 * **Online-class recordings (Revision 99) — reachable ONLY by the platform's own ingestion pipeline, never by the upload boundary.** An `audio_only` class yields an audio object under the audio rules above; an `audio_video` class yields **`video/mp4`**, max **500 MB**. **`video/*` remains refused at `/uploads/*` exactly as before** — this row is not a widening of what a person may upload, it is a statement about what the platform may produce for itself. The same server-side verification applies unchanged: magic bytes from the ranged 512-byte window, size from HEAD against the declared value and the cap, and **mismatch → the object is deleted and no `EducationalContent` row is created**. The cap is separate and larger than the audio one because a three-hour صوت وصورة lesson is legitimately bigger than a voice memo, and it is bounded rather than open for the same disk-budget reason Revision 18 gave (§2.4, §6). **Revision 168 §2 supersedes both figures for the platform's OWN capture: a recording is as long as the class was, and at the measured bitrates (≈59 MB per audio hour, ≈0.63 GB per video hour) the 100 MB and 500 MB caps refused — on import, permanently — every audio class over about 1 h 40 and every video class over about 47 minutes. The platform's own recording, of either kind, is bounded at 5 GiB; an `audio_only` class now yields `audio/mp4` (AAC), not OGG. The upload caps are unchanged for what a person uploads.**
+* **Revision 200 — a declared type is read as the listed type it names:** `audio/mp3`, `audio/x-mpeg`, `audio/x-wav`, `audio/x-m4a`, `image/jpg` … map to their listed type, and a file declared with no type (`''`, `application/octet-stream`) is read by its extension. The list itself is unchanged; the bytes still decide.
 * Browser-upload MIME is validated from the same complete stream that is SHA-256 hashed into server-controlled finalization staging (magic bytes, not just declared header), with exact declared length and cap enforcement; mismatch → `409 VALIDATION_FAILED` and the client staging object is deleted. R99 provider ingestion retains the bounded HEAD + ranged-magic verification specified in Revision 99/100.
 
 **Deterministic, immutable storage keys** (visibility is never encoded in the key — the bucket carries it; a **lifecycle-specific version segment** defeats browser/Nginx/CDN caching collisions when a file with the same name is re-uploaded):

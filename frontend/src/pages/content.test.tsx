@@ -58,9 +58,15 @@ describe('what the uploader tells someone when the server refuses', () => {
   it('treats a rejected type and a magic-byte mismatch as one message', () => {
     // They are one thing from the person's side — this file is not a kind the
     // platform accepts — and the server answers `VALIDATION_FAILED` for both.
-    expect(uploadErrorMessage(envelope('VALIDATION_FAILED'))).toBe(
+    expect(uploadErrorMessage(envelope('VALIDATION_FAILED', { reason: 'TYPE_NOT_ACCEPTED' }))).toBe(
       t('content.upload.typeRejected'),
     );
+    const mismatch = new ApiError(409, { code: 'VALIDATION_FAILED', message_key: 'x', message: 'x', details: {}, request_id: 'r' });
+    expect(uploadErrorMessage(mismatch)).toBe(t('content.upload.typeRejected'));
+  });
+
+  it('R200 — another refused field is not called a wrong file type', () => {
+    expect(uploadErrorMessage(envelope('VALIDATION_FAILED', { issues: [] }))).toBe(t('content.upload.failed'));
   });
 
   it('separates a network failure from any server refusal', () => {

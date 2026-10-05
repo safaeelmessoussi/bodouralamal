@@ -119,6 +119,60 @@ export function mimeEssence(mime: string): string {
 }
 
 /**
+ * **R200 — the same type under another name** (the Owner, 2026-10-05: a
+ * working MP3 was refused as «نوع الملف غير مقبول»). Browsers and phone file
+ * pickers declare an MP3 as `audio/mp3`, `audio/x-mpeg` …, or declare nothing
+ * (`''`, `application/octet-stream`). These names are mapped to the ONE type
+ * on the list they mean — the list itself is unchanged (§20 rule 16), and the
+ * magic-byte check at completion still decides what the bytes are.
+ */
+const MIME_ALIASES: Record<string, string> = {
+  'audio/mp3': 'audio/mpeg',
+  'audio/x-mp3': 'audio/mpeg',
+  'audio/mpeg3': 'audio/mpeg',
+  'audio/x-mpeg': 'audio/mpeg',
+  'audio/x-mpeg-3': 'audio/mpeg',
+  'audio/mpg': 'audio/mpeg',
+  'audio/x-mpg': 'audio/mpeg',
+  'audio/x-wav': 'audio/wav',
+  'audio/wave': 'audio/wav',
+  'audio/vnd.wave': 'audio/wav',
+  'audio/x-pn-wav': 'audio/wav',
+  'audio/m4a': 'audio/mp4',
+  'audio/x-m4a': 'audio/mp4',
+  'audio/x-ogg': 'audio/ogg',
+  'application/ogg': 'audio/ogg',
+  'image/jpg': 'image/jpeg',
+  'image/pjpeg': 'image/jpeg',
+};
+
+/** A file that declares no type is read by its extension — the same list. */
+const MIME_BY_EXTENSION: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  opus: 'audio/ogg',
+  weba: 'audio/webm',
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
+export function canonicalUploadMime(mime: string, filename: string): string {
+  const essence = mimeEssence(mime);
+  if (essence !== '' && essence !== 'application/octet-stream') return MIME_ALIASES[essence] ?? essence;
+  const extension = /\.([a-z0-9]+)$/i.exec(filename.trim())?.[1]?.toLowerCase() ?? '';
+  return MIME_BY_EXTENSION[extension] ?? essence;
+}
+
+/**
  * **The `/uploads/*` door.** `video/*` is refused here, whatever the caller says
  * about the file's provenance (R99.8, R99.12) — the origin marker describes what
  * a thing is and never widens what may be sent.

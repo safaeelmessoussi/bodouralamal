@@ -30,7 +30,9 @@ export const initiateUploadSchema = z
   .object({
     filename,
     size: z.number().int().positive(),
-    mime: z.string().trim().min(1).max(120),
+    // R200 — may be empty: a file the browser could not type is read by its
+    // extension (`canonicalUploadMime`), and its bytes are checked at completion.
+    mime: z.string().trim().max(120),
     content_meta: z
       .object({
         /**

@@ -187,3 +187,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Holidays: `services/holiday-cancellation.service.ts` (`applyHoliday` on event create/update/delete and Trash restore; `applyHolidaysToSessions` on materialisation); migration `20261005120000` (`session.cancelled_by_event_id`, SET NULL, CHECK only while cancelled); manual «إعادة البرمجة» clears it.
 - Tables: no header sorting where rows can be dragged (sort dropped when a table becomes draggable); groups default Level→branch→name, Level sort keeps branch/name, one Level = manual order; «الهدف» `wide` and «كل مستويات {الفئة}» (`dimensionSummary`).
 - Verified: frontend 1624 + lint + build, backend 382 + typecheck + lint, 34 guards, OpenAPI current, seed drill; integration 15 files / 375 tests + 2 restated suites (CI found them: a test holiday on its own classes' day — now evening hours; groups' name-order default); Localhost browser 9/9 (three files through an 8 s offline cut, no click).
+
+## 2026-10-05 — SRS Revision 200: an MP3 declared under another name is accepted
+- `lib/file-types.ts` `canonicalUploadMime`: aliases (`audio/mp3`, `audio/x-mpeg`, `audio/x-wav`, `audio/x-m4a`, `image/jpg` …) → listed type; `''`/`application/octet-stream` → by extension; used at `/uploads/initiate` (`TYPE_NOT_ACCEPTED`); `mime` may be empty. List unchanged; byte check unchanged.
+- `uploadErrorMessage`: «نوع الملف غير مقبول…» only for `TYPE_NOT_ACCEPTED` or the 409 byte check; other refusals «فشل الرفع».
+- Verified: reproduced on Localhost (same MP3 accepted as `audio/mpeg`, refused as `audio/mp3`/`audio/x-mpeg`/empty/octet-stream); after: all four complete, random bytes named `.mp3` refused; backend 383, frontend 1625.
+

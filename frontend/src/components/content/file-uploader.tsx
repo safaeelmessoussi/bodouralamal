@@ -375,10 +375,13 @@ export function uploadErrorMessage(error: unknown): string {
     case 'RATE_LIMITED':
       return t('content.upload.quotaExhausted');
     case 'VALIDATION_FAILED':
-      // Covers both the whitelist refusal at initiate and the magic-byte
-      // mismatch at completion — from the person's side they are one thing:
-      // this file is not a kind the platform accepts.
-      return t('content.upload.typeRejected');
+      // The whitelist refusal at initiate and the byte check at completion
+      // (409) — from the person's side one thing: this file is not a kind the
+      // platform accepts. R200 — any OTHER refused field is not called a
+      // wrong file type: that sentence sent the Owner looking at a good MP3.
+      return reason === 'TYPE_NOT_ACCEPTED' || error.status === 409
+        ? t('content.upload.typeRejected')
+        : t('content.upload.failed');
     case 'UPLOAD_INCOMPLETE':
       return t('content.upload.incomplete');
     default:
