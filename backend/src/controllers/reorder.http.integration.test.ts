@@ -286,9 +286,14 @@ describe.each([
     ).toEqual([...ascNames].reverse());
     // Sorting by name is not the same list as BR-19's order — otherwise this
     // test would pass against an endpoint that ignored the parameter entirely.
-    expect(ascNames).not.toEqual(
-      mine(plain.body.data as unknown as Record<string, unknown>[]),
-    );
+    // R199 §7 — the groups' default IS by name within one Level and branch
+    // (all of this suite's groups), so there the reversed `desc` above is the
+    // proof that the parameter is read.
+    if (_label !== "administrative-groups") {
+      expect(ascNames).not.toEqual(
+        mine(plain.body.data as unknown as Record<string, unknown>[]),
+      );
+    }
   });
 
   it("refuses an unknown field, a column name and a bad direction", async () => {

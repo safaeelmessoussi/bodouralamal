@@ -98,6 +98,11 @@ async function makeEvent(title: string, schedulingTypeId: string): Promise<void>
       startDate: WHEN,
       recurrenceType: 'none',
       global: true,
+      // R199 §5 — a عطلة cancels the classes it covers; this one is the
+      // evening, so the day's 09:00 classes stay on the calendar beside it.
+      ...(title === 'عيد'
+        ? { startTime: new Date(Date.UTC(1970, 0, 1, 18, 0, 0)), endTime: new Date(Date.UTC(1970, 0, 1, 20, 0, 0)) }
+        : {}),
     } as never,
     NOW,
   );
