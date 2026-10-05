@@ -192,4 +192,3 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `lib/file-types.ts` `canonicalUploadMime`: aliases (`audio/mp3`, `audio/x-mpeg`, `audio/x-wav`, `audio/x-m4a`, `image/jpg` …) → listed type; `''`/`application/octet-stream` → by extension; used at `/uploads/initiate` (`TYPE_NOT_ACCEPTED`); `mime` may be empty. List unchanged; byte check unchanged.
 - `uploadErrorMessage`: «نوع الملف غير مقبول…» only for `TYPE_NOT_ACCEPTED` or the 409 byte check; other refusals «فشل الرفع».
 - Verified: reproduced on Localhost (same MP3 accepted as `audio/mpeg`, refused as `audio/mp3`/`audio/x-mpeg`/empty/octet-stream); after: all four complete, random bytes named `.mp3` refused; backend 383, frontend 1625.
-
