@@ -197,3 +197,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `updateContentMetadata`: `description`, `academicYearId` (live), `branchIds` (authorised per branch as at upload; join rows replaced around the row update); controller schema `description`/`academic_year_id`/`branch_ids`; OpenAPI.
 - `ContentEditDialog`: «الوصف» (textarea), «السنة الدراسية*», «الفرع» multi-select («الكل» when none, required for a مؤطِّرة); `branchesPatch` sends the set only when it or its home changed.
 - Verified: integration 104 (2 new R201 cases), frontend 1625 + build, backend 383; Localhost: a probe item edited through the dialog (description, year, two branches) read back from the API, then purged.
+
+## 2026-10-06 — SRS Revision 202: a phone recording named .mp3 that is really an M4A is accepted
+- Cause (Staging log): completion's byte check refused it (409 in 88 ms) — the content was not MP3. `lib/file-types.ts` `provenMime` + padded MP3 frame sync; `object-verification.ts` returns the proven type; `completeUpload` stores and serves it (`audio/mp4`); documents never re-typed.
+- Verified: unit 22 (file types), backend 384; integration 164 (2 new R202 cases: M4A-as-.mp3 stored `audio/mp4`, PDF-as-.mp3 refused); Localhost: a real ffmpeg M4A named `.mp3` uploaded and served `Content-Type: audio/mp4`, then purged.

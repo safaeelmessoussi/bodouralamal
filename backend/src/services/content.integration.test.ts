@@ -696,6 +696,38 @@ describe("R198 §2 — several branches", () => {
  * **SRS Revision 201 — «تعديل عنصر المحتوى» edits the description, the year
  * and the branches**, each authorised as an upload is.
  */
+/**
+ * **SRS Revision 202 — a phone recording named `.mp3` that is really an M4A**
+ * is accepted and stored as what its bytes are; a document is not re-typed.
+ */
+describe("R202 — an audio file is stored as what its bytes prove", () => {
+  const upload = async (bytes: Buffer, filename: string, mime: string) => {
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename,
+      size: bytes.length,
+      mime,
+      meta: meta({}) as never,
+    });
+    trackTicket(initiated.uploadId);
+    expect(await putObject(initiated.putUrl, bytes, mime)).toBe(200);
+    return completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, { title: `${TAG} ${filename}`, description: null });
+  };
+
+  it("an M4A named .mp3 completes as audio/mp4", async () => {
+    const m4a = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypM4A ", "latin1"), Buffer.alloc(2048, 7)]);
+    const { id } = await upload(m4a, "الحصة 5 الجزء 1.mp3", "audio/mpeg");
+    createdContentIds.add(id);
+    const row = await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { mimeType: true, storageBucket: true, storageKey: true } });
+    trackObject(row.storageBucket, row.storageKey);
+    expect(row.mimeType).toBe("audio/mp4");
+  });
+
+  it("a PDF named .mp3 is still refused", async () => {
+    const e = await failure(() => upload(Buffer.from("%PDF-1.4\n" + "x".repeat(2000), "latin1"), "fake.mp3", "audio/mpeg"));
+    expect(e.code).toBe("VALIDATION_FAILED");
+  });
+});
+
 describe("R201 — editing the description, year and branches", () => {
   it("rewrites them, home branch first, and clears the description with null", async () => {
     const { id } = await uploadPdf(admin(), "تعديل النطاق", {});

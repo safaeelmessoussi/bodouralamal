@@ -1,9 +1,11 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–201 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–202 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 202 (Document Owner, 2026-10-06 — an MP3 recording refused at «جارٍ التحقّق من الملف» with «نوع الملف غير مقبول»):** **BUILT.** Staging's log showed the completion byte check (409, 88 ms); a phone recorder's file named `.mp3` is commonly an M4A/AAC (or WAV/OGG). `provenMime` (`lib/file-types.ts`): for a declared audio type, the listed audio type the first 512 bytes prove — the declared one, else another on the list — and the row and the stored object take that type so it plays; an MP3 after zero padding is recognised. Documents are never re-typed; a non-audio file is refused as before; the list is unchanged.
 
 **Revision 201 (Document Owner, 2026-10-05 — «I want to be able to edit السنة الدراسية and الفرع and الوصف in the form تعديل عنصر المحتوى»):** **BUILT.** `PATCH /content/{id}` takes `description` (`null` clears), `academic_year_id` (a live year) and `branch_ids` (home first, the rest additional, `[]` Global; each authorised as at upload; replaces the set around the row's update, as the additional Levels are). The dialog shows «الوصف», «السنة الدراسية*» and «الفرع» (multi-select, «الكل» when none; required for a مؤطِّرة) and sends only what changed.
 

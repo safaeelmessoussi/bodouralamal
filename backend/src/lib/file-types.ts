@@ -277,6 +277,16 @@ const zip = startsWith(0x50, 0x4b, 0x03, 0x04);
 const mp3FrameSync: Sniffer = (head) =>
   head[0] === 0xff && head[1] !== undefined && (head[1] & 0xe0) === 0xe0;
 
+/**
+ * R202 — an MP3 some encoders start with a run of zero padding before the
+ * first frame: still a frame sync, once the zeros (and only zeros) are passed.
+ */
+const paddedMp3FrameSync: Sniffer = (head) => {
+  let i = 0;
+  while (i < head.length && head[i] === 0x00) i += 1;
+  return i > 0 && i < head.length - 1 && head[i] === 0xff && ((head[i + 1] ?? 0) & 0xe0) === 0xe0;
+};
+
 const SIGNATURES: Record<AcceptedMime, Sniffer> = {
   'application/pdf': ascii(0, '%PDF-'),
   'image/jpeg': startsWith(0xff, 0xd8, 0xff),
@@ -289,7 +299,7 @@ const SIGNATURES: Record<AcceptedMime, Sniffer> = {
   // the container and no further; that is the honest limit of a 512-byte window.
   'audio/webm': startsWith(0x1a, 0x45, 0xdf, 0xa3),
   'audio/mp4': ascii(4, 'ftyp'),
-  'audio/mpeg': either(ascii(0, 'ID3'), mp3FrameSync),
+  'audio/mpeg': either(ascii(0, 'ID3'), either(mp3FrameSync, paddedMp3FrameSync)),
   // The three OOXML types are ZIP archives and are indistinguishable from one
   // another at this depth. The check is therefore "consistent with the
   // declaration", which is what a magic-byte test can honestly assert.
@@ -324,6 +334,25 @@ export function magicBytesMatch(mime: AcceptedMime, head: Buffer): boolean {
   // `audio/webm`. Without this the lookup returns `undefined` and throws.
   const check = SIGNATURES[mimeEssence(mime) as AcceptedMime];
   return check !== undefined && check(head);
+}
+
+/**
+ * **R202 — what an AUDIO upload really is** (the Owner, 2026-10-06: a phone
+ * recording named `.mp3` was refused as «نوع الملف غير مقبول»). Phone
+ * recorders save M4A/AAC, WAV or OGG and name the file `.mp3`; the bytes are
+ * an accepted audio type, only the name is wrong. For a declared AUDIO type
+ * the type the bytes prove is returned — the declared one when it matches,
+ * else another audio type on the list (the row is then stored as what it IS,
+ * so it plays). Anything else answers `null`, as before: the list is
+ * unchanged, a document is never re-typed, and a non-audio file declared as
+ * audio is still refused.
+ */
+export function provenMime(declared: string, head: Buffer): AcceptedMime | null {
+  const essence = mimeEssence(declared) as AcceptedMime;
+  if (magicBytesMatch(essence, head)) return essence;
+  if (!(AUDIO_MIME_TYPES as readonly string[]).includes(essence)) return null;
+  for (const audio of AUDIO_MIME_TYPES) if (magicBytesMatch(audio, head)) return audio;
+  return null;
 }
 
 /* ── Storage keys (TD-9) ─────────────────────────────────────────────────── */

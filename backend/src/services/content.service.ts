@@ -474,6 +474,7 @@ async function streamAndVerifyObject(
   sourceEtag: string;
   serverStagingEtag: string | null;
   contentSha256: string;
+  mime: string;
 }> {
   let outcome;
   try {
@@ -509,6 +510,7 @@ async function streamAndVerifyObject(
       sourceEtag: outcome.sourceEtag,
       serverStagingEtag: outcome.destinationEtag,
       contentSha256: outcome.sha256,
+      mime: outcome.mime,
     };
   }
 
@@ -856,7 +858,7 @@ export async function completeUpload(
   input: CompleteInput,
   hooks: UploadCompletionHooks = {},
 ): Promise<{ id: string }> {
-  const claims = claimsOf(uploadId, signingKey, actor);
+  let claims = claimsOf(uploadId, signingKey, actor);
   const finalizationId = finalizationIdOf(claims);
 
   // A successful completion is durable in the mandatory audit transaction.
@@ -900,7 +902,12 @@ export async function completeUpload(
     sourceEtag,
     serverStagingEtag,
     contentSha256,
+    mime: provenType,
   } = await streamAndVerifyObject(clients, claims, serverStagingKey, hooks);
+  // R202 — an audio file is stored as what its bytes proved (an M4A named
+  // `.mp3` is `audio/mp4`), so it plays; for every other type this is the
+  // declared one.
+  claims = { ...claims, mime: provenType };
   const canonicalKey = canonicalKeyFor(claims, finalizationId, contentSha256);
   try {
     await hooks.afterVerification?.({

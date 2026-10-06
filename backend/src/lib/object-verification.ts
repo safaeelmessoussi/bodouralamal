@@ -42,9 +42,8 @@ import { PassThrough, Readable, Transform, type TransformCallback } from 'node:s
 import { pipeline } from 'node:stream/promises';
 
 import {
-  magicBytesMatch,
+  provenMime,
   mimeEssence,
-  type AcceptedMime,
 } from './file-types.js';
 import {
   deleteObject,
@@ -77,7 +76,7 @@ export interface ObjectVerificationRequest {
 }
 
 export type ObjectVerification =
-  | { ok: true; sizeBytes: number; etag: string }
+  | { ok: true; sizeBytes: number; etag: string; mime: string }
   | {
       ok: false;
       /**
@@ -169,7 +168,9 @@ export async function verifyStoredObject(
     }
     throw error;
   }
-  if (!magicBytesMatch(request.mime as AcceptedMime, head)) {
+  // R202 — an audio file is what its bytes prove (`provenMime`).
+  const proven = provenMime(request.mime, head);
+  if (proven === null) {
     return {
       ok: false,
       reason: 'MAGIC',
@@ -177,7 +178,7 @@ export async function verifyStoredObject(
     };
   }
 
-  return { ok: true, sizeBytes: inspected.sizeBytes, etag: inspected.etag };
+  return { ok: true, sizeBytes: inspected.sizeBytes, etag: inspected.etag, mime: proven };
 }
 
 class StreamValidationFailure extends Error {
@@ -288,6 +289,8 @@ export type StreamedObjectVerification =
       sourceEtag: string;
       destinationEtag: string | null;
       sha256: string;
+      /** R202 — the type the bytes proved (the declared one, or for audio the real one). */
+      mime: string;
     }
   | Exclude<ObjectVerification, { ok: true }>;
 
@@ -306,6 +309,7 @@ export async function streamVerifiedObjectToStorage(
   const inspected = await inspectStoredObject(clients, request);
   if ('ok' in inspected) return inspected;
 
+  let proven: string | null = null;
   let opened;
   try {
     opened = await openObjectRead(
@@ -353,7 +357,8 @@ export async function streamVerifiedObjectToStorage(
         detail: { reason: 'OBJECT_CHANGED_DURING_STREAM' },
       };
     }
-    if (!magicBytesMatch(request.mime as AcceptedMime, prefix.subarray(0, 512))) {
+    proven = provenMime(request.mime, prefix.subarray(0, 512));
+    if (proven === null) {
       opened.body.destroy();
       return {
         ok: false,
@@ -392,6 +397,7 @@ export async function streamVerifiedObjectToStorage(
       sourceEtag: inspected.etag,
       destinationEtag: stored.etag,
       sha256: state.sha256,
+      mime: proven ?? mimeEssence(request.mime),
     };
   } catch (error) {
     opened.body.destroy();

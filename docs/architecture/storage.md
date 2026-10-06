@@ -80,7 +80,7 @@ Single-shot presigned PUT to a disposable staging key, then server-controlled im
 - Version segment = first 128 bits (32 hex) of `SHA-256("upload-finalization-sha256-v1" || NUL || finalization_id || NUL || content_sha256)`; the full SHA-256 goes to mandatory audit detail and object metadata and a retry candidate is checked against it. Single-part PUT ETag is MD5, not byte identity; `If-Match` never decides hash, key or publication.
 - The private server-finalization object solves the key-order problem (digest unknown until stream end). Rejected: buffering up to 100 MB in memory; reopening the client-writable key after hashing (TOCTOU). An equal-size/equal-MD5 PDF collision test overwrites client staging after the source read opens and proves one stable snapshot.
 - The server streams, never buffers: memory bounded by stream chunks plus the 512-byte validation window; browser uploads only (50/100 MB); R99's 500 MB object is a storage-side copy.
-- Declared content type is not trusted; magic bytes are. It is first read as the listed type it names (R200: `audio/mp3` → `audio/mpeg`, …), and an absent one (`''`, `application/octet-stream`) from the extension (`canonicalUploadMime`).
+- Declared content type is not trusted; magic bytes are. It is first read as the listed type it names (R200: `audio/mp3` → `audio/mpeg`, …), and an absent one (`''`, `application/octet-stream`) from the extension (`canonicalUploadMime`). R202 — an audio upload is stored as the listed audio type its bytes prove (`provenMime`: an M4A named `.mp3` → `audio/mp4`); documents are never re-typed.
 
 ### `upload_id` is a signed ticket, not a database row
 
