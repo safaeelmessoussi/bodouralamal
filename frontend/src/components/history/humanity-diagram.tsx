@@ -58,15 +58,31 @@ export function HumanityDiagram({
             </button>
           </span>
         ) : null}
+        {all.length > 0 ? (
+          <span className="hdiagram__hint">
+            {t("content.history.diagram.hint")}
+          </span>
+        ) : null}
       </figcaption>
       <div className="hdiagram__scroll">
         <ul className="hdiagram__tree">
-          <Branch node={diagram.root} at="0" open={open} onToggle={toggle} />
+          <Branch
+            node={diagram.root}
+            at="0"
+            depth={0}
+            index={0}
+            open={open}
+            onToggle={toggle}
+          />
         </ul>
       </div>
     </figure>
   );
 }
+
+/** R205 — a first branch with no colour of its own takes the next one, so
+ *  each branch of the big picture is told apart at a glance. */
+const CYCLE: DiagramTone[] = ["blue", "orange", "green", "violet", "gold"];
 
 const TONE_CLASS: Record<DiagramTone, string> = {
   gold: "tone-prophets",
@@ -79,18 +95,30 @@ const TONE_CLASS: Record<DiagramTone, string> = {
 function Branch({
   node,
   at,
+  depth,
+  index,
   open,
   onToggle,
 }: {
   node: DiagramNode;
   at: string;
+  depth: number;
+  index: number;
   open: Set<string>;
   onToggle: (key: string) => void;
 }): ReactNode {
   const branches = node.children ?? [];
   const isOpen = open.has(at);
+  const tone =
+    node.tone ?? (depth === 1 ? CYCLE[index % CYCLE.length] : undefined);
   const body = (
     <>
+      {/* R205 — the first branches are numbered: the order to read them in. */}
+      {depth === 1 ? (
+        <span className="hdiagram__step" aria-hidden="true">
+          {index + 1}
+        </span>
+      ) : null}
       <span className="hdiagram__label">
         <Verse text={node.label} />
       </span>
@@ -102,7 +130,7 @@ function Branch({
     </>
   );
   return (
-    <li className={node.tone ? TONE_CLASS[node.tone] : undefined}>
+    <li className={tone ? TONE_CLASS[tone] : undefined}>
       {branches.length > 0 ? (
         <button
           type="button"
@@ -125,6 +153,8 @@ function Branch({
               key={i}
               node={child}
               at={`${at}/${String(i)}`}
+              depth={depth + 1}
+              index={i}
               open={open}
               onToggle={onToggle}
             />

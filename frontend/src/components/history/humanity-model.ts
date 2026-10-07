@@ -61,8 +61,30 @@ export interface TimelineMarker {
   hijri: string;
   label: string;
   tone: HistoryTone;
-  /** The node it opens, as `era/child` ids; none for «اليوم». */
+  /** The node it opens, as `era/child` ids; `today` for «اليوم» (R205). */
   node?: string;
+}
+
+/** The address of «اليوم»: today's schedule, not a node of the tree (R205). */
+export const TODAY = 'today';
+
+/** A phase on the timeline's second line, between two stations (R205). */
+export interface TimelineSpan {
+  label: string;
+  sub: string;
+  tone: HistoryTone;
+  node: string;
+  /** Station indexes in `TIMELINE`: the phase runs from one to the other. */
+  from: number;
+  to: number;
+}
+
+/** A station on the timeline's third line — an expedition (R205). */
+export interface TimelineDetail {
+  label: string;
+  hijri: string;
+  gregorian: string;
+  node: string;
 }
 
 /** The nodes from the root to the one addressed by `path` (ids), as far as they resolve. */
@@ -153,16 +175,17 @@ export function diagramSize(node: DiagramNode): number {
 }
 
 /**
- * **Which boxes start open** (R204), by address (`0`, `0/2`…). A diagram of
- * up to `whole` boxes opens whole, so it reads at a glance like the Owner's
- * drawings; a larger one opens two levels, and each box opens on a click.
+ * **Which boxes start open** (R204; R205), by address (`0`, `0/2`…). A
+ * diagram of up to `whole` boxes opens whole, so it reads at a glance like the
+ * Owner's drawings; a larger one shows its trunk and first branches only — the
+ * big picture first, never a wall of boxes — and each branch opens on a click.
  */
-export function initiallyOpen(root: DiagramNode, whole = 40): Set<string> {
+export function initiallyOpen(root: DiagramNode, whole = 16): Set<string> {
   const open = new Set<string>();
   const all = diagramSize(root) <= whole;
   const walk = (node: DiagramNode, key: string, depth: number): void => {
     if (!node.children?.length) return;
-    if (all || depth < 2) open.add(key);
+    if (all || depth < 1) open.add(key);
     node.children.forEach((child, i) => walk(child, `${key}/${String(i)}`, depth + 1));
   };
   walk(root, '0', 0);

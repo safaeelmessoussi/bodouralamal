@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { t } from '../../i18n/index.js';
-import { HUMANITY, TIMELINE } from './humanity-data.js';
+import { EXPEDITIONS, HUMANITY, PHASES, TIMELINE } from './humanity-data.js';
 import {
   branchKeys,
   descendantCount,
@@ -63,7 +63,9 @@ describe('R203 — «نظرة شاملة», the content from the Owner’s board
   });
 
   it('opens a real node from every station of the timeline', () => {
-    for (const marker of TIMELINE.filter((m) => m.node)) {
+    // R205 — «اليوم» opens today's schedule, not a node of the tree.
+    expect(TIMELINE.at(-1)!.node).toBe('today');
+    for (const marker of TIMELINE.filter((m) => m.node && m.node !== 'today')) {
       const ids = marker.node!.split('/');
       expect(resolvePath(HUMANITY, ids).length, marker.label).toBe(ids.length + 1);
     }
@@ -125,6 +127,22 @@ describe('R203 — «نظرة شاملة», the content from the Owner’s board
     }
   });
 
+  it('R205 — the second and third lines: the phases between their stations, the expeditions in the Medinan phase', () => {
+    expect(PHASES.map((p) => [p.label, TIMELINE[p.from]!.label, TIMELINE[p.to]!.label])).toEqual([
+      ['المرحلة المكية', 'البعثة وبدء الوحي', 'الهجرة'],
+      ['المرحلة المدنية', 'الهجرة', 'وفاة النبي ﷺ'],
+    ]);
+    for (const p of PHASES) expect(resolvePath(HUMANITY, p.node.split('/')).length).toBe(3);
+    expect(EXPEDITIONS.map((e) => e.label)).toEqual(['بدر', 'أُحُد', 'بنو النضير', 'الأحزاب', 'فتح مكة', 'حُنَين', 'تبوك']);
+    for (const e of EXPEDITIONS) {
+      const node = resolvePath(HUMANITY, e.node.split('/')).at(-1)!;
+      expect(node.id, e.label).toBe(e.node.split('/').at(-1));
+      // Each is tied to the Qur'an by a verse.
+      expect(node.lines!.join(' '), e.label).toMatch(/﴿/);
+      expect(node.when).toEqual({ gregorian: e.gregorian, hijri: e.hijri });
+    }
+  });
+
   it('keeps ids unique among siblings, so every address is one node', () => {
     for (const node of all(HUMANITY)) {
       const ids = (node.children ?? []).map((c) => c.id);
@@ -140,7 +158,7 @@ describe('R203 — the rules of the diagram', () => {
     expect(parsePath(HUMANITY, null)).toEqual([]);
   });
 
-  it('R204 — opens a small diagram whole, a large one two levels deep', () => {
+  it('R205 — opens a small diagram whole, a large one at its first branches', () => {
     const leaf = (label: string): DiagramNode => ({ label });
     const small: DiagramNode = { label: 'r', children: [{ label: 'a', children: [{ label: 'b', children: [leaf('c')] }] }] };
     expect([...initiallyOpen(small)]).toEqual(['0', '0/0', '0/0/0']);
@@ -149,8 +167,7 @@ describe('R203 — the rules of the diagram', () => {
     const large: DiagramNode = { label: 'r', children: Array.from({ length: 5 }, (_, i) => ({ label: `v${String(i)}`, children: Array.from({ length: 9 }, (_, j) => ({ label: `w${String(j)}`, children: [leaf('x')] })) })) };
     expect(diagramSize(large)).toBeGreaterThan(40);
     const open = initiallyOpen(large);
-    expect(open.has('0') && open.has('0/4')).toBe(true);
-    expect(open.has('0/0/0')).toBe(false);
+    expect([...open]).toEqual(['0']);
   });
 
   it('counts what is beneath a node', () => {
@@ -205,6 +222,25 @@ describe('R203 — the page', () => {
     expect(html.match(/>ميلادي</g)?.length).toBe(1);
   });
 
+  it('R205 — draws the three lines, the arrow, and «اليوم» as a station that opens', () => {
+    at('?view=history');
+    const html = renderToStaticMarkup(<HumanityTimeline />);
+    expect(html.match(/class="humanity__phase /g)?.length).toBe(2);
+    expect(html.match(/class="humanity__expedition"/g)?.length).toBe(7);
+    expect(html).toContain('humanity__zoom');
+    expect(html).toMatch(/humanity__station[^"]* is-last/);
+    // «اليوم» is a button now: a station that opens.
+    expect(html).toMatch(/<button[^>]*is-last[^>]*>(?:(?!<\/button>).)*اليوم/s);
+  });
+
+  it('R205 — «اليوم» opens the association’s day', () => {
+    at('?view=history&node=today');
+    const html = renderToStaticMarkup(<HumanityTimeline />);
+    expect(html).toContain(t('content.history.today.title'));
+    expect(html).toContain(t('content.history.today.loading'));
+    expect(html).toContain('href="/calendar"');
+  });
+
   it('R204 — draws a diagram as a tree whose branches open and close', () => {
     at('?view=history&node=seal/makki/al-fatiha');
     const page = renderToStaticMarkup(<HumanityTimeline />);
@@ -214,6 +250,10 @@ describe('R203 — the page', () => {
     );
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('class="tone-prophets"');
+    // R205 — the first branches are numbered, and one without a colour takes the next.
+    expect(html).toContain('<span class="hdiagram__step" aria-hidden="true">2</span>');
+    expect(html).toContain('class="tone-makki"');
+    expect(html).toContain(t('content.history.diagram.hint'));
     expect(html).toContain('<span class="humanity__verse">﴿اقْرَأْ﴾</span>');
     expect(html).toContain(t('content.history.diagram.openAll'));
   });

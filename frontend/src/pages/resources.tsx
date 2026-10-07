@@ -159,9 +159,11 @@ function ModeTabs({
 /** R203 — «نظرة شاملة» (R204): the path of humanity, read from the general to the particular.
  *  No lede under the tabs (R204): the timeline and the eras' cards fit one laptop view. */
 function HistoryView({ tabs }: { tabs: ReactNode }): ReactNode {
+  // R205 — «اليوم» lists today's schedule at this reader's visibility.
+  const { accessToken } = useSession();
   return (
     <Shell title={t('content.title')} lede={null} tabs={tabs}>
-      <HumanityTimeline />
+      <HumanityTimeline token={accessToken} />
     </Shell>
   );
 }

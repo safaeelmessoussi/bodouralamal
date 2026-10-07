@@ -11,16 +11,25 @@ import {
 import { t } from "../../i18n/index.js";
 import { counted } from "../../lib/arabic-years.js";
 import { ButtonLink } from "../ui/button.js";
-import { HUMANITY, TIMELINE } from "./humanity-data.js";
+import { EXPEDITIONS, HUMANITY, PHASES, TIMELINE } from "./humanity-data.js";
 import { HumanityDiagram, Verse } from "./humanity-diagram.js";
 import {
+  TODAY,
   descendantCount,
   detailSections,
   parsePath,
   resolvePath,
   type HistoryNode,
+  type TimelineDetail,
   type TimelineMarker,
+  type TimelineSpan,
 } from "./humanity-model.js";
+import { TodayInTheAssociation } from "./humanity-today.js";
+
+/** `?node=` read as an address: a node of the tree, or «اليوم» (R205). */
+function readPath(root: HistoryNode, raw: string | null): string[] {
+  return raw === TODAY ? [TODAY] : parsePath(root, raw);
+}
 
 /**
  * **SRS Revision 203 — «نظرة شاملة»** (the Owner, 2026-10-07; «مسيرة
@@ -42,12 +51,19 @@ import {
 export function HumanityTimeline({
   root = HUMANITY,
   markers = TIMELINE,
+  phases = PHASES,
+  expeditions = EXPEDITIONS,
+  token = null,
 }: {
   root?: HistoryNode;
   markers?: TimelineMarker[];
+  phases?: TimelineSpan[];
+  expeditions?: TimelineDetail[];
+  /** The reader's token, for «اليوم»'s schedule at their visibility (R205). */
+  token?: string | null;
 }): ReactNode {
   const [path, setPath] = useState<string[]>(() =>
-    parsePath(root, new URLSearchParams(window.location.search).get("node")),
+    readPath(root, new URLSearchParams(window.location.search).get("node")),
   );
   const heading = useRef<HTMLHeadingElement | null>(null);
   const moved = useRef(false);
@@ -55,10 +71,7 @@ export function HumanityTimeline({
   useEffect(() => {
     const onPop = (): void =>
       setPath(
-        parsePath(
-          root,
-          new URLSearchParams(window.location.search).get("node"),
-        ),
+        readPath(root, new URLSearchParams(window.location.search).get("node")),
       );
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -83,6 +96,7 @@ export function HumanityTimeline({
     heading.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [path]);
 
+  const isToday = path[0] === TODAY;
   const trail = useMemo(() => resolvePath(root, path), [root, path]);
   const node = trail[trail.length - 1] ?? root;
   const eraId = path[0] ?? null;
@@ -94,12 +108,39 @@ export function HumanityTimeline({
     <div className="humanity">
       <TimelineAxis
         markers={markers}
+        phases={phases}
+        expeditions={expeditions}
         path={path}
         eraId={eraId}
         onOpen={(target) => go(target.split("/"))}
       />
 
-      {path.length > 0 ? (
+      {isToday ? (
+        <nav
+          className="humanity__trail"
+          aria-label={t("content.history.trailLabel")}
+        >
+          <ol>
+            <li>
+              <button
+                type="button"
+                className="humanity__crumb"
+                onClick={() => go([])}
+              >
+                {t("content.views.history")}
+              </button>
+            </li>
+            <li>
+              <span
+                className="humanity__crumb is-current"
+                aria-current="location"
+              >
+                {t("content.history.today.title")}
+              </span>
+            </li>
+          </ol>
+        </nav>
+      ) : path.length > 0 ? (
         <nav
           className="humanity__trail"
           aria-label={t("content.history.trailLabel")}
@@ -134,7 +175,9 @@ export function HumanityTimeline({
         key={path.join("/") || "root"}
         aria-live="polite"
       >
-        {path.length === 0 ? (
+        {isToday ? (
+          <TodayInTheAssociation token={token} headingRef={heading} />
+        ) : path.length === 0 ? (
           <EraCards
             root={root}
             headingRef={heading}
@@ -208,11 +251,15 @@ export function HumanityTimeline({
 
 function TimelineAxis({
   markers,
+  phases,
+  expeditions,
   path,
   eraId,
   onOpen,
 }: {
   markers: TimelineMarker[];
+  phases: TimelineSpan[];
+  expeditions: TimelineDetail[];
   path: string[];
   eraId: string | null;
   onOpen: (node: string) => void;
@@ -279,7 +326,7 @@ function TimelineAxis({
             <button
               key={`${marker.label}-${index}`}
               type="button"
-              className={`humanity__station tone-${marker.tone}${active ? " is-active" : ""}`}
+              className={`humanity__station tone-${marker.tone}${active ? " is-active" : ""}${index === markers.length - 1 ? " is-last" : ""}`}
               style={{ gridColumn: String(index + 2) }}
               onClick={() => onOpen(marker.node!)}
               aria-current={active ? "location" : undefined}
@@ -289,7 +336,7 @@ function TimelineAxis({
           ) : (
             <div
               key={`${marker.label}-${index}`}
-              className={`humanity__station tone-${marker.tone}`}
+              className={`humanity__station tone-${marker.tone}${index === markers.length - 1 ? " is-last" : ""}`}
               style={{ gridColumn: String(index + 2) }}
             >
               {body}
@@ -310,8 +357,116 @@ function TimelineAxis({
             {t(`content.history.era.${span.id}`)}
           </button>
         ))}
+        {phases.map((phase) => (
+          <PhaseLine
+            key={phase.node}
+            phase={phase}
+            active={here === phase.node || here.startsWith(`${phase.node}/`)}
+            onOpen={onOpen}
+          />
+        ))}
+        <ExpeditionLine
+          phase={phases.find((p) => p.node === "seal/madani")}
+          expeditions={expeditions}
+          stations={markers.length}
+          here={here}
+          onOpen={onOpen}
+        />
       </div>
     </div>
+  );
+}
+
+/**
+ * **The second line (R205): a phase leaves the main line between its two
+ * stations** — drawn from the middle of one station's column to the middle of
+ * the other's, one level under the line.
+ */
+function PhaseLine({
+  phase,
+  active,
+  onOpen,
+}: {
+  phase: TimelineSpan;
+  active: boolean;
+  onOpen: (node: string) => void;
+}): ReactNode {
+  const columns = phase.to - phase.from + 1;
+  return (
+    <button
+      type="button"
+      className={`humanity__phase tone-${phase.tone}${active ? " is-active" : ""}`}
+      style={{
+        gridColumn: `${String(phase.from + 2)} / ${String(phase.to + 3)}`,
+        ["--span" as string]: String(columns),
+      }}
+      onClick={() => onOpen(phase.node)}
+      title={`${phase.label} — ${phase.sub}`}
+    >
+      <span className="humanity__phase-label">{phase.label}</span>
+    </button>
+  );
+}
+
+/**
+ * **The third line (R205): the expeditions, as a zoom of the Medinan phase.**
+ * Ten years in one column cannot hold seven names, so the phase opens into a
+ * wider strip under the stations that follow it — a wedge from the phase down
+ * to the strip says it is the same ten years, drawn larger.
+ */
+function ExpeditionLine({
+  phase,
+  expeditions,
+  stations,
+  here,
+  onOpen,
+}: {
+  phase: TimelineSpan | undefined;
+  expeditions: TimelineDetail[];
+  stations: number;
+  here: string;
+  onOpen: (node: string) => void;
+}): ReactNode {
+  if (!phase || expeditions.length === 0) return null;
+  const start = phase.from + 2;
+  const width = Math.min(expeditions.length, stations + 2 - start);
+  const area = {
+    gridColumn: `${String(start)} / ${String(start + width)}`,
+    ["--n" as string]: String(width),
+    ["--far" as string]: String(phase.to - phase.from + 0.5),
+  };
+  return (
+    <>
+      <span
+        className={`humanity__zoom tone-${phase.tone}`}
+        style={area}
+        aria-hidden="true"
+      />
+      <ol
+        className={`humanity__expeditions tone-${phase.tone}`}
+        style={area}
+        aria-label={t("content.history.expeditions")}
+      >
+        {expeditions.map((item) => {
+          const active = here === item.node;
+          return (
+            <li key={item.node}>
+              <button
+                type="button"
+                className={`humanity__expedition${active ? " is-active" : ""}`}
+                onClick={() => onOpen(item.node)}
+                aria-current={active ? "location" : undefined}
+                title={`${item.gregorian} — ${item.hijri}`}
+              >
+                <span className="humanity__expedition-dot" aria-hidden="true" />
+                <span className="humanity__expedition-label">{item.label}</span>
+                <span className="humanity__expedition-year">{item.hijri}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </>
   );
 }
 

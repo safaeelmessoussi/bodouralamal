@@ -140,8 +140,14 @@ const MIME_ALIASES: Record<string, string> = {
   'audio/x-pn-wav': 'audio/wav',
   'audio/m4a': 'audio/mp4',
   'audio/x-m4a': 'audio/mp4',
+  // R205 — some Android pickers name an .m4a by its codec; the bytes still
+  // decide (a bare ADTS .aac is not an MP4 container and is refused).
+  'audio/aac': 'audio/mp4',
+  'audio/x-aac': 'audio/mp4',
   'audio/x-ogg': 'audio/ogg',
   'application/ogg': 'audio/ogg',
+  // R205 — Opus is carried in Ogg; its own name is what Chrome declares.
+  'audio/opus': 'audio/ogg',
   'image/jpg': 'image/jpeg',
   'image/pjpeg': 'image/jpeg',
 };

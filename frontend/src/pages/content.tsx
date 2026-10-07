@@ -370,7 +370,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
      * teaches — the narrowing is the useful half and it is kept.
      */
     mode: 'filter',
-    defaultCurrentYear: true,
+    // R205 — «السنة الدراسية» opens on «الكل»: the library is every year's.
+    // The upload form still seeds the live year itself (content-scope-fields).
+    defaultCurrentYear: false,
     // R198 §2 — «بدون فرع» narrows to Global items: a legal value the
     // branch list cannot contain, so rule 2 must not clear it (it did).
     sentinels: { branchId: [GLOBAL] },

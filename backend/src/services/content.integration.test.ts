@@ -722,6 +722,21 @@ describe("R202 — an audio file is stored as what its bytes prove", () => {
     expect(row.mimeType).toBe("audio/mp4");
   });
 
+  it("R205 — an .m4a a phone names audio/aac, and an .opus Chrome names audio/opus, complete as TD-9's types", async () => {
+    const m4a = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypM4A ", "latin1"), Buffer.alloc(2048, 7)]);
+    const ogg = Buffer.concat([Buffer.from("OggS", "latin1"), Buffer.alloc(2048, 3)]);
+    for (const [bytes, filename, mime, stored] of [
+      [m4a, "تلاوة.m4a", "audio/aac", "audio/mp4"],
+      [ogg, "درس.opus", "audio/opus", "audio/ogg"],
+    ] as const) {
+      const { id } = await upload(bytes, filename, mime);
+      createdContentIds.add(id);
+      const row = await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { mimeType: true, storageBucket: true, storageKey: true } });
+      trackObject(row.storageBucket, row.storageKey);
+      expect(row.mimeType, filename).toBe(stored);
+    }
+  });
+
   it("a PDF named .mp3 is still refused", async () => {
     const e = await failure(() => upload(Buffer.from("%PDF-1.4\n" + "x".repeat(2000), "latin1"), "fake.mp3", "audio/mpeg"));
     expect(e.code).toBe("VALIDATION_FAILED");

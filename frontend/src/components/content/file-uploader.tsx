@@ -27,7 +27,9 @@ import { Feedback } from '../ui/feedback.js';
 
 /** TD-9's whitelist, as the file picker's `accept` hint. **Advisory only** — the
  *  server checks the declared type against the same list and then checks the
- *  magic bytes, because a picker filter is a convenience a caller can bypass. */
+ *  magic bytes, because a picker filter is a convenience a caller can bypass.
+ *  R205 — the audio extensions too: a phone names an .m4a `audio/x-m4a` or
+ *  `audio/aac`, which a filter of type names alone greyed out. */
 const ACCEPT = [
   'application/pdf',
   'image/jpeg',
@@ -38,6 +40,13 @@ const ACCEPT = [
   'audio/ogg',
   'audio/mpeg',
   'audio/wav',
+  '.mp3',
+  '.m4a',
+  '.ogg',
+  '.oga',
+  '.opus',
+  '.wav',
+  '.weba',
   '.docx',
   '.pptx',
   '.xlsx',

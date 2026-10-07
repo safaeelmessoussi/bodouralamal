@@ -212,3 +212,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `humanity-diagram.tsx`: `HistoryNode.diagrams` as trees that open/close (sideways ≥48rem, outline on phones; `initiallyOpen`, `branchKeys` in `humanity-model.ts`); al-Fatiha's chart in six trees, al-Baqara and Al Imran from the Owner's drawings, every other Surah's axes.
 - Content: «عام الجماعة» and the Umayyad era (Owner's text), al-Nasa'i, Makki/Madani events; disputed or wrong items removed (ledger R204 §5); «pending» text withdrawn; data now edited by hand.
 - Verified: frontend 1642 + tsc/lint/build, 34 guards; Localhost 1366×768 overview fits one view (cards end 765 px), cards 5/5 and 6/6 per row, no overflow at 1366/390; click-through 7/7.
+
+## 2026-10-07 — SRS Revision 205: «اليوم», the phases and expeditions, m4a/ogg, «الكل»
+- «مكتبة المحتوى»: «السنة الدراسية» opens on «الكل» (`content.tsx` `defaultCurrentYear: false`). «رفع ملف»: audio extensions in `accept`; `audio/aac`/`audio/x-aac` → `audio/mp4`, `audio/opus` → `audio/ogg` (`lib/file-types.ts`).
+- «نظرة شاملة»: arrowhead after the last station; `PHASES` (second line) and `EXPEDITIONS` (third line, a zoom wedge under the Medinan phase; node `seal/madani/ghazawat/*`); «اليوم» → `humanity-today.tsx` (`GET /calendar` for today); hero description one line; overview still fits 1366×768.
+- Diagrams: >16 boxes open at the first branches, which are numbered and coloured; hint line; open animation.
+- Verified: backend 385 + frontend 1645 (tsc/lint/build both), 34 guards; integration `content` 86 (new: .m4a as `audio/aac`, .opus as `audio/opus`); Localhost probes: «الكل» default, picker accept, «اليوم», phase, «بدر»; overview cards end 767 px at 1366×768.

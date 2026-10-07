@@ -8,7 +8,7 @@
  * `diagrams` are the Surahs' axes drawn as trees (the Owner's own diagrams of
  * al-Fatiha, al-Baqara and Al Imran; the board's axes for the others).
  */
-import type { HistoryNode, TimelineMarker } from './humanity-model.js';
+import type { HistoryNode, TimelineDetail, TimelineMarker, TimelineSpan } from './humanity-model.js';
 
 export const HUMANITY: HistoryNode = {
  "id": "root",
@@ -387,7 +387,7 @@ export const HUMANITY: HistoryNode = {
   },
   {
    "id": "seal",
-   "title": "محمد صلى الله عليه وسلم (خاتم النبيين والقرآن الكريم)",
+   "title": "محمد ﷺ — خاتم النبيين والقرآن الكريم",
    "tone": "seal",
    "subtitle": "من المولد إلى إتمام الدين",
    "when": {
@@ -1168,6 +1168,117 @@ export const HUMANITY: HistoryNode = {
       "أبرز الأحداث: غزوة بدر (2هـ)، غزوة أحد (3هـ)، غزوة الأحزاب (5هـ)، صلح الحديبية (6هـ)، فتح مكة (8هـ)، وحجة الوداع (10هـ)"
      ],
      "children": [
+      {
+       "id": "ghazawat",
+       "title": "غزوات في القرآن الكريم",
+       "tone": "madani",
+       "subtitle": "من بدر إلى تبوك",
+       "when": {
+        "gregorian": "624 – 630م",
+        "hijri": "2 – 9 هـ"
+       },
+       "summary": "غزوات ذكرها القرآن الكريم أو نزلت فيها آياته، يتعلّم منها المؤمن أن النصر من عند الله، وأن الطاعة والثبات طريقه.",
+       "children": [
+        {
+         "id": "badr",
+         "title": "غزوة بدر الكبرى",
+         "tone": "madani",
+         "when": {
+          "gregorian": "624م",
+          "hijri": "2 هـ"
+         },
+         "lines": [
+          "الزمن: رمضان 2 هـ",
+          "في القرآن: ﴿وَلَقَدْ نَصَرَكُمُ اللَّهُ بِبَدْرٍ وَأَنتُمْ أَذِلَّةٌ﴾ (آل عمران 123)، وفيها نزلت سورة الأنفال.",
+          "يوم الفرقان: أول لقاء كبير بين المسلمين والمشركين، نصر الله فيه القلة المؤمنة ﴿يَوْمَ الْفُرْقَانِ يَوْمَ الْتَقَى الْجَمْعَانِ﴾ (الأنفال 41)."
+         ]
+        },
+        {
+         "id": "uhud",
+         "title": "غزوة أُحُد",
+         "tone": "madani",
+         "when": {
+          "gregorian": "625م",
+          "hijri": "3 هـ"
+         },
+         "lines": [
+          "الزمن: شوال 3 هـ",
+          "في القرآن: آيات من سورة آل عمران ﴿وَإِذْ غَدَوْتَ مِنْ أَهْلِكَ تُبَوِّئُ الْمُؤْمِنِينَ مَقَاعِدَ لِلْقِتَالِ﴾ (آل عمران 121).",
+          "الدرس: طاعة الرسول ﷺ سبب النصر، والابتلاء يميّز الصادقين ﴿وَلِيَعْلَمَ اللَّهُ الَّذِينَ آمَنُوا﴾ (آل عمران 140)."
+         ]
+        },
+        {
+         "id": "bani-nadir",
+         "title": "غزوة بني النضير",
+         "tone": "madani",
+         "when": {
+          "gregorian": "625م",
+          "hijri": "4 هـ"
+         },
+         "lines": [
+          "الزمن: السنة الرابعة للهجرة",
+          "في القرآن: سورة الحشر ﴿هُوَ الَّذِي أَخْرَجَ الَّذِينَ كَفَرُوا مِنْ أَهْلِ الْكِتَابِ مِن دِيَارِهِمْ لِأَوَّلِ الْحَشْرِ﴾ (الحشر 2).",
+          "السبب: نقضهم العهد مع النبي ﷺ."
+         ]
+        },
+        {
+         "id": "ahzab",
+         "title": "غزوة الأحزاب (الخندق)",
+         "tone": "madani",
+         "when": {
+          "gregorian": "627م",
+          "hijri": "5 هـ"
+         },
+         "lines": [
+          "الزمن: شوال 5 هـ",
+          "في القرآن: سورة الأحزاب ﴿إِذْ جَاءُوكُم مِّن فَوْقِكُمْ وَمِن أَسْفَلَ مِنكُمْ﴾ (الأحزاب 10).",
+          "ثبات المؤمنين: حفروا الخندق حول المدينة، وقالوا ﴿هَٰذَا مَا وَعَدَنَا اللَّهُ وَرَسُولُهُ﴾ (الأحزاب 22)."
+         ]
+        },
+        {
+         "id": "fath",
+         "title": "فتح مكة",
+         "tone": "madani",
+         "when": {
+          "gregorian": "630م",
+          "hijri": "8 هـ"
+         },
+         "lines": [
+          "الزمن: رمضان 8 هـ",
+          "في القرآن: ﴿إِذَا جَاءَ نَصْرُ اللَّهِ وَالْفَتْحُ﴾ (النصر 1).",
+          "الحدث: دخل النبي ﷺ مكة فاتحًا، وطهّر الكعبة من الأصنام، وعفا عن أهلها."
+         ]
+        },
+        {
+         "id": "hunayn",
+         "title": "غزوة حُنَين",
+         "tone": "madani",
+         "when": {
+          "gregorian": "630م",
+          "hijri": "8 هـ"
+         },
+         "lines": [
+          "الزمن: شوال 8 هـ",
+          "في القرآن: ﴿وَيَوْمَ حُنَيْنٍ إِذْ أَعْجَبَتْكُمْ كَثْرَتُكُمْ فَلَمْ تُغْنِ عَنكُمْ شَيْئًا﴾ (التوبة 25).",
+          "الدرس: النصر من عند الله، لا بكثرة العدد."
+         ]
+        },
+        {
+         "id": "tabuk",
+         "title": "غزوة تبوك",
+         "tone": "madani",
+         "when": {
+          "gregorian": "630م",
+          "hijri": "9 هـ"
+         },
+         "lines": [
+          "الزمن: رجب 9 هـ، وهي آخر غزوات النبي ﷺ",
+          "في القرآن: سورة التوبة ﴿الَّذِينَ اتَّبَعُوهُ فِي سَاعَةِ الْعُسْرَةِ﴾ (التوبة 117)، ولذلك تُسمّى «غزوة العسرة».",
+          "الدرس: النفير في الشدة، وتمييز الصادقين من المنافقين."
+         ]
+        }
+       ]
+      },
       {
        "id": "al-baqara",
        "title": "سورة البقرة",
@@ -2487,6 +2598,77 @@ export const TIMELINE: TimelineMarker[] = [
   "gregorian": "2026م",
   "hijri": "1448 هـ",
   "label": "اليوم",
-  "tone": "ummah"
+  "tone": "ummah",
+  "node": "today"
+ }
+];
+
+/**
+ * **R205 — the timeline's second and third lines.** The Meccan and Medinan
+ * phases leave the main line between their stations (`from`/`to` are station
+ * indexes); under the Medinan phase, the expeditions the Qur'an names or was
+ * revealed about, drawn as a zoom of that phase.
+ */
+export const PHASES: TimelineSpan[] = [
+ {
+  "label": "المرحلة المكية",
+  "sub": "13 سنة",
+  "tone": "makki",
+  "node": "seal/makki",
+  "from": 2,
+  "to": 3
+ },
+ {
+  "label": "المرحلة المدنية",
+  "sub": "10 سنوات",
+  "tone": "madani",
+  "node": "seal/madani",
+  "from": 3,
+  "to": 4
+ }
+];
+
+export const EXPEDITIONS: TimelineDetail[] = [
+ {
+  "label": "بدر",
+  "hijri": "2 هـ",
+  "gregorian": "624م",
+  "node": "seal/madani/ghazawat/badr"
+ },
+ {
+  "label": "أُحُد",
+  "hijri": "3 هـ",
+  "gregorian": "625م",
+  "node": "seal/madani/ghazawat/uhud"
+ },
+ {
+  "label": "بنو النضير",
+  "hijri": "4 هـ",
+  "gregorian": "625م",
+  "node": "seal/madani/ghazawat/bani-nadir"
+ },
+ {
+  "label": "الأحزاب",
+  "hijri": "5 هـ",
+  "gregorian": "627م",
+  "node": "seal/madani/ghazawat/ahzab"
+ },
+ {
+  "label": "فتح مكة",
+  "hijri": "8 هـ",
+  "gregorian": "630م",
+  "node": "seal/madani/ghazawat/fath"
+ },
+ {
+  "label": "حُنَين",
+  "hijri": "8 هـ",
+  "gregorian": "630م",
+  "node": "seal/madani/ghazawat/hunayn"
+ },
+ {
+  "label": "تبوك",
+  "hijri": "9 هـ",
+  "gregorian": "630م",
+  "node": "seal/madani/ghazawat/tabuk"
  }
 ];
