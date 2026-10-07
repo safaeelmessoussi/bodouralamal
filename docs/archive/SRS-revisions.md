@@ -1,9 +1,11 @@
 [Documentation](../README.md) › [Archive](.) › **SRS revision ledger**
 
-# SRS revision ledger — Revisions 1–202 (2026-07-27 →)
+# SRS revision ledger — Revisions 1–203 (2026-07-27 →)
 
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
+
+**Revision 203 (Document Owner, 2026-10-07 — «مسيرة البشرية», and «stop using staging.bodouralamal.com and kill it»):** **BUILT.** §1 A tab before «حسب السورة», signed-in accounts only for now: the board https://miro.com/app/board/uXjVEdTqTNo=/ (265 items, read in full) as an interactive diagram — timeline (Gregorian and Hijri) → eras → stations → items, as deep as the board goes (87 nodes, 5 levels), the board's text generated into `humanity-data.ts` without retyping, its palette as `--color-era-*` tokens; a Surah links to «حسب السورة» (`?surah=N`); the address carries the node (back button walks up). Structure added by the agent and stated: the 23 prophets grouped in five stations; the Abbasid, Mamluk and Ottoman texts split at their numbered headings; the Mamluk imams' box (titled «أئمة» on the board) named «أئمة عهد المماليك». Empty on the board, shown as «لم تُضَف تفاصيل هذا العنصر بعد»: the Umayyad era, al-Nasa'i, the present era. §2 `staging.bodouralamal.com` answers 301 to `https://bodouralamal.com` (same path); the DNS record and the certificate's name are the remaining steps (deployment.md).
 
 **Revision 202 (Document Owner, 2026-10-06 — an MP3 recording refused at «جارٍ التحقّق من الملف» with «نوع الملف غير مقبول»):** **BUILT.** Staging's log showed the completion byte check (409, 88 ms); a phone recorder's file named `.mp3` is commonly an M4A/AAC (or WAV/OGG). `provenMime` (`lib/file-types.ts`): for a declared audio type, the listed audio type the first 512 bytes prove — the declared one, else another on the list — and the row and the stored object take that type so it plays; an MP3 after zero padding is recognised. Documents are never re-typed; a non-audio file is refused as before; the list is unchanged.
 

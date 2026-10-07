@@ -201,3 +201,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-06 — SRS Revision 202: a phone recording named .mp3 that is really an M4A is accepted
 - Cause (Staging log): completion's byte check refused it (409 in 88 ms) — the content was not MP3. `lib/file-types.ts` `provenMime` + padded MP3 frame sync; `object-verification.ts` returns the proven type; `completeUpload` stores and serves it (`audio/mp4`); documents never re-typed.
 - Verified: unit 22 (file types), backend 384; integration 164 (2 new R202 cases: M4A-as-.mp3 stored `audio/mp4`, PDF-as-.mp3 refused); Localhost: a real ffmpeg M4A named `.mp3` uploaded and served `Content-Type: audio/mp4`, then purged.
+
+## 2026-10-07 — SRS Revision 203: «مسيرة البشرية», and staging.bodouralamal.com retired
+- `/resources?view=history` (signed-in only): `components/history/` — `humanity-data.ts` (generated from the Owner's Miro board, 87 nodes), `humanity-model.ts` (path, sections, verses), `humanity-timeline.tsx` (timeline with both calendars, era bands, cards, breadcrumbs, previous/next, Surah → `?surah=N`); `styles/components/history.css`; `--color-era-*` tokens from the board's palette; `ar.ts` `content.views.history`, `content.history.*`.
+- Staging host: `nginx/conf.d/retired-staging-host.conf` (host only) — 301 to `https://bodouralamal.com`; DNS and certificate steps in deployment.md, TASKS E11.
+- Verified: frontend 1636 + build, token and neutral-address guards; Localhost browser 1366/390 (no page overflow), click-through 6/6 + Surah link lands on `?surah=1` «حسب السورة»; signed-out: no tab.

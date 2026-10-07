@@ -277,7 +277,9 @@ describe('the sidebar promises exactly what the router delivers', () => {
     const { IMPLEMENTED_ADMIN_PATHS } = await import('../pages/admin/index.js');
     const ready = ADMIN_MODULES.filter((m) => m.status === 'ready').map((m) => m.path).sort();
     expect(ready).toEqual([...IMPLEMENTED_ADMIN_PATHS].sort());
-  });
+    // The dynamic import loads every admin screen; under the full parallel
+    // suite that takes over vitest's 5 s default (TASKS E9, closed 2026-10-07).
+  }, 30_000);
 
   it('every blocked module NAMES what is missing', () => {
     // "Coming soon" tells nobody whether the wait is a day or a milestone, so

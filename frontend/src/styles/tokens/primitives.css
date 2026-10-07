@@ -90,4 +90,24 @@
      as TEXT and not only as a fill. */
   --violet-50: #f6eefb;
   --violet-700: #6b2496;
+
+  /* R203 — «مسيرة البشرية»: the Owner's own board palette (Miro, 2026-10-07),
+     one family per era — gold for the prophets, violet for the Prophet ﷺ,
+     blue for the ummah, and the two phases of the revelation (Meccan
+     orange, Medinan green). Each family: a wash, a line and an ink. */
+  --era-gold-50: #fffbed;
+  --era-gold-300: #ffdc4a;
+  --era-gold-700: #8a6303;
+  --era-violet-50: #f4f2fd;
+  --era-violet-300: #8f7fee;
+  --era-violet-700: #5626b8;
+  --era-blue-50: #f0f5fd;
+  --era-blue-300: #659df2;
+  --era-blue-700: #305bab;
+  --era-orange-50: #fff5ed;
+  --era-orange-300: #f2a36b;
+  --era-orange-700: #9b4a08;
+  --era-green-50: #eaf9ef;
+  --era-green-300: #5fc485;
+  --era-green-700: #067429;
 }

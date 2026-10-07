@@ -115,7 +115,7 @@ chmod 600 .env infra.env
 
 # 3  Prove host/config/release boundary without changing runtime state.
 export DEPLOYMENT_TIER=production                 # or staging
-export DOMAIN=bodouralamal.com                    # staging.bodouralamal.com for Staging
+export DOMAIN=bodouralamal.com                    # the one public address (staging.bodouralamal.com retired, R203)
 export EXPECTED_PUBLIC_IPV4='<provider-approved-public-ipv4>'
 export MINIMUM_FREE_GIB='<Owner-approved-primary-disk-floor>'
 bash scripts/deploy/preflight-host.sh "$DEPLOYMENT_TIER" "$DOMAIN" "$EXPECTED_PUBLIC_IPV4" "$MINIMUM_FREE_GIB"
@@ -278,7 +278,7 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
 
 ## Staging
 
-[Environments](environments.md); Vercel Preview is retired (Owner, 2026-09-13). Staging (`https://staging.bodouralamal.com`) runs **this same pipeline** with two differences:
+[Environments](environments.md); Vercel Preview is retired (Owner, 2026-09-13). Staging — served at `https://bodouralamal.com` since 2026-10-07 (R203: `staging.bodouralamal.com` is retired; the host's untracked `nginx/conf.d/retired-staging-host.conf` answers it with 301 to `https://bodouralamal.com`, same path; to finish: delete its DNS record, then re-issue the certificate without it — `certbot certonly --webroot -w /var/www/certbot --cert-name bodouralamal.com -d bodouralamal.com -d www.bodouralamal.com`, delete `renewal/staging.bodouralamal.com.conf` and the redirect file — before the renewal that would fail on the missing name) runs **this same pipeline** with two differences:
 
 | | Staging | Production |
 |---|---|---|

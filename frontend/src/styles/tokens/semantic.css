@@ -66,6 +66,23 @@
      `-ink` is the accessible alternative, for any future surface where these
      hues must carry text a reader depends on. Which pair applies is a decision,
      not a detail — do not swap one for the other silently. */
+  /* R203 — «مسيرة البشرية»: each era's wash, line and ink. */
+  --color-era-prophets-soft: var(--era-gold-50);
+  --color-era-prophets-line: var(--era-gold-300);
+  --color-era-prophets: var(--era-gold-700);
+  --color-era-seal-soft: var(--era-violet-50);
+  --color-era-seal-line: var(--era-violet-300);
+  --color-era-seal: var(--era-violet-700);
+  --color-era-ummah-soft: var(--era-blue-50);
+  --color-era-ummah-line: var(--era-blue-300);
+  --color-era-ummah: var(--era-blue-700);
+  --color-era-makki-soft: var(--era-orange-50);
+  --color-era-makki-line: var(--era-orange-300);
+  --color-era-makki: var(--era-orange-700);
+  --color-era-madani-soft: var(--era-green-50);
+  --color-era-madani-line: var(--era-green-300);
+  --color-era-madani: var(--era-green-700);
+
   --color-gregorian: var(--brand-logo-orange);
   --color-gregorian-ink: var(--brand-logo-orange-ink);
   --color-hijri: var(--brand-logo-green);

@@ -20,6 +20,7 @@ import {
 } from '../components/content/content-filters.js';
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
 import { byTitle, SurahLibrary } from '../components/content/surah-library.js';
+import { HumanityTimeline } from '../components/history/humanity-timeline.js';
 import { Button } from '../components/ui/button.js';
 import { useActiveChild } from '../contexts/active-child.js';
 import { useSession } from '../contexts/session.js';
@@ -95,26 +96,42 @@ export function ResourcesPage(): ReactNode {
  * not a navigation node — §20 rule 16), and a link naming a Level or a
  * Category opens the Level view, as it always did.
  */
-type LibraryMode = 'surah' | 'level';
+type LibraryMode = 'history' | 'surah' | 'level';
 
 function LibraryPage({ levelId, categoryId }: { levelId: string | null; categoryId: string | null }): ReactNode {
+  const { status } = useSession();
   const [mode, setMode] = useState<LibraryMode>(() => {
     const param = new URLSearchParams(window.location.search).get('view');
     if (param === 'levels' || levelId !== null || categoryId !== null) return 'level';
+    if (param === 'history') return 'history';
     return 'surah';
   });
-  const tabs = <ModeTabs mode={mode} onMode={setMode} />;
-  return mode === 'surah' ? (
+  // R203 — «مسيرة البشرية» is offered to signed-in readers only, for now: an
+  // anonymous visitor (or a link followed while signed out) reads by Surah.
+  const signedIn = status === 'authenticated';
+  const shown: LibraryMode = mode === 'history' && status === 'anonymous' ? 'surah' : mode;
+  const tabs = <ModeTabs mode={shown} onMode={setMode} withHistory={signedIn} />;
+  if (shown === 'history') return <HistoryView tabs={tabs} />;
+  return shown === 'surah' ? (
     <SurahView tabs={tabs} />
   ) : (
     <LibraryView initialLevel={levelId} initialCategory={categoryId} tabs={tabs} />
   );
 }
 
-function ModeTabs({ mode, onMode }: { mode: LibraryMode; onMode: (next: LibraryMode) => void }): ReactNode {
+function ModeTabs({
+  mode,
+  onMode,
+  withHistory,
+}: {
+  mode: LibraryMode;
+  onMode: (next: LibraryMode) => void;
+  withHistory: boolean;
+}): ReactNode {
+  const modes: LibraryMode[] = withHistory ? ['history', 'surah', 'level'] : ['surah', 'level'];
   return (
     <div className="cal-segmented content-modes" role="tablist" aria-label={t('content.views.label')}>
-      {(['surah', 'level'] as const).map((m) => (
+      {modes.map((m) => (
         <Button
           key={m}
           variant="ghost"
@@ -124,16 +141,27 @@ function ModeTabs({ mode, onMode }: { mode: LibraryMode; onMode: (next: LibraryM
           onClick={() => {
             onMode(m);
             const url = new URL(window.location.href);
+            url.searchParams.delete('node');
             if (m === 'level') url.searchParams.set('view', 'levels');
+            else if (m === 'history') url.searchParams.set('view', 'history');
             else url.searchParams.delete('view');
             window.history.replaceState(null, '', url);
           }}
         >
-          <Icon name={m === 'surah' ? 'book' : 'folder'} size={16} />
-          {t(m === 'surah' ? 'content.views.bySurah' : 'content.views.byLevel')}
+          <Icon name={m === 'surah' ? 'book' : m === 'history' ? 'calendar' : 'folder'} size={16} />
+          {t(m === 'surah' ? 'content.views.bySurah' : m === 'history' ? 'content.views.history' : 'content.views.byLevel')}
         </Button>
       ))}
     </div>
+  );
+}
+
+/** R203 — «مسيرة البشرية»: the path of humanity, read from the general to the particular. */
+function HistoryView({ tabs }: { tabs: ReactNode }): ReactNode {
+  return (
+    <Shell title={t('content.title')} lede={t('content.history.pageLede')} tabs={tabs}>
+      <HumanityTimeline />
+    </Shell>
   );
 }
 

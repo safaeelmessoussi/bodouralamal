@@ -68,7 +68,7 @@ Ends when the Moroccan VPS exists: restore there, OVH returns to Staging, the si
 | E5 | Restate `verify-assessment-library.sh` against R136's source/occurrence split (stale, 24/31) | S |
 | E6 | `verify-backup-restore.sh` into hosted CI; integration/backup stacks off ephemeral host ports (55438, 58083, 59005, 59006) | S |
 | E7 | «حالة النظام»: backup freshness + certificate expiry via a host-published status file (blocked on D7) | M |
-| E9 | `admin-modules.test.ts` «every ready module has a screen» failed once in a full run (dynamic import), passed alone and on re-run — make it order-independent | S |
+| E11 | «مسيرة البشرية» (R203): the Owner's board leaves three boxes empty — the Umayyad era, al-Nasa'i, the present era; their text is the Owner's to write (the diagram shows «لم تُضَف تفاصيل هذا العنصر بعد»). Retire `staging.bodouralamal.com` fully: DNS record (Owner), then certificate without the name (deployment.md) | S |
 | E10 | Tables (R198 §6 built the rest): server sort still missing for columns that are sets or derived — users (e-mail, roles, branches), approvals (type, bundle, branch, requested, framing; three sources merged per page), Trash (record label in per-entity JSONB, purgeable/restorable) — they sort on screen only once one page holds the whole list; add the «maximum related details» columns per table — which columns is the Owner's per table | M |
 
 ## Launch gate (§18/§19 — when go-live is lifted)
