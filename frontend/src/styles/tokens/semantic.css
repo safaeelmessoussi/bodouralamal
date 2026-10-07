@@ -66,7 +66,7 @@
      `-ink` is the accessible alternative, for any future surface where these
      hues must carry text a reader depends on. Which pair applies is a decision,
      not a detail — do not swap one for the other silently. */
-  /* R203 — «مسيرة البشرية»: each era's wash, line and ink. */
+  /* R203 — «نظرة شاملة»: each era's wash, line and ink. */
   --color-era-prophets-soft: var(--era-gold-50);
   --color-era-prophets-line: var(--era-gold-300);
   --color-era-prophets: var(--era-gold-700);

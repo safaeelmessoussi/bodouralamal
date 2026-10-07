@@ -12,27 +12,30 @@ import { t } from "../../i18n/index.js";
 import { counted } from "../../lib/arabic-years.js";
 import { ButtonLink } from "../ui/button.js";
 import { HUMANITY, TIMELINE } from "./humanity-data.js";
+import { HumanityDiagram, Verse } from "./humanity-diagram.js";
 import {
   descendantCount,
   detailSections,
   parsePath,
   resolvePath,
-  verseRuns,
   type HistoryNode,
   type TimelineMarker,
 } from "./humanity-model.js";
 
 /**
- * **SRS Revision 203 — «مسيرة البشرية»** (the Owner, 2026-10-07): the whole
- * path of humanity, from Adam عليه السلام to today, read from the general to
- * the particular.
+ * **SRS Revision 203 — «نظرة شاملة»** (the Owner, 2026-10-07; «مسيرة
+ * البشرية» until R204): the whole path of humanity, from Adam عليه السلام to
+ * today, read from the general to the particular.
  *
- * - On top, the timeline: each station with its Gregorian and Hijri year
- *   (the platform's two calendar colours), and under it the three eras as
- *   bands. A station opens its node.
- * - Under it, the three eras as cards; a card opens its era, every node opens
- *   its children, and so on down to a prophet, a Surah, an imam — each with
- *   the board's text read as sections. A Surah opens «حسب السورة» on itself.
+ * - On top, the timeline: the three eras as bands, then each station with its
+ *   Gregorian and Hijri year (the platform's two calendar colours, named once
+ *   at the start of the line). A station opens its node.
+ * - Under it, the three eras as cards — no title between them, so the line
+ *   and the cards are read in one view (R204); a card opens its era, every
+ *   node opens its children in one row of compact cards, and so on down to a
+ *   prophet, a Surah, an imam — each with its text read as sections, and a
+ *   Surah with its axes drawn as diagrams. A Surah opens «حسب السورة» on
+ *   itself.
  * - Where the reader is lives in the address (`?view=history&node=a/b`), so
  *   the browser's back button walks back up and a link opens the same node.
  */
@@ -96,33 +99,35 @@ export function HumanityTimeline({
         onOpen={(target) => go(target.split("/"))}
       />
 
-      <nav
-        className="humanity__trail"
-        aria-label={t("content.history.trailLabel")}
-      >
-        <ol>
-          {trail.map((step, index) => (
-            <li key={step.id}>
-              {index < trail.length - 1 ? (
-                <button
-                  type="button"
-                  className="humanity__crumb"
-                  onClick={() => go(path.slice(0, index))}
-                >
-                  {index === 0 ? t("content.views.history") : step.title}
-                </button>
-              ) : (
-                <span
-                  className="humanity__crumb is-current"
-                  aria-current="location"
-                >
-                  {index === 0 ? t("content.views.history") : step.title}
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
-      </nav>
+      {path.length > 0 ? (
+        <nav
+          className="humanity__trail"
+          aria-label={t("content.history.trailLabel")}
+        >
+          <ol>
+            {trail.map((step, index) => (
+              <li key={step.id}>
+                {index < trail.length - 1 ? (
+                  <button
+                    type="button"
+                    className="humanity__crumb"
+                    onClick={() => go(path.slice(0, index))}
+                  >
+                    {index === 0 ? t("content.views.history") : step.title}
+                  </button>
+                ) : (
+                  <span
+                    className="humanity__crumb is-current"
+                    aria-current="location"
+                  >
+                    {index === 0 ? t("content.views.history") : step.title}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      ) : null}
 
       <section
         className={`humanity__stage tone-${node.tone}`}
@@ -138,9 +143,9 @@ export function HumanityTimeline({
         ) : (
           <>
             <NodeHero node={node} headingRef={heading} />
-            {node.lines && node.lines.length > 0 ? (
-              <Details lines={node.lines} />
-            ) : null}
+            {/* The children first, right under the header, so the timeline
+                and the next step are read in one view (R204); the text and
+                the diagrams follow. */}
             {node.children && node.children.length > 0 ? (
               <ol className="humanity__path">
                 {node.children.map((child, index) => (
@@ -154,10 +159,15 @@ export function HumanityTimeline({
                 ))}
               </ol>
             ) : null}
-            {!node.lines?.length && !node.children?.length ? (
-              <p className="humanity__pending">
-                {t("content.history.pending")}
-              </p>
+            {node.lines && node.lines.length > 0 ? (
+              <Details lines={node.lines} />
+            ) : null}
+            {node.diagrams && node.diagrams.length > 0 ? (
+              <div className="humanity__diagrams">
+                {node.diagrams.map((diagram) => (
+                  <HumanityDiagram key={diagram.title} diagram={diagram} />
+                ))}
+              </div>
             ) : null}
             {siblings.length > 1 ? (
               <div className="humanity__steps">
@@ -230,10 +240,13 @@ function TimelineAxis({
         className="humanity__axis"
         style={{ ["--stations" as string]: String(markers.length) }}
       >
+        {/* The two calendars, named once at the start of the line, in the
+            stations' own shape so each name sits on its row of years. */}
         <div className="humanity__legend" aria-hidden="true">
           <span className="humanity__year is-gregorian">
             {t("content.history.gregorian")}
           </span>
+          <span className="humanity__dot is-blank" />
           <span className="humanity__year is-hijri">
             {t("content.history.hijri")}
           </span>
@@ -267,7 +280,7 @@ function TimelineAxis({
               key={`${marker.label}-${index}`}
               type="button"
               className={`humanity__station tone-${marker.tone}${active ? " is-active" : ""}`}
-              style={{ gridColumn: String(index + 1) }}
+              style={{ gridColumn: String(index + 2) }}
               onClick={() => onOpen(marker.node!)}
               aria-current={active ? "location" : undefined}
             >
@@ -277,7 +290,7 @@ function TimelineAxis({
             <div
               key={`${marker.label}-${index}`}
               className={`humanity__station tone-${marker.tone}`}
-              style={{ gridColumn: String(index + 1) }}
+              style={{ gridColumn: String(index + 2) }}
             >
               {body}
             </div>
@@ -288,7 +301,10 @@ function TimelineAxis({
             key={span.id}
             type="button"
             className={`humanity__band tone-${span.tone}${eraId === span.id ? " is-active" : ""}`}
-            style={{ gridColumn: `${span.from + 1} / ${span.to + 2}` }}
+            // The first band also covers the calendars' column: room for its name.
+            style={{
+              gridColumn: `${span.from === 0 ? 1 : span.from + 2} / ${span.to + 3}`,
+            }}
             onClick={() => onOpen(span.id)}
           >
             {t(`content.history.era.${span.id}`)}
@@ -312,7 +328,12 @@ function EraCards({
 }): ReactNode {
   return (
     <>
-      <h2 className="humanity__title" ref={headingRef} tabIndex={-1}>
+      {/* Named for a screen reader only: on screen the timeline above says it. */}
+      <h2
+        className="humanity__title visually-hidden"
+        ref={headingRef}
+        tabIndex={-1}
+      >
         {t("content.history.erasTitle")}
       </h2>
       <ol className="humanity__eras">
@@ -331,16 +352,6 @@ function EraCards({
                 <span className="humanity__era-subtitle">{era.subtitle}</span>
               ) : null}
               <When when={era.when} />
-              {era.summary ? (
-                <span className="humanity__era-summary">{era.summary}</span>
-              ) : null}
-              <span className="humanity__era-peek">
-                {(era.children ?? []).map((child) => (
-                  <span key={child.id} className="humanity__peek">
-                    {child.title}
-                  </span>
-                ))}
-              </span>
               <span className="humanity__count">
                 {counted("content.history.items", descendantCount(era))}
               </span>
@@ -448,22 +459,6 @@ function NodeCard({
         ) : null}
       </span>
     </button>
-  );
-}
-
-function Verse({ text }: { text: string }): ReactNode {
-  return (
-    <>
-      {verseRuns(text).map((run, i) =>
-        run.verse ? (
-          <span key={i} className="humanity__verse">
-            {run.text}
-          </span>
-        ) : (
-          <span key={i}>{run.text}</span>
-        ),
-      )}
-    </>
   );
 }
 

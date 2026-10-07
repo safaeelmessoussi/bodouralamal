@@ -1,8 +1,9 @@
-/* ── «مسيرة البشرية» (SRS Revision 203) ─────────────────────────────────────
+/* ── «نظرة شاملة» (SRS Revision 203; R204) ──────────────────────────────────
  *
  * The whole path of humanity, from the general to the particular: a timeline
- * of stations with both calendars, the eras as bands under it, then cards
- * that open into cards. Each era keeps the colour family of the Owner's board
+ * with the eras as bands on top and the stations with both calendars under
+ * them, then compact cards that open into cards — the line and the cards in
+ * one view (R204) — and a Surah's axes as diagrams (`.hdiagram`). Each era keeps the colour family of the Owner's board
  * (`--color-era-*`), carried by `.tone-*` as three local properties so every
  * element below simply reads `--tone`, `--tone-soft` and `--tone-line`.
  */
@@ -40,8 +41,8 @@
 
 .humanity {
   display: grid;
-  gap: var(--space-6);
-  margin-block-start: var(--space-4);
+  gap: var(--space-4);
+  margin-block-start: var(--space-3);
 }
 
 /* ── The timeline ─────────────────────────────────────────────────────────── */
@@ -51,7 +52,7 @@
      its own containing block on phones). */
   position: relative;
   overflow-x: auto;
-  padding-block: var(--space-3);
+  padding-block: var(--space-2);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   border: 1px solid var(--color-border-subtle);
@@ -61,28 +62,31 @@
 
 .humanity__axis {
   display: grid;
-  grid-template-columns: repeat(var(--stations, 12), minmax(5.6rem, 1fr));
+  /* The calendars' names, then one column per station. */
+  grid-template-columns: auto repeat(var(--stations, 12), minmax(5.2rem, 1fr));
   grid-auto-rows: auto;
-  row-gap: var(--space-2);
+  row-gap: var(--space-1);
   min-inline-size: 100%;
   padding-inline: var(--space-3);
 }
 
 .humanity__legend {
-  grid-row: 3;
-  grid-column: 1 / -1;
+  grid-row: 2;
+  grid-column: 1;
   display: flex;
-  gap: var(--space-2);
-  justify-content: flex-start;
-  font-size: var(--font-size-xs);
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1);
 }
 
-.humanity__year.is-blank {
+.humanity__year.is-blank,
+.humanity__dot.is-blank {
   visibility: hidden;
 }
 
 .humanity__station {
-  grid-row: 1;
+  grid-row: 2;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -134,7 +138,7 @@ button.humanity__station.is-active {
 }
 
 .humanity__station-label {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--tone, var(--color-primary));
   line-height: var(--line-height-tight);
@@ -160,18 +164,21 @@ button.humanity__station.is-active {
 }
 
 .humanity__band {
-  grid-row: 2;
+  grid-row: 1;
   align-self: center;
   line-height: var(--line-height-tight);
   margin-inline: var(--space-1);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-3);
   border: 1px solid var(--tone-line, var(--color-border));
   border-radius: var(--radius-pill);
   background: var(--tone-soft, var(--color-primary-soft));
   color: var(--tone, var(--color-primary));
   font: inherit;
   font-weight: 700;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   transition: box-shadow var(--transition-fast), transform var(--transition-fast);
 }
@@ -234,7 +241,7 @@ button.humanity__station.is-active {
 
 .humanity__stage {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
   animation: humanity-in var(--transition-slow) both;
 }
 
@@ -254,7 +261,8 @@ button.humanity__station.is-active {
 .humanity__title {
   margin: 0;
   font-family: var(--font-family-display);
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-tight);
   color: var(--tone, var(--color-text));
   outline: none;
 }
@@ -262,8 +270,8 @@ button.humanity__station.is-active {
 /* The three eras. */
 .humanity__eras {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -277,7 +285,7 @@ button.humanity__station.is-active {
   gap: var(--space-2);
   inline-size: 100%;
   block-size: 100%;
-  padding: var(--space-5);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--tone-line, var(--color-border));
   border-inline-start: 6px solid var(--tone, var(--color-primary));
   border-radius: var(--radius-lg);
@@ -309,8 +317,8 @@ button.humanity__station.is-active {
 .humanity__order {
   display: inline-grid;
   place-items: center;
-  min-inline-size: 2.25rem;
-  block-size: 2.25rem;
+  min-inline-size: 1.75rem;
+  block-size: 1.75rem;
   padding-inline: var(--space-1);
   border-radius: var(--radius-full);
   background: var(--tone, var(--color-primary));
@@ -321,7 +329,7 @@ button.humanity__station.is-active {
 
 .humanity__era-title {
   font-family: var(--font-family-display);
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-md);
   font-weight: 700;
   color: var(--tone, var(--color-primary));
   line-height: var(--line-height-tight);
@@ -330,20 +338,10 @@ button.humanity__station.is-active {
 .humanity__era-subtitle,
 .humanity__card-subtitle {
   color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-tight);
 }
 
-.humanity__era-summary {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-}
-
-.humanity__era-peek {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-.humanity__peek,
 .humanity__badge {
   padding: 0.15rem var(--space-2);
   border-radius: var(--radius-pill);
@@ -372,12 +370,14 @@ button.humanity__station.is-active {
   gap: var(--space-1);
 }
 
-/* A node's own header. */
+/* A node's own header: one compact band — title, subtitle and dates on a
+   line, the summary under them (R204). */
 .humanity__hero {
-  display: grid;
-  justify-items: start;
-  gap: var(--space-2);
-  padding: var(--space-6);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-xl);
   border: 1px solid var(--tone-line, var(--color-border));
   background:
@@ -388,7 +388,7 @@ button.humanity__station.is-active {
 
 .humanity__subtitle {
   margin: 0;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -400,20 +400,22 @@ button.humanity__station.is-active {
 }
 
 .humanity__summary {
+  flex-basis: 100%;
   margin: 0;
   max-inline-size: var(--measure);
   color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .humanity__surah {
-  margin-block-start: var(--space-2);
+  margin-inline-start: auto;
 }
 
-/* The children: a path of cards. */
+/* The children: compact cards, five or six on one line on a laptop (R204). */
 .humanity__path {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -421,11 +423,13 @@ button.humanity__station.is-active {
 }
 
 .humanity__card {
-  padding: var(--space-4);
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-inline-start-width: 4px;
 }
 
 .humanity__card-title {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-sm);
   font-weight: 700;
   color: var(--tone, var(--color-primary));
   line-height: var(--line-height-tight);
@@ -449,7 +453,7 @@ button.humanity__station.is-active {
 }
 
 .humanity__section {
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   border: 1px solid var(--color-border-subtle);
@@ -511,13 +515,8 @@ button.humanity__station.is-active {
   margin: var(--space-2) 0 0;
   padding-block-end: var(--space-2);
   border-block-end: 2px solid var(--tone-line, var(--color-border));
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-md);
   color: var(--tone, var(--color-primary));
-}
-
-.humanity__pending {
-  margin: 0;
-  color: var(--color-text-muted);
 }
 
 /* Previous / next among siblings. */
@@ -549,9 +548,262 @@ button.humanity__station.is-active {
 
 @media (max-width: 44rem) {
   .humanity__hero {
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4);
   }
-  .humanity__title {
-    font-size: var(--font-size-xl);
+  .humanity__surah {
+    margin-inline-start: 0;
+  }
+}
+
+/* ── A Surah's axes as diagrams (R204) ────────────────────────────────────
+ *
+ * One tree per figure. On a laptop each level is a column and the branches
+ * flow from the start side (the right) like the Owner's drawings, joined by
+ * lines; on a phone the same markup is an indented outline. A box keeps the
+ * colour family the data gives it (`.tone-*` on its `li`), inherited below.
+ */
+
+.humanity__diagrams {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.hdiagram {
+  min-inline-size: 0;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-block-start: 4px solid var(--tone-line, var(--color-border));
+  box-shadow: var(--shadow-sm);
+}
+
+.hdiagram.is-wide {
+  grid-column: 1 / -1;
+}
+
+.hdiagram__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-block-end: var(--space-3);
+}
+
+.hdiagram__title {
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+  color: var(--tone, var(--color-primary));
+}
+
+.hdiagram__actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.hdiagram__action {
+  padding: 0.1rem var(--space-3);
+  border: 1px solid var(--tone-line, var(--color-border));
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--tone, var(--color-primary));
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hdiagram__action:hover {
+  background: var(--tone-soft, var(--color-primary-soft));
+}
+
+/* A wide tree scrolls inside its figure, never the page. */
+.hdiagram__scroll {
+  position: relative;
+  overflow-x: auto;
+  padding-block: var(--space-1);
+  scrollbar-width: thin;
+}
+
+.hdiagram__tree,
+.hdiagram__tree ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hdiagram__box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  min-inline-size: 6rem;
+  max-inline-size: 14rem;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--tone-line, var(--color-border));
+  border-inline-start: 4px solid var(--tone, var(--color-primary));
+  border-radius: var(--radius-md);
+  background: var(--tone-soft, var(--color-primary-soft));
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+}
+
+button.hdiagram__box {
+  padding-inline-end: var(--space-8);
+  cursor: pointer;
+  transition: box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+button.hdiagram__box:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+button.hdiagram__box:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.hdiagram__label {
+  font-weight: 700;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-tight);
+  color: var(--tone, var(--color-primary));
+}
+
+.hdiagram__text {
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-base);
+  color: var(--color-text-secondary);
+}
+
+.hdiagram__more {
+  position: absolute;
+  inset-inline-end: var(--space-1);
+  inset-block-start: var(--space-1);
+  min-inline-size: 1.6rem;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--tone-line, var(--color-border));
+  color: var(--tone, var(--color-primary));
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-align: center;
+  line-height: var(--line-height-tight);
+}
+
+/* The trunk: the whole tree's first box, in full colour. */
+.hdiagram__tree > li > .hdiagram__box {
+  background: var(--tone, var(--color-primary));
+}
+
+.hdiagram__tree > li > .hdiagram__box .hdiagram__label,
+.hdiagram__tree > li > .hdiagram__box .hdiagram__text {
+  color: var(--color-text-inverse);
+}
+
+.hdiagram__tree > li > .hdiagram__box .humanity__verse {
+  background: transparent;
+  color: var(--color-text-inverse);
+}
+
+/* Laptop: the tree flows sideways, one column per level. */
+@media (min-width: 48rem) {
+  .hdiagram__tree {
+    inline-size: max-content;
+    min-inline-size: 100%;
+  }
+
+  .hdiagram__tree li {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .hdiagram__tree ul {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding-inline-start: var(--space-5);
+  }
+
+  /* From a box to its branches' spine. */
+  .hdiagram__tree ul::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block-start: 50%;
+    inline-size: var(--space-5);
+    border-block-start: 2px solid var(--tone-line, var(--color-border));
+  }
+
+  .hdiagram__tree ul > li {
+    padding-block: var(--space-1);
+    padding-inline-start: var(--space-5);
+  }
+
+  /* The spine, cut at the first and last branch. */
+  .hdiagram__tree ul > li::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block: 0;
+    border-inline-start: 2px solid var(--tone-line, var(--color-border));
+  }
+
+  .hdiagram__tree ul > li:first-child::before {
+    inset-block-start: 50%;
+  }
+
+  .hdiagram__tree ul > li:last-child::before {
+    inset-block-end: 50%;
+  }
+
+  .hdiagram__tree ul > li:only-child::before {
+    display: none;
+  }
+
+  /* From the spine to each branch. */
+  .hdiagram__tree ul > li::after {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block-start: 50%;
+    inline-size: var(--space-5);
+    border-block-start: 2px solid var(--tone-line, var(--color-border));
+  }
+}
+
+/* Phone: an indented outline, each level hanging from a line. */
+@media (max-width: 47.99rem) {
+  .hdiagram__box {
+    max-inline-size: 100%;
+  }
+
+  .hdiagram__tree ul {
+    margin-inline-start: var(--space-3);
+    padding-inline-start: var(--space-4);
+    border-inline-start: 2px solid var(--tone-line, var(--color-border));
+  }
+
+  .hdiagram__tree ul > li {
+    position: relative;
+    padding-block-start: var(--space-2);
+  }
+
+  .hdiagram__tree ul > li::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: calc(-1 * var(--space-4));
+    inset-block-start: calc(var(--space-2) + 0.9rem);
+    inline-size: var(--space-4);
+    border-block-start: 2px solid var(--tone-line, var(--color-border));
   }
 }

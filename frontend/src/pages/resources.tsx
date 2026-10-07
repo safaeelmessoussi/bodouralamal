@@ -106,7 +106,7 @@ function LibraryPage({ levelId, categoryId }: { levelId: string | null; category
     if (param === 'history') return 'history';
     return 'surah';
   });
-  // R203 — «مسيرة البشرية» is offered to signed-in readers only, for now: an
+  // R203 — «نظرة شاملة» (R204; «مسيرة البشرية» before) is offered to signed-in readers only, for now: an
   // anonymous visitor (or a link followed while signed out) reads by Surah.
   const signedIn = status === 'authenticated';
   const shown: LibraryMode = mode === 'history' && status === 'anonymous' ? 'surah' : mode;
@@ -156,10 +156,11 @@ function ModeTabs({
   );
 }
 
-/** R203 — «مسيرة البشرية»: the path of humanity, read from the general to the particular. */
+/** R203 — «نظرة شاملة» (R204): the path of humanity, read from the general to the particular.
+ *  No lede under the tabs (R204): the timeline and the eras' cards fit one laptop view. */
 function HistoryView({ tabs }: { tabs: ReactNode }): ReactNode {
   return (
-    <Shell title={t('content.title')} lede={t('content.history.pageLede')} tabs={tabs}>
+    <Shell title={t('content.title')} lede={null} tabs={tabs}>
       <HumanityTimeline />
     </Shell>
   );

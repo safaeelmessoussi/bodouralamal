@@ -4,13 +4,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../../i18n/index.js';
 import { HUMANITY, TIMELINE } from './humanity-data.js';
 import {
+  branchKeys,
   descendantCount,
   detailSections,
+  diagramSize,
+  initiallyOpen,
   parsePath,
   resolvePath,
   verseRuns,
+  type DiagramNode,
   type HistoryNode,
 } from './humanity-model.js';
+import { HumanityDiagram } from './humanity-diagram.js';
 import { HumanityTimeline } from './humanity-timeline.js';
 
 /** Every node, depth first. */
@@ -18,7 +23,27 @@ function all(node: HistoryNode): HistoryNode[] {
   return [node, ...(node.children ?? []).flatMap(all)];
 }
 
-describe('R203 — «مسيرة البشرية», the content from the Owner’s board', () => {
+/** Every box of a diagram, depth first. */
+function boxes(node: DiagramNode): DiagramNode[] {
+  return [node, ...(node.children ?? []).flatMap(boxes)];
+}
+
+/** Every text the page can show, joined. */
+function everything(node: HistoryNode): string {
+  return all(node)
+    .map((n) =>
+      [
+        n.title,
+        n.subtitle ?? '',
+        n.summary ?? '',
+        ...(n.lines ?? []),
+        ...(n.diagrams ?? []).flatMap((d) => [d.title, ...boxes(d.root).map((b) => `${b.label} ${b.text ?? ''}`)]),
+      ].join('\n'),
+    )
+    .join('\n');
+}
+
+describe('R203 — «نظرة شاملة», the content from the Owner’s board', () => {
   it('holds the three eras, in order, and every node has a title', () => {
     expect((HUMANITY.children ?? []).map((era) => era.id)).toEqual(['prophets', 'seal', 'ummah']);
     for (const node of all(HUMANITY)) expect(node.title.trim().length).toBeGreaterThan(0);
@@ -45,6 +70,61 @@ describe('R203 — «مسيرة البشرية», the content from the Owner’s
     expect(TIMELINE.at(-1)!.label).toBe('اليوم');
   });
 
+  it('R204 — draws every Surah’s axes as a diagram, al-Fatiha with its seven verses', () => {
+    const surahs = all(HUMANITY).filter((n) => n.surah !== undefined);
+    for (const s of surahs) {
+      expect(s.diagrams?.length, s.title).toBeGreaterThan(0);
+      for (const d of s.diagrams!) for (const b of boxes(d.root)) {
+        expect(b.label.trim().length).toBeGreaterThan(0);
+        // A colour is never read as a box's sentence.
+        expect(b.text ?? '', b.label).not.toMatch(/^\||^(gold|blue|violet|orange|green)$/);
+      }
+      // The axes are no longer listed as text: the diagram says them.
+      expect((s.lines ?? []).some((l) => l.startsWith('المحاور')), s.title).toBe(false);
+    }
+    const fatiha = surahs.find((s) => s.surah === 1)!;
+    const verses = fatiha.diagrams![0]!.root.children!.map((v) => v.text);
+    expect(verses).toEqual(['الآية 1', 'الآية 2 — الرحمة', 'الآية 3 — المُلك', 'الآية 4', 'الآية 5 — طلب الهداية بصفة الرحمة', 'الآية 6 — أهل العلم والعمل', 'الآية 7']);
+    expect(fatiha.diagrams!.map((d) => d.title)).toEqual(['الآيات وما تحتها', 'التوحيد في السورة', 'أقسام الناس', 'مدار الأسماء والصفات', 'الحمد والشكر والتسبيح', 'مراتب العلم']);
+  });
+
+  it('R204 — the Owner’s additions: عام الجماعة opens the Umayyad era, al-Nasa’i has his text', () => {
+    const umayyad = resolvePath(HUMANITY, ['ummah', 'umayyad']).at(-1)!;
+    expect(umayyad.children!.map((c) => c.id)).toEqual(['am-al-jamaa', 'umayyad-1', 'umayyad-2', 'umayyad-3']);
+    expect(umayyad.children![0]!.when).toEqual({ gregorian: '661م', hijri: '41 هـ' });
+    expect(umayyad.children![0]!.lines!.join(' ')).toContain('حقنًا لدماء المسلمين');
+    expect(resolvePath(HUMANITY, ['ummah', 'abbasid', 'hadith-imams', 'nasai']).at(-1)!.lines!.length).toBeGreaterThan(0);
+    // Only the present era waits for its text — and says nothing about it.
+    const empty = all(HUMANITY).filter((n) => !n.lines?.length && !n.children?.length && !n.diagrams?.length);
+    expect(empty.map((n) => n.id)).toEqual(['present']);
+  });
+
+  it('R204 — leaves out what the scholars do not agree upon, and the errors the review found', () => {
+    const text = everything(HUMANITY);
+    for (const gone of [
+      'الذبيح', // which son was to be sacrificed is a known difference
+      'خمسون صحيفة',
+      'ثلاثون صحيفة',
+      'أخنوخ',
+      'يوم الجمعة',
+      'ثماني عشرة سنة',
+      'تلميذ شيخ الإسلام',
+      'العدل المطلق',
+      'قابيل',
+      'سبعون ألف',
+      'الوحيدة بين السبع الطوال',
+      'الإشاري',
+      'الصاوي',
+      'إمام مجتهد وموسوعي',
+      '633م',
+      'الأسطوري',
+      'صفين',
+      'التقية',
+    ]) {
+      expect(text, gone).not.toContain(gone);
+    }
+  });
+
   it('keeps ids unique among siblings, so every address is one node', () => {
     for (const node of all(HUMANITY)) {
       const ids = (node.children ?? []).map((c) => c.id);
@@ -58,6 +138,19 @@ describe('R203 — the rules of the diagram', () => {
     expect(resolvePath(HUMANITY, ['seal', 'makki', 'al-fatiha']).map((n) => n.id)).toEqual(['root', 'seal', 'makki', 'al-fatiha']);
     expect(parsePath(HUMANITY, 'seal/nowhere/al-fatiha')).toEqual(['seal']);
     expect(parsePath(HUMANITY, null)).toEqual([]);
+  });
+
+  it('R204 — opens a small diagram whole, a large one two levels deep', () => {
+    const leaf = (label: string): DiagramNode => ({ label });
+    const small: DiagramNode = { label: 'r', children: [{ label: 'a', children: [{ label: 'b', children: [leaf('c')] }] }] };
+    expect([...initiallyOpen(small)]).toEqual(['0', '0/0', '0/0/0']);
+    expect(branchKeys(small)).toEqual(['0', '0/0', '0/0/0']);
+    expect(diagramSize(small)).toBe(4);
+    const large: DiagramNode = { label: 'r', children: Array.from({ length: 5 }, (_, i) => ({ label: `v${String(i)}`, children: Array.from({ length: 9 }, (_, j) => ({ label: `w${String(j)}`, children: [leaf('x')] })) })) };
+    expect(diagramSize(large)).toBeGreaterThan(40);
+    const open = initiallyOpen(large);
+    expect(open.has('0') && open.has('0/4')).toBe(true);
+    expect(open.has('0/0/0')).toBe(false);
   });
 
   it('counts what is beneath a node', () => {
@@ -98,8 +191,31 @@ describe('R203 — the page', () => {
     for (const marker of TIMELINE) expect(html).toContain(marker.label);
     expect(html).toContain('1448 هـ');
     expect(html).toContain('2026م');
-    expect(html).toContain(t('content.history.erasTitle'));
     expect(html.match(/class="humanity__era /g)?.length).toBe(3);
+  });
+
+  it('R204 — keeps the line and the cards together: no visible title, no trail on the overview', () => {
+    at('?view=history');
+    const html = renderToStaticMarkup(<HumanityTimeline />);
+    expect(t('content.views.history')).toBe('نظرة شاملة');
+    expect(html).toContain(`class="humanity__title visually-hidden"`);
+    expect(html).not.toContain('humanity__trail');
+    // The calendars are named once, at the start of the line.
+    expect(html.indexOf('humanity__legend')).toBeLessThan(html.indexOf('humanity__station '));
+    expect(html.match(/>ميلادي</g)?.length).toBe(1);
+  });
+
+  it('R204 — draws a diagram as a tree whose branches open and close', () => {
+    at('?view=history&node=seal/makki/al-fatiha');
+    const page = renderToStaticMarkup(<HumanityTimeline />);
+    expect(page.match(/<figure class="hdiagram/g)?.length).toBe(6);
+    const html = renderToStaticMarkup(
+      <HumanityDiagram diagram={{ title: 'خطاطة', root: { label: 'ج', children: [{ label: 'أ', text: '﴿اقْرَأْ﴾', tone: 'gold' }, { label: 'ب', children: [{ label: 'ت' }] }] } }} />,
+    );
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('class="tone-prophets"');
+    expect(html).toContain('<span class="humanity__verse">﴿اقْرَأْ﴾</span>');
+    expect(html).toContain(t('content.history.diagram.openAll'));
   });
 
   it('opens a Surah with its ideas and a link to «حسب السورة» on it', () => {

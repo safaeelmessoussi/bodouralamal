@@ -1,5 +1,6 @@
 /**
- * **SRS Revision 203 — «مسيرة البشرية», the shape of the diagram.**
+ * **SRS Revision 203 — «نظرة شاملة» (R204; «مسيرة البشرية» before), the shape
+ * of the diagram.**
  *
  * One tree, read from the general to the particular: the root holds the three
  * eras of the Owner's board (the prophets, the Prophet ﷺ, the ummah); every
@@ -33,7 +34,26 @@ export interface HistoryNode {
   surah?: number;
   /** A book revealed to this prophet («التوراة»…). */
   badge?: string;
+  /** A Surah's axes drawn as trees (R204), after its own lines. */
+  diagrams?: HistoryDiagram[];
   children?: HistoryNode[];
+}
+
+/** The colour of a box in a diagram — the board's five families. */
+export type DiagramTone = 'gold' | 'blue' | 'violet' | 'orange' | 'green';
+
+/** One box of a diagram: a short label, an optional sentence, its branches. */
+export interface DiagramNode {
+  label: string;
+  text?: string;
+  /** Inherited from the parent box when absent. */
+  tone?: DiagramTone;
+  children?: DiagramNode[];
+}
+
+export interface HistoryDiagram {
+  title: string;
+  root: DiagramNode;
 }
 
 export interface TimelineMarker {
@@ -125,4 +145,38 @@ export function verseRuns(text: string): { verse: boolean; text: string }[] {
   }
   if (last < text.length) runs.push({ verse: false, text: text.slice(last) });
   return runs;
+}
+
+/** Every box of a diagram, itself included. */
+export function diagramSize(node: DiagramNode): number {
+  return 1 + (node.children ?? []).reduce((sum, child) => sum + diagramSize(child), 0);
+}
+
+/**
+ * **Which boxes start open** (R204), by address (`0`, `0/2`…). A diagram of
+ * up to `whole` boxes opens whole, so it reads at a glance like the Owner's
+ * drawings; a larger one opens two levels, and each box opens on a click.
+ */
+export function initiallyOpen(root: DiagramNode, whole = 40): Set<string> {
+  const open = new Set<string>();
+  const all = diagramSize(root) <= whole;
+  const walk = (node: DiagramNode, key: string, depth: number): void => {
+    if (!node.children?.length) return;
+    if (all || depth < 2) open.add(key);
+    node.children.forEach((child, i) => walk(child, `${key}/${String(i)}`, depth + 1));
+  };
+  walk(root, '0', 0);
+  return open;
+}
+
+/** The addresses of every box that has branches — for «فتح الكل». */
+export function branchKeys(root: DiagramNode): string[] {
+  const keys: string[] = [];
+  const walk = (node: DiagramNode, key: string): void => {
+    if (!node.children?.length) return;
+    keys.push(key);
+    node.children.forEach((child, i) => walk(child, `${key}/${String(i)}`));
+  };
+  walk(root, '0');
+  return keys;
 }

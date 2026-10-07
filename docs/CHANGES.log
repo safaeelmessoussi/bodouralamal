@@ -206,3 +206,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `/resources?view=history` (signed-in only): `components/history/` — `humanity-data.ts` (generated from the Owner's Miro board, 87 nodes), `humanity-model.ts` (path, sections, verses), `humanity-timeline.tsx` (timeline with both calendars, era bands, cards, breadcrumbs, previous/next, Surah → `?surah=N`); `styles/components/history.css`; `--color-era-*` tokens from the board's palette; `ar.ts` `content.views.history`, `content.history.*`.
 - Staging host: `nginx/conf.d/retired-staging-host.conf` (host only) — 301 to `https://bodouralamal.com`; DNS and certificate steps in deployment.md, TASKS E11.
 - Verified: frontend 1636 + build, token and neutral-address guards; Localhost browser 1366/390 (no page overflow), click-through 6/6 + Surah link lands on `?surah=1` «حسب السورة»; signed-out: no tab.
+
+## 2026-10-07 — SRS Revision 204: «نظرة شاملة» — one view, Surah diagrams, content review
+- Renamed tab; bands above the stations, «ميلادي/هجري» as the line's first column, no titles/lede on the overview; compact header, one row of cards before a node's text (`humanity-timeline.tsx`, `history.css`).
+- `humanity-diagram.tsx`: `HistoryNode.diagrams` as trees that open/close (sideways ≥48rem, outline on phones; `initiallyOpen`, `branchKeys` in `humanity-model.ts`); al-Fatiha's chart in six trees, al-Baqara and Al Imran from the Owner's drawings, every other Surah's axes.
+- Content: «عام الجماعة» and the Umayyad era (Owner's text), al-Nasa'i, Makki/Madani events; disputed or wrong items removed (ledger R204 §5); «pending» text withdrawn; data now edited by hand.
+- Verified: frontend 1642 + tsc/lint/build, 34 guards; Localhost 1366×768 overview fits one view (cards end 765 px), cards 5/5 and 6/6 per row, no overflow at 1366/390; click-through 7/7.
