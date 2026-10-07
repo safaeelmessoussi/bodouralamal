@@ -99,18 +99,16 @@ export function ResourcesPage(): ReactNode {
 type LibraryMode = 'history' | 'surah' | 'level';
 
 function LibraryPage({ levelId, categoryId }: { levelId: string | null; categoryId: string | null }): ReactNode {
-  const { status } = useSession();
   const [mode, setMode] = useState<LibraryMode>(() => {
     const param = new URLSearchParams(window.location.search).get('view');
     if (param === 'levels' || levelId !== null || categoryId !== null) return 'level';
     if (param === 'history') return 'history';
     return 'surah';
   });
-  // R203 — «نظرة شاملة» (R204; «مسيرة البشرية» before) is offered to signed-in readers only, for now: an
-  // anonymous visitor (or a link followed while signed out) reads by Surah.
-  const signedIn = status === 'authenticated';
-  const shown: LibraryMode = mode === 'history' && status === 'anonymous' ? 'surah' : mode;
-  const tabs = <ModeTabs mode={shown} onMode={setMode} withHistory={signedIn} />;
+  // R207 — «نظرة شاملة» is public, like the rest of the library (R43): every
+  // visitor has the three tabs; «حسب السورة» stays the default (R196).
+  const shown: LibraryMode = mode;
+  const tabs = <ModeTabs mode={shown} onMode={setMode} />;
   if (shown === 'history') return <HistoryView tabs={tabs} />;
   return shown === 'surah' ? (
     <SurahView tabs={tabs} />
@@ -122,13 +120,11 @@ function LibraryPage({ levelId, categoryId }: { levelId: string | null; category
 function ModeTabs({
   mode,
   onMode,
-  withHistory,
 }: {
   mode: LibraryMode;
   onMode: (next: LibraryMode) => void;
-  withHistory: boolean;
 }): ReactNode {
-  const modes: LibraryMode[] = withHistory ? ['history', 'surah', 'level'] : ['surah', 'level'];
+  const modes: LibraryMode[] = ['history', 'surah', 'level'];
   return (
     <div className="cal-segmented content-modes" role="tablist" aria-label={t('content.views.label')}>
       {modes.map((m) => (

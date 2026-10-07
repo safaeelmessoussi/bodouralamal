@@ -79,6 +79,9 @@ try {
   // R196 — the bare page opens «حسب السورة»; the Level shelves are «حسب المستوى».
   await open('/resources');
   check('fresh anonymous library opens on «حسب السورة»', await waitFor(`document.querySelector('.content-modes [aria-selected="true"]')?.textContent.includes('حسب السورة')`));
+  // R207 — «نظرة شاملة» is public: an anonymous visitor has its tab and its timeline.
+  await open('/resources?view=history');
+  check('anonymous «نظرة شاملة» opens its timeline', await waitFor(`document.querySelector('.content-modes [aria-selected="true"]')?.textContent.includes('نظرة شاملة') && document.querySelectorAll('.humanity__station').length > 0 && document.querySelectorAll('.humanity__era').length === 3`));
   await open('/resources?view=levels');
   // R174 §3 — the library shows everything at once: the fixture Level is a
   // SHELF heading with its items beneath it, not a card that links away.
