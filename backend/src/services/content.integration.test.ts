@@ -589,7 +589,8 @@ describe("the two-phase upload (TD-3.5)", () => {
     const e = await failure(() =>
       initiateUpload(prisma, clients, KEY, admin(), {
         filename: "huge.pdf",
-        size: 51 * 1024 * 1024,
+        // R206 — one byte over the 500 MB every upload may reach.
+        size: 500 * 1024 * 1024 + 1,
         mime: "application/pdf",
         meta: meta() as never,
       }),

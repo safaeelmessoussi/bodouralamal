@@ -41,7 +41,7 @@ import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
  * configuration knob TD-13 does not list.
  */
 
-/** Long enough for a slow mobile upload of a 100 MB file (§2.3 connectivity),
+/** Long enough for a slow mobile upload of a 500 MB file (§2.3 connectivity; R206),
  *  short enough that a leaked ticket is not a standing grant. */
 export const UPLOAD_TICKET_TTL_SECONDS = 2 * 60 * 60;
 

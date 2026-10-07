@@ -757,7 +757,8 @@ describe("the ACTUAL staging bytes are verified (R99.8)", () => {
     const { sizeCapFor, SIZE_CAPS } = await import("../lib/file-types.js");
     expect(sizeCapFor("video/mp4")).toBe(SIZE_CAPS.recording);
     expect(SIZE_CAPS.recording).toBe(500 * 1024 * 1024);
-    expect(SIZE_CAPS.recording).toBeGreaterThan(SIZE_CAPS.audio);
+    // R206 — a person's upload reaches the same 500 MB, never more.
+    expect(SIZE_CAPS.recording).toBeGreaterThanOrEqual(SIZE_CAPS.audio);
   });
 
   it("refuses an object that is simply not there", async () => {
@@ -1274,11 +1275,12 @@ describe("SRS Revision 168 §2 — a recorder that dies mid-class loses nothing 
 });
 
 describe("SRS Revision 168 §2 — a recording is as long as the class was", () => {
-  it("the UPLOAD caps do not govern the platform's own capture: a two-hour audio class is over TD-9's 100 MB and must import", () => {
+  it("the UPLOAD caps do not govern the platform's own capture: a ten-hour audio class is over TD-9's 500 MB (R206) and must import", () => {
     // At the measured ≈59 MB per audio hour and ≈0.63 GB per video hour.
     expect(platformRecordingCap()).toBeGreaterThan(2 * 59 * 1024 * 1024);
     expect(platformRecordingCap()).toBeGreaterThan(5 * 0.63 * 1024 * 1024 * 1024);
-    expect(SIZE_CAPS.audio).toBeLessThan(2 * 59 * 1024 * 1024);
+    expect(platformRecordingCap()).toBeGreaterThan(10 * 59 * 1024 * 1024);
+    expect(SIZE_CAPS.audio).toBeLessThan(10 * 59 * 1024 * 1024);
   });
 });
 

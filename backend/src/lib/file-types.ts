@@ -70,16 +70,24 @@ export type UploadableMime =
 const MB = 1024 * 1024;
 
 /**
- * TD-9: audio 100 MB (Revision 12, reduced from 500 MB), everything else 50 MB,
- * and **R99.8's ingested class recording 500 MB**.
+ * TD-9: **500 MB for every file a person uploads** (SRS Revision 206 — the
+ * Owner: a 148 MB MP3 lesson was refused under Revision 12's 100 MB audio and
+ * 50 MB document caps; «the maximum possible»), and R99.8's ingested class
+ * recording 500 MB.
+ *
+ * Why 500 MB and not more: a browser upload is ONE request with no resume (a
+ * dropped connection restarts it), its signed URL lives an hour, and completion
+ * streams the whole object twice through the API (R103) inside the API's 60 s
+ * proxy window — 500 MB is the size those bounds carry with margin, and the
+ * size the platform already stores for an uploaded class recording.
  *
  * The recording cap is separate and larger because a three-hour صوت وصورة lesson
  * is legitimately bigger than a voice memo, and it is **bounded rather than
  * open** for the same disk-budget reason Revision 18 gave (§2.4, §6).
  */
 export const SIZE_CAPS = {
-  audio: 100 * MB,
-  document: 50 * MB,
+  audio: 500 * MB,
+  document: 500 * MB,
   recording: 500 * MB,
   /**
    * **The platform's OWN capture of a class** (SRS Revision 168 §2).

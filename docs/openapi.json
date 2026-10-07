@@ -12895,7 +12895,7 @@
             }
           },
           "413": {
-            "description": "Error envelope (TD-3.8). PAYLOAD_TOO_LARGE — the declared size exceeds the TD-9 cap (audio 100 MB, everything else 50 MB).",
+            "description": "Error envelope (TD-3.8). PAYLOAD_TOO_LARGE — the declared size exceeds the TD-9 cap (500 MB for every file, SRS Revision 206).",
             "content": {
               "application/json": {
                 "schema": {

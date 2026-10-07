@@ -78,8 +78,8 @@ Single-shot presigned PUT to a disposable staging key, then server-controlled im
 - `POST /uploads/{upload_id}/abort`: deletes only unreferenced staging, best-effort; `upload.gc` owns abandonment.
 - The original PUT stays valid for its hour (unrevocable) and can only recreate the staging key; the DB names the distinct canonical key the browser never had write authority for.
 - Version segment = first 128 bits (32 hex) of `SHA-256("upload-finalization-sha256-v1" || NUL || finalization_id || NUL || content_sha256)`; the full SHA-256 goes to mandatory audit detail and object metadata and a retry candidate is checked against it. Single-part PUT ETag is MD5, not byte identity; `If-Match` never decides hash, key or publication.
-- The private server-finalization object solves the key-order problem (digest unknown until stream end). Rejected: buffering up to 100 MB in memory; reopening the client-writable key after hashing (TOCTOU). An equal-size/equal-MD5 PDF collision test overwrites client staging after the source read opens and proves one stable snapshot.
-- The server streams, never buffers: memory bounded by stream chunks plus the 512-byte validation window; browser uploads only (50/100 MB); R99's 500 MB object is a storage-side copy.
+- The private server-finalization object solves the key-order problem (digest unknown until stream end). Rejected: buffering up to 500 MB in memory; reopening the client-writable key after hashing (TOCTOU). An equal-size/equal-MD5 PDF collision test overwrites client staging after the source read opens and proves one stable snapshot.
+- The server streams, never buffers: memory bounded by stream chunks plus the 512-byte validation window; browser uploads only (up to 500 MB, R206: a 473 MiB completion took 11 s on Localhost); R99's 500 MB object is a storage-side copy.
 - Declared content type is not trusted; magic bytes are. It is first read as the listed type it names (R200: `audio/mp3` → `audio/mpeg`, …; R205: `audio/aac` → `audio/mp4`, `audio/opus` → `audio/ogg`), and an absent one (`''`, `application/octet-stream`) from the extension (`canonicalUploadMime`). R202 — an audio upload is stored as the listed audio type its bytes prove (`provenMime`: an M4A named `.mp3` → `audio/mp4`); documents are never re-typed.
 
 ### `upload_id` is a signed ticket, not a database row
@@ -106,14 +106,14 @@ Single-shot presigned PUT to a disposable staging key, then server-controlled im
 
 | | Cap | Accepted types |
 |---|---|---|
-| Audio | 100 MB | `audio/webm`, `audio/mp4`, `audio/ogg`, `audio/mpeg`, `audio/wav` |
-| Documents, slides, images | 50 MB | PDF, JPEG, PNG, WebP, docx/pptx/xlsx |
+| Audio | 500 MB | `audio/webm`, `audio/mp4`, `audio/ogg`, `audio/mpeg`, `audio/wav` |
+| Documents, slides, images | 500 MB | PDF, JPEG, PNG, WebP, docx/pptx/xlsx |
 | Video | — | Not accepted at `/uploads/*` (§4.9 «Video remains excluded entirely»); R99.12's `origin` marker does not widen it |
 | Ingested class recording | 500 MB | `video/mp4`, reachable only by `session-recording-ingest` (R99.8): a provenance, not a file type; bounded for R18's disk-budget reason |
 
 - Video's absence is a rule: the library client maps `video/*` for presentation only; accepting video is a Document Owner decision and SRS revision (§20 rule 16).
 - Magic-byte check is a predicate per type, not a prefix table: RIFF real type at offset 8 (WAV vs WebP), MP4 `ftyp` at offset 4, MP3 = ID3 tag or eleven-bit frame sync (`FF` alone would admit every JPEG); OOXML types are ZIP archives, checked for consistency with the declaration.
-- 100 MB (down from 500 MB) is over six hours at 32 kbps mono; it bounds failed-upload blast radius, VPS disk and the Nginx body limit.
+- 500 MB for every person upload (SRS Revision 206; 100/50 MB before): the most a single non-resumable PUT and completion's two passes inside the API's 60 s window carry with margin; it bounds failed-upload blast radius, VPS disk and the Nginx body limit.
 - Resumable multipart is deferred: a failed upload restarts from zero (accepted risk; mitigations: progress + retry UI, stable-connection guidance, the cap; phone recordings are typically 10–30 MB); first post-MVP storage item; the key structure already fits.
 
 ### What a recording IS (Owner 2026-09-02, R120)
@@ -163,7 +163,7 @@ The storage half of [BR-2](../reference/business-rules.md#br-2): a **warning sin
 
 - `/storage/` responses carry `frame-ancestors 'self'`; everything else keeps `'none'` (§3.1 scopes its CSP to client responses; the inherited `'none'` blanked §14.6's inline PDF preview; the app shell stays `'none'`, so clickjacking protection is unchanged).
 - `add_header` in a location replaces the inherited set, so the storage block restates `X-Content-Type-Options` (`nosniff`).
-- `/storage/` only: `client_max_body_size 110m` (default 1 MB → 413) and `proxy_request_buffering off`; the API location stays `2m`; never raise the body limit globally.
+- `/storage/` only: `client_max_body_size 510m` (R206) (default 1 MB → 413) and `proxy_request_buffering off`; the API location stays `2m`; never raise the body limit globally.
 
 ## Deletion and quarantine
 

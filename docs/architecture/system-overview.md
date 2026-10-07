@@ -41,11 +41,11 @@ graph TB
 |---|---|---|
 | `/` | Static React bundle | gzip (brotli where available) |
 | `/api/v1/` | Express API | `client_max_body_size 2m` |
-| `/storage/` | Proxied to MinIO | `client_max_body_size 110m`, `proxy_request_buffering off` |
+| `/storage/` | Proxied to MinIO | `client_max_body_size 510m`, `proxy_request_buffering off` |
 | `/healthz` | Component health | Public, unauthenticated, origin root |
 | `/.well-known/acme-challenge/` | Certbot | TLS renewal |
 
-- `client_max_body_size 110m` on `/storage/` only (Nginx default 1 MB → `413` before application code); `proxy_request_buffering off` avoids spooling bodies to disk (doubled I/O, disk-fill vector).
+- `client_max_body_size 510m` on `/storage/` only (SRS Revision 206) (Nginx default 1 MB → `413` before application code); `proxy_request_buffering off` avoids spooling bodies to disk (doubled I/O, disk-fill vector).
 - Never raise the body limit globally; the API stays at 2 MB.
 
 ### The storage proxy, and signatures

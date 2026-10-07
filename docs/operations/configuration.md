@@ -144,7 +144,7 @@ Nginx cannot read a token subject and admits only `r/s`/`r/m` ([Security](../arc
 
 ```nginx
 location /api/v1/  { client_max_body_size 2m;   }
-location /storage/ { client_max_body_size 110m;
+location /storage/ { client_max_body_size 510m;
                      proxy_request_buffering off; }
 ```
 

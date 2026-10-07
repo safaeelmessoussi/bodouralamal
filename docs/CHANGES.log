@@ -218,3 +218,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - «نظرة شاملة»: arrowhead after the last station; `PHASES` (second line) and `EXPEDITIONS` (third line, a zoom wedge under the Medinan phase; node `seal/madani/ghazawat/*`); «اليوم» → `humanity-today.tsx` (`GET /calendar` for today); hero description one line; overview still fits 1366×768.
 - Diagrams: >16 boxes open at the first branches, which are numbered and coloured; hint line; open animation.
 - Verified: backend 385 + frontend 1645 (tsc/lint/build both), 34 guards; integration `content` 86 (new: .m4a as `audio/aac`, .opus as `audio/opus`); Localhost probes: «الكل» default, picker accept, «اليوم», phase, «بدر»; overview cards end 767 px at 1366×768.
+
+## 2026-10-07 — SRS Revision 206: 500 MB per uploaded file
+- TD-9 `SIZE_CAPS.audio`/`.document` 100/50 MB → 500 MB (`lib/file-types.ts`); Nginx `/storage/` `client_max_body_size` 110m → 510m; upload hint «كل ملف حتى 500 ميغابايت»; OpenAPI 413 text.
+- Why 500 MB: single non-resumable PUT, 1 h signed URL, completion's two passes inside the API's 60 s window; beyond it needs multipart (§10.1).
+- Verified: Localhost, real MP3s through Nginx — 145 MiB (PUT 0.8 s, complete 3.2 s), 473 MiB (PUT 3.5 s, complete 10.9 s), both 201, then purged; backend unit + integration, OpenAPI drift.

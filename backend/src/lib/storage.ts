@@ -186,7 +186,7 @@ export async function presignGetUrl(
  * **Everything below runs on the INTERNAL client.** R99's large provider
  * recordings remain storage-side copies. R103's browser-upload finalization
  * deliberately uses bounded streams through this process so SHA-256 covers the
- * exact accepted bytes; browser uploads remain capped at 100 MB.
+ * exact accepted bytes; browser uploads remain capped at 500 MB (R206).
  *
  * Upload finalization and R99 ingestion both move verified bytes out of staging
  * without giving a browser write authority over the canonical key. R99 can be

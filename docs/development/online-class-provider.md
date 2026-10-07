@@ -75,7 +75,7 @@ Established by `scripts/dev/browser/verify-recorder-crash.sh` on the real stack:
 - Recovered item says so in «الوصف»; at most one segment may be missing.
 - `ffmpeg`: one static binary, pinned by digest, in a shared layer (Debian's package = +481 MB, ~200 packages).
 - `npm run ops:recording-segments -- <recording-id>` (read-only): storage's segments, newest time, provider's view side by side. `npm run ops:reconcile-recordings`: one pass now.
-- TD-9's 100 MB / 500 MB caps bound person uploads only (would refuse audio > ≈1 h 40, video > ≈47 min); platform capture capped at 5 GiB (`platformRecordingCap`). Staging holds segments + final file (~2× size) until the import sweeps both.
+- TD-9's 500 MB caps bound person uploads only (R206; would refuse audio > ≈8 h, video > ≈47 min); platform capture capped at 5 GiB (`platformRecordingCap`). Staging holds segments + final file (~2× size) until the import sweeps both.
 
 ## What it actually costs (MEASURED)
 
