@@ -15,6 +15,7 @@ import { Dialog } from '../ui/dialog.js';
 import { AttendancePanel } from './attendance-panel.js';
 import { deliveryLabel, mediaLabel } from '../scheduling/delivery.js';
 import { formatInstant } from '../../lib/morocco-time.js';
+import { occurrenceSurahs } from '../../lib/surah-list.js';
 
 /** The roles that may reach الجدولة at all — the same set `AttendancePanel`
  *  already uses to decide who sees the staff sheet rather than one button. */
@@ -197,10 +198,12 @@ export function EventDetailsDialog({
 
             {/* SRS Revision 165 §2 — which Surah(s) a by-Surah class or exam is
                 about; absent wherever the Subject has none. */}
-            {(occurrence.surah_names ?? []).length > 0 ? (
+            {/* R208 — else the Level's «مقرر الحفظ», in full here: a
+                details view has the room a chip does not. */}
+            {occurrenceSurahs(occurrence).length > 0 ? (
               <div className="details__item details__item--wide">
                 <dt>{t('calendar.detailsSurahs')}</dt>
-                <dd>{(occurrence.surah_names ?? []).join('، ')}</dd>
+                <dd>{occurrenceSurahs(occurrence).join('، ')}</dd>
               </div>
             ) : null}
 

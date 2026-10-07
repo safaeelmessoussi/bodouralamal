@@ -1,8 +1,13 @@
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
 
-import { fetchOccurrences, type Occurrence } from "../../adapters/calendar.js";
+import {
+  fetchCalendarBootstrap,
+  fetchOccurrences,
+  type Occurrence,
+} from "../../adapters/calendar.js";
 import { t } from "../../i18n/index.js";
 import { toIsoDate } from "../../lib/dates.js";
+import { occurrenceSurahs, shortSurahList } from "../../lib/surah-list.js";
 
 type Load =
   | { kind: "loading" }
@@ -18,6 +23,12 @@ type Load =
  * and the same visibility tier as «الجدول الزمني» for this reader, the same
  * device date that page opens on — listed by time, with a link to the whole
  * calendar.
+ *
+ * **R208 — the women's Category only, each item with its Level and Surahs.**
+ * «المرأة» is the Category whose beneficiaries hold their own login
+ * (`holds_own_login`, R170 §6) — a fact about the Category, never a match on
+ * its name (§4.4b); no such Category, no items. The Surahs are the item's own,
+ * else its Level's for a Subject that works by Surah, shortened past four.
  */
 export function TodayInTheAssociation({
   token,
@@ -34,19 +45,28 @@ export function TodayInTheAssociation({
     setLoad({ kind: "loading" });
     void (async () => {
       try {
-        const result = await fetchOccurrences({
-          from: today,
-          to: today,
-          token,
-        });
-        if (!cancelled) {
-          setLoad({
-            kind: "ready",
-            occurrences: [...result.occurrences].sort((a, b) =>
-              (a.start_time ?? "").localeCompare(b.start_time ?? ""),
-            ),
-          });
-        }
+        const chrome = await fetchCalendarBootstrap({ from: today, to: today });
+        const women = chrome.categories
+          .filter((category) => category.holds_own_login === true)
+          .map((category) => category.id);
+        const pages = await Promise.all(
+          women.map((categoryId) =>
+            fetchOccurrences({ from: today, to: today, token, categoryId }),
+          ),
+        );
+        const seen = new Set<string>();
+        const occurrences = pages
+          .flatMap((page) => page.occurrences)
+          .filter((item) => {
+            const key = `${item.kind}-${item.id}-${item.date}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .sort((a, b) =>
+            (a.start_time ?? "").localeCompare(b.start_time ?? ""),
+          );
+        if (!cancelled) setLoad({ kind: "ready", occurrences });
       } catch {
         if (!cancelled) setLoad({ kind: "error" });
       }
@@ -90,8 +110,9 @@ export function TodayInTheAssociation({
               <span className="humanity__today-title">{item.title}</span>
               <span className="humanity__today-meta">
                 {[
-                  item.scheduling_type_name,
-                  item.audience_label,
+                  levelsOf(item),
+                  surahsOf(item),
+                  item.audience_name,
                   item.branch_name,
                   item.room_name,
                 ]
@@ -107,4 +128,24 @@ export function TodayInTheAssociation({
       </p>
     </>
   );
+}
+
+/** The Level(s) the item is for; the Category when it names no Level. */
+function levelsOf(item: Occurrence): string | null {
+  const levels = item.level_names?.length
+    ? item.level_names
+    : item.level_name
+      ? [item.level_name]
+      : [];
+  if (levels.length > 0) return levels.join("، ");
+  return item.category_names?.join("، ") || item.category_name || null;
+}
+
+/** R208 — «سورة X», or «السور: …» shortened past four. */
+function surahsOf(item: Occurrence): string | null {
+  const surahs = occurrenceSurahs(item);
+  if (surahs.length === 0) return null;
+  return surahs.length === 1
+    ? t("calendar.chipSurah").replace("{surah}", surahs[0]!)
+    : t("calendar.chipSurahs").replace("{surahs}", shortSurahList(surahs));
 }

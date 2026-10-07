@@ -451,6 +451,8 @@ const OCCURRENCE_KEYS = [
   "level_ids",
   "level_name",
   "level_names",
+  // R208 — the Level's «مقرر الحفظ» for a by-Surah class that names none.
+  "level_surah_names",
   "online_media_mode",
   "recurrence",
   "room_name",

@@ -189,6 +189,8 @@ describe("a class of a Subject that works by Surah", () => {
     });
     const mine = occurrences.find((o) => o.id === session.id);
     expect(mine?.surahNames).toEqual([]);
+    // R208 — with none of its own, it says its Level's «مقرر الحفظ», in Mushaf order.
+    expect(mine?.levelSurahNames).toEqual(["الفاتحة", "البقرة"]);
     expect(mine?.itemTitle).toBe(`${TAG} مادة بالسور — الثلاثاء 2 يونيو 2026 15:00`);
   });
 
@@ -378,6 +380,8 @@ describe("§5 — one occurrence may name its own Surahs", () => {
     });
     expect(await prisma.sessionSurah.count({ where: { sessionId: session.id } })).toBe(0);
     expect((await calendarOn(FIRST)).find((o) => o.id === session.id)?.surahNames).toEqual(["الفاتحة"]);
+    // R208 — a class that names its Surahs carries no Level list beside them.
+    expect((await calendarOn(FIRST)).find((o) => o.id === session.id)?.levelSurahNames).toEqual([]);
 
     // Retaught as a Subject that does not work by Surah: the class's Surahs
     // are NOT inherited on that date — the title and the calendar say none.
@@ -386,6 +390,8 @@ describe("§5 — one occurrence may name its own Surahs", () => {
       subjectId: fiqhId,
     });
     expect((await calendarOn(FIRST)).find((o) => o.id === session.id)?.surahNames).toEqual([]);
+    // R208 — nor its Level's: فقه does not work by Surah.
+    expect((await calendarOn(FIRST)).find((o) => o.id === session.id)?.levelSurahNames).toEqual([]);
     const titles = await sessionTitles(prisma, [session.id]);
     expect(titles.get(session.id)).toBeDefined();
     expect(titles.get(session.id)).not.toContain("الفاتحة");

@@ -350,3 +350,23 @@ describe('ProgramsTextView — the same journey, to scan', () => {
     expect(text).toContain('حفظ: سورة واحدة');
   });
 });
+
+describe('R208 — «عرض بملء الشاشة» lists every Surah of the Level', () => {
+  it('a card in full mode carries the whole list, unclamped, with no «…»', async () => {
+    const { LevelCard } = await import('./level-card.js');
+    const surahs = Array.from({ length: 37 }, (_, i) => ({ id: 78 + i, name: `سورة ${String(78 + i)}` }));
+    const level = {
+      id: 'w0',
+      name: 'المستوى 0',
+      description: null,
+      subjects: [],
+      surahs,
+    } as unknown as Parameters<typeof LevelCard>[0]['level'];
+    const html = renderToStaticMarkup(<LevelCard level={level} idPrefix="show-level" className="show__card" surahsInFull />);
+    expect(html).toContain('journey__surahs is-expanded is-full');
+    expect(html).toContain('سورة 78، سورة 79');
+    expect(html).toContain('سورة 114');
+    expect(html).not.toContain('journey__surahsMore');
+    expect(html).not.toContain('journey__surahsLess');
+  });
+});

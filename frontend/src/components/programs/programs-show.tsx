@@ -259,7 +259,7 @@ function Slide({ slide, current }: { slide: ShowSlide; current: boolean }): Reac
           {t('programs.journey.categoryTitle').replace('{name}', slide.category.name)}
         </p>
       ) : null}
-      <LevelCard level={slide.level} idPrefix="show-level" className="show__card" />
+      <LevelCard level={slide.level} idPrefix="show-level" className="show__card" surahsInFull />
     </div>
   );
 }

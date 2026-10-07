@@ -170,6 +170,15 @@ export interface Occurrence {
    * is not taught by Surah, and always for an Event.
    */
   surahNames: string[];
+  /**
+   * **R208 — the Level's «مقرر الحفظ» (`LevelSurah`), when the occurrence
+   * names no Surah of its own but its Subject works by Surah** (حفظ, تفسير).
+   * Mushaf order, every Level of the occurrence together; empty otherwise. The
+   * reader shortens it where room is short («الأولى … الأخيرة»), never here.
+   */
+  levelSurahNames: string[];
+  /** Internal to the read: whether the Subject works by Surah. Not sent. */
+  worksBySurah?: boolean;
   /** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
   date: string;
   startTime: string | null;
@@ -721,6 +730,8 @@ function sessionOccurrence(
     }),
     surahNames,
     surahIds,
+    levelSurahNames: [],
+    worksBySurah: subject?.requiresSurahs === true,
     date: iso(session.date),
     startTime: hhmm(session.startTime),
     endTime: hhmm(session.endTime),
@@ -1664,6 +1675,7 @@ export async function readCalendar(
         itemTitle: event.title,
         surahNames: [],
         surahIds: [],
+        levelSurahNames: [],
         subjectId: null,
         subjectName: null,
         audienceName: null,
@@ -1783,7 +1795,7 @@ export async function readCalendar(
                 category: { select: { id: true, name: true } },
               },
             },
-            subject: { select: { id: true, name: true } },
+            subject: { select: { id: true, name: true, requiresSurahs: true } },
             branch: { select: { id: true, name: true } },
             room: { select: { name: true } },
             administrativeGroup: { select: { id: true, name: true } },
@@ -1844,6 +1856,8 @@ export async function readCalendar(
       itemTitle: exam.title,
       surahNames: exam.surah ? [exam.surah.nameArabic] : [],
       surahIds: exam.surah ? [exam.surah.surahId] : [],
+      levelSurahNames: [],
+      worksBySurah: exam.subject?.requiresSurahs === true,
       date: iso(exam.date),
       startTime: hhmm(exam.startTime),
       endTime: hhmm(exam.endTime),
@@ -2066,6 +2080,7 @@ export async function readCalendar(
   }
 
   await flagAttendanceAuthority(prisma, actor, out);
+  await attachLevelSurahs(prisma, out);
 
   // Deterministic order: date, then time, then id (TD-10's tiebreaker habit).
   return out.sort(
@@ -2097,6 +2112,38 @@ export async function readCalendar(
  * `attendance-authority.integration.test.ts` holds this to the service's own
  * answer, occurrence by occurrence, so the two cannot drift silently.
  */
+/**
+ * **R208 — the Level's Surahs for an occurrence that names none** (the Owner,
+ * 2026-10-07: «for events of the subjects related to the surahs split, such as
+ * memorization and tafseer, specify the list of all surahs of that level»).
+ * One read for the whole page, never one per occurrence.
+ */
+async function attachLevelSurahs(prisma: PrismaClient, occurrences: Occurrence[]): Promise<void> {
+  const wanting = occurrences.filter(
+    (o) => o.worksBySurah === true && o.surahNames.length === 0 && o.levelIds.length > 0,
+  );
+  if (wanting.length === 0) return;
+  const levelIds = [...new Set(wanting.flatMap((o) => o.levelIds))];
+  const rows = await prisma.levelSurah.findMany({
+    where: { levelId: { in: levelIds }, deletedAt: null },
+    select: { levelId: true, surah: { select: { surahId: true, nameArabic: true } } },
+    orderBy: { surahId: 'asc' },
+  });
+  const byLevel = new Map<string, { surahId: number; nameArabic: string }[]>();
+  for (const row of rows) {
+    const list = byLevel.get(row.levelId) ?? [];
+    list.push(row.surah);
+    byLevel.set(row.levelId, list);
+  }
+  for (const occurrence of wanting) {
+    const merged = new Map<number, string>();
+    for (const levelId of occurrence.levelIds) {
+      for (const surah of byLevel.get(levelId) ?? []) merged.set(surah.surahId, surah.nameArabic);
+    }
+    occurrence.levelSurahNames = [...merged.entries()].sort((a, b) => a[0] - b[0]).map(([, name]) => name);
+  }
+}
+
 async function flagAttendanceAuthority(
   prisma: PrismaClient,
   actor: CalendarActor | null,

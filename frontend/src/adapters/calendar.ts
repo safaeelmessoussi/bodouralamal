@@ -77,6 +77,9 @@ export interface Occurrence {
   /** SRS Revision 163 §2 — the item's own typed title («العنوان»). For a class
    *  `title` is its Subject's name; this is what somebody actually typed. */
   item_title?: string;
+  /** R208 — the Level's «مقرر الحفظ» when the occurrence names no Surah and its
+   *  Subject works by Surah; empty otherwise. Optional: an older server omits it. */
+  level_surah_names?: string[];
   /** SRS Revision 165 §2 — the Surah(s) this class or exam is about. */
   surah_names?: string[];
   /** Local calendar date `YYYY-MM-DD` (TD-11) — never an instant. */

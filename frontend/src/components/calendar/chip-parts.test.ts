@@ -50,17 +50,16 @@ describe('hiddenChipParts — one rule for every calendar surface', () => {
 });
 
 describe('chipText — the words, in reading order', () => {
-  it('a class: Subject, then «سورة X» each, the circle, the Level, who leads, the branch — each part typed', () => {
+  it('a class: Subject, then its Surahs in one part (R208), the circle, the Level, who leads, the branch — each part typed', () => {
     const text = chipText(session(), new Set());
     expect(text.head).toBe('أحكام التجويد');
-    expect(texts(text.details)).toEqual(['سورة الفاتحة', 'سورة البقرة', 'الحلقة 1', 'وميض الأمل', 'فاطمة بوخبزى', 'مقر أمرشيش']);
-    expect(parts(text.details)).toEqual(['surah', 'surah', 'audience', 'level', 'lead', 'branch']);
+    expect(texts(text.details)).toEqual(['السور: الفاتحة، البقرة', 'الحلقة 1', 'وميض الأمل', 'فاطمة بوخبزى', 'مقر أمرشيش']);
+    expect(parts(text.details)).toEqual(['surah', 'audience', 'level', 'lead', 'branch']);
   });
 
   it('drops the filtered parts, and leads with the next one when the Subject is filtered', () => {
     expect(texts(chipText(session(), new Set(['branch', 'level'])).details)).toEqual([
-      'سورة الفاتحة',
-      'سورة البقرة',
+      'السور: الفاتحة، البقرة',
       'الحلقة 1',
       'فاطمة بوخبزى',
     ]);
@@ -85,7 +84,7 @@ describe('chipText — the words, in reading order', () => {
       ],
     );
     const whole = session({ level_ids: ['l1', 'l2'], level_names: ['وميض الأمل', 'نور الأمل'] });
-    expect(texts(chipText(whole, new Set(), taxonomy).details)).toEqual(['سورة الفاتحة', 'سورة البقرة', 'الحلقة 1', 'المرأة', 'فاطمة بوخبزى', 'مقر أمرشيش']);
+    expect(texts(chipText(whole, new Set(), taxonomy).details)).toEqual(['السور: الفاتحة، البقرة', 'الحلقة 1', 'المرأة', 'فاطمة بوخبزى', 'مقر أمرشيش']);
     expect(parts(chipText(whole, new Set(), taxonomy).details)).toContain('category');
     // One Level short of the Category: the Levels stay listed.
     expect(texts(chipText(session(), new Set(), taxonomy).details)).toContain('وميض الأمل');
@@ -96,7 +95,7 @@ describe('chipText — the words, in reading order', () => {
       level_ids: ['l1', 'l2', 'k1', 'x1'],
       level_names: ['وميض الأمل', 'نور الأمل', 'براعم', 'مستوى آخر'],
     });
-    expect(texts(chipText(mixed, new Set(), taxonomy).details)).toEqual(['سورة الفاتحة', 'سورة البقرة', 'الحلقة 1', 'المرأة', 'الأطفال', 'مستوى آخر', 'فاطمة بوخبزى', 'مقر أمرشيش']);
+    expect(texts(chipText(mixed, new Set(), taxonomy).details)).toEqual(['السور: الفاتحة، البقرة', 'الحلقة 1', 'المرأة', 'الأطفال', 'مستوى آخر', 'فاطمة بوخبزى', 'مقر أمرشيش']);
     // A Category filter hides the collapsed word; a Level filter hides both.
     expect(texts(chipText(whole, hiddenChipParts({ categoryId: 'women' }), taxonomy).details)).not.toContain('المرأة');
     expect(parts(chipText(mixed, hiddenChipParts({ levelId: 'l1' }), taxonomy).details)).not.toContain('level');

@@ -228,3 +228,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `resources.tsx`: the three tabs for every visitor (no sign-in gate, no anonymous fallback to «حسب السورة»); «اليوم» reads `GET /calendar` at the anonymous tier.
 - `verify-public-reader.mjs`: anonymous «نظرة شاملة» opens its timeline.
 - Verified: frontend gates; Localhost signed out — three tabs, timeline, «اليوم» (2 public items), deep link to al-Fatiha's diagrams.
+
+## 2026-10-07 — SRS Revision 208: the Level's Surahs on chips and «اليوم»; women only; full list in the show
+- `calendar.service.ts` `attachLevelSurahs`: `level_surah_names` (the Level's «مقرر الحفظ») for a by-Surah occurrence that names none — one read per page; OpenAPI text; key-set test.
+- `lib/surah-list.ts`: own Surahs else the Level's; «سورة X» / «السور: …» in full to four, «الأولى … الأخيرة» beyond — chips (`chip-parts.ts`) and «اليوم»; the details dialog lists all.
+- «اليوم»: the Categories with `holds_own_login` only (women), each item with its Level and Surahs. «عرض بملء الشاشة»: `LevelCard surahsInFull` — the whole list, no «…».
+- Verified: backend 385 + frontend 1649 (tsc/lint/build), integration 51 (calendar, scheduling-surahs, R176); Localhost: «اليوم» women-only with Levels, chip «السور: الفاتحة، البقرة».

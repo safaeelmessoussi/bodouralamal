@@ -1,5 +1,6 @@
 import type { Occurrence } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
+import { occurrenceSurahs, shortSurahList } from '../../lib/surah-list.js';
 
 /**
  * **What a month cell says about an occurrence, and what it leaves unsaid
@@ -159,9 +160,17 @@ export function chipText(
     : occurrence.branch_name
       ? [occurrence.branch_name]
       : [];
-  const surahs = (occurrence.surah_names ?? []).map((name) =>
-    t('calendar.chipSurah').replace('{surah}', name),
-  );
+  // R208 — one part for the Surahs: the occurrence's own, else its Level's
+  // when the Subject works by Surah; in full up to four, else «الأولى … الأخيرة».
+  const surahList = occurrenceSurahs(occurrence);
+  const surahs =
+    surahList.length === 0
+      ? []
+      : [
+          surahList.length === 1
+            ? t('calendar.chipSurah').replace('{surah}', surahList[0]!)
+            : t('calendar.chipSurahs').replace('{surahs}', shortSurahList(surahList)),
+        ];
 
   if (occurrence.kind === 'event') {
     return {

@@ -333,10 +333,8 @@
 .show__card .journey__cardTitle {
   font-size: var(--font-size-lg);
 }
-/* Six lines before «…» here — the screen is the card's alone. */
-.show__card .journey__surahs:not(.is-expanded) .journey__surahsText {
-  -webkit-line-clamp: 6;
-}
+/* R208 — the show lists every Surah of the Level: the screen is the card's
+   alone, so nothing is clamped and no «…» is offered. */
 @keyframes show-slide-in {
   from {
     opacity: 0;

@@ -28,10 +28,13 @@ export function LevelCard({
   level,
   idPrefix = 'journey-level',
   className = '',
+  surahsInFull = false,
 }: {
   level: PublicProgramLevel;
   idPrefix?: string;
   className?: string;
+  /** R208 — «عرض بملء الشاشة» lists every Surah, with no «…». */
+  surahsInFull?: boolean;
 }): ReactNode {
   const ages = levelAgeWords(level, t);
   const memorisation = memorisationWords(level, t);
@@ -69,7 +72,7 @@ export function LevelCard({
         </p>
       ) : null}
       {memorisation ? <p className="journey__cardMemo">{memorisation}</p> : null}
-      <SurahList level={level} />
+      <SurahList level={level} full={surahsInFull} />
     </article>
   );
 }
@@ -84,7 +87,14 @@ const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : us
  * again. The «…» is offered only when the clamp actually hides something,
  * measured — a short list shows no control at all.
  */
-export function SurahList({ level }: { level: PublicProgramLevel }): ReactNode {
+export function SurahList({
+  level,
+  full = false,
+}: {
+  level: PublicProgramLevel;
+  /** R208 — the whole list, no clamp and no «…» (the full-screen show). */
+  full?: boolean;
+}): ReactNode {
   const [expanded, setExpanded] = useState(false);
   const [clipped, setClipped] = useState(false);
   const text = useRef<HTMLSpanElement | null>(null);
@@ -102,6 +112,15 @@ export function SurahList({ level }: { level: PublicProgramLevel }): ReactNode {
     return () => observer.disconnect();
   }, [expanded, level.surahs]);
   if (level.surahs.length === 0) return null;
+  if (full) {
+    return (
+      <p className="journey__surahs is-expanded is-full">
+        <span className="journey__surahsText">
+          {level.surahs.map((s) => s.name).join('، ')}
+        </span>
+      </p>
+    );
+  }
   return (
     <p className={`journey__surahs${expanded ? ' is-expanded' : ''}`}>
       <span className="journey__surahsText" ref={text}>
