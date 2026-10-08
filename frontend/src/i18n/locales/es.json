@@ -607,5 +607,9 @@
   "Shawwal",
   "Du al-Qada",
   "Du al-Hiyya"
- ]
+ ],
+ "content.history.openSurahLead": "Para más detalles y profundizar:",
+ "content.bySurah.more.both": "Para más detalles: escuchar las grabaciones de las clases más abajo y leer los materiales de la sura más abajo.",
+ "content.bySurah.more.listen": "Para más detalles: escuchar las grabaciones de las clases más abajo.",
+ "content.bySurah.more.read": "Para más detalles: leer los materiales de la sura más abajo."
 }

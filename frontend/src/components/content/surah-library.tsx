@@ -5,6 +5,8 @@ import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 import { Button } from '../ui/button.js';
 import { Icon } from '../ui/icon.js';
+import { HumanityDiagram } from '../history/humanity-diagram.js';
+import { SURAH_DIAGRAMS, type SurahDiagrams } from '../history/surah-diagrams.js';
 import { ContentCard } from './content-card.js';
 
 /**
@@ -63,6 +65,32 @@ export function groupBySurah(entries: readonly LibraryEntry[]): SurahGroup[] {
   return [...groups.values()].sort((a, b) => a.id - b.id);
 }
 
+/**
+ * **R210 — a Surah «نظرة شاملة» draws is in the index too**, with or without
+ * content: its diagrams are what the reader meets first. Mushaf order.
+ */
+export function withDiagramSurahs(
+  groups: readonly SurahGroup[],
+  diagrams: ReadonlyMap<number, Pick<SurahDiagrams, 'surah' | 'name'>>,
+): SurahGroup[] {
+  const all = new Map(groups.map((group) => [group.id, group]));
+  for (const { surah, name } of diagrams.values()) {
+    if (!all.has(surah)) all.set(surah, { id: surah, name, items: [] });
+  }
+  return [...all.values()].sort((a, b) => a.id - b.id);
+}
+
+/**
+ * **R210 — after the diagrams, where to go deeper**: the recordings and the
+ * materials below, each named only when the Surah has some.
+ */
+export function moreDetailsKey(listen: number, read: number): string | null {
+  if (listen > 0 && read > 0) return 'content.bySurah.more.both';
+  if (listen > 0) return 'content.bySurah.more.listen';
+  if (read > 0) return 'content.bySurah.more.read';
+  return null;
+}
+
 /** The four shelves of one Surah, in the order a learner meets them. */
 const SECTIONS = [
   { key: 'listen', kinds: ['audio'], icon: 'audio' },
@@ -85,7 +113,7 @@ export function SurahLibrary({
   activeChildId: string | null;
   onOpen: (item: ContentItem) => void;
 }): ReactNode {
-  const surahs = useMemo(() => groupBySurah(entries), [entries]);
+  const surahs = useMemo(() => withDiagramSurahs(groupBySurah(entries), SURAH_DIAGRAMS), [entries]);
   const [chosen, setChosen] = useState<number | null>(initialSurah);
   const current = surahs.find((s) => s.id === chosen) ?? surahs[0] ?? null;
   const panel = useRef<HTMLElement | null>(null);
@@ -113,6 +141,11 @@ export function SurahLibrary({
     ...section,
     items: current.items.filter((item) => (section.kinds as readonly string[]).includes(item.kind)),
   })).filter((section) => section.items.length > 0);
+  const diagrams = SURAH_DIAGRAMS.get(current.id)?.diagrams ?? [];
+  const more = moreDetailsKey(
+    counts.find((section) => section.key === 'listen')?.items.length ?? 0,
+    counts.find((section) => section.key === 'read')?.items.length ?? 0,
+  );
 
   return (
     <div className="surah-library">
@@ -131,7 +164,9 @@ export function SurahLibrary({
                   {surah.id}
                 </span>
                 <span className="surah-library__name">{surah.name}</span>
-                <span className="surah-library__count">{surah.items.length}</span>
+                {surah.items.length > 0 ? (
+                  <span className="surah-library__count">{surah.items.length}</span>
+                ) : null}
               </button>
             </li>
           ))}
@@ -148,9 +183,25 @@ export function SurahLibrary({
           <h2 id="surah-library-title" className="surah-library__title">
             {t('content.surahGroupLabel').replace('{surah}', current.name)}
           </h2>
-          <p className="surah-library__lede">
-            {t('content.bySurah.lede').replace('{surah}', current.name)}
-          </p>
+          {current.items.length > 0 ? (
+            <p className="surah-library__lede">
+              {t('content.bySurah.lede').replace('{surah}', current.name)}
+            </p>
+          ) : null}
+        </header>
+
+        {/* R210 — the Surah's diagrams first (those of «نظرة شاملة»), then
+            where to go deeper, then its content. */}
+        {diagrams.length > 0 ? (
+          <div className="humanity__diagrams surah-library__diagrams">
+            {diagrams.map((diagram) => (
+              <HumanityDiagram key={diagram.title} diagram={diagram} />
+            ))}
+          </div>
+        ) : null}
+        {diagrams.length > 0 && more ? <p className="surah-library__more">{t(more)}</p> : null}
+
+        {counts.length > 0 ? (
           <ul className="surah-library__summary">
             {counts.map((section) => (
               <li key={section.key}>
@@ -162,7 +213,7 @@ export function SurahLibrary({
               </li>
             ))}
           </ul>
-        </header>
+        ) : null}
 
         {counts.map((section) => (
           <section

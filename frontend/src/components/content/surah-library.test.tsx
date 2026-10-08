@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { LibraryEntry } from '../../adapters/content.js';
 import { ar } from '../../i18n/ar.js';
 import RESOURCES_SOURCE from '../../pages/resources.tsx?raw';
-import { byTitle, groupBySurah, SurahLibrary } from './surah-library.js';
+import { byTitle, groupBySurah, moreDetailsKey, SurahLibrary, withDiagramSurahs } from './surah-library.js';
 
 /** R196 — the library read by Surah. */
 const entry = (id: string, surah: number | null, mime: string, shelf = 'L1'): LibraryEntry => ({
@@ -66,12 +66,36 @@ describe('SurahLibrary', () => {
     renderToStaticMarkup(
       <SurahLibrary entries={ENTRIES} initialSurah={initialSurah} accessToken={null} activeChildId={null} onOpen={() => undefined} />,
     );
-  it('opens on the first Surah in the Mushaf that has content, listing only Surahs with content', () => {
+  it('R210 — opens on the first Surah in the Mushaf, with content or with diagrams', () => {
     const out = html(null);
-    expect(out).toContain('سورة البقرة');
+    // الفاتحة has no content here, but «نظرة شاملة» draws it: it is listed, and first.
+    expect(out).toContain('سورة الفاتحة');
+    expect(out).toContain('البقرة');
     expect(out).toContain('يس');
-    expect(out).not.toContain('الفاتحة');
     expect(out).toContain('aria-current="true"');
+    expect(out).toContain('<figure class="hdiagram');
+  });
+
+  it('R210 — a Surah opens with its diagrams, then where to go deeper, then its content', () => {
+    const out = html(2);
+    const figure = out.indexOf('<figure class="hdiagram');
+    const more = out.indexOf(ar.content.bySurah.more.both);
+    const listen = out.indexOf(ar.content.bySurah.section.listen);
+    expect(figure).toBeGreaterThan(-1);
+    expect(more).toBeGreaterThan(figure);
+    expect(listen).toBeGreaterThan(more);
+  });
+
+  it('R210 — names the recordings and the materials only when the Surah has them', () => {
+    expect(moreDetailsKey(2, 1)).toBe('content.bySurah.more.both');
+    expect(moreDetailsKey(2, 0)).toBe('content.bySurah.more.listen');
+    expect(moreDetailsKey(0, 1)).toBe('content.bySurah.more.read');
+    expect(moreDetailsKey(0, 0)).toBeNull();
+    const merged = withDiagramSurahs(
+      [{ id: 36, name: 'يس', items: [] }],
+      new Map([[1, { surah: 1, name: 'الفاتحة' }], [36, { surah: 36, name: 'x' }]]),
+    );
+    expect(merged.map((g) => [g.id, g.name])).toEqual([[1, 'الفاتحة'], [36, 'يس']]);
   });
   it('groups the Surah by what each item is: listen in place, read, see', () => {
     const out = html(2);
@@ -84,11 +108,14 @@ describe('SurahLibrary', () => {
   it('honours a shared ?surah=', () => {
     expect(html(36)).toContain('سورة يس');
   });
-  it('says so when nothing is about a Surah yet', () => {
+  it('R210 — with no content about a Surah yet, the diagrammed Surahs are still offered', () => {
     const out = renderToStaticMarkup(
       <SurahLibrary entries={[entry('d', null, 'application/pdf')]} initialSurah={null} accessToken={null} activeChildId={null} onOpen={() => undefined} />,
     );
-    expect(out).toContain(ar.content.bySurah.empty);
+    expect(out).not.toContain(ar.content.bySurah.empty);
+    expect(out).toContain('سورة الفاتحة');
+    // No recordings and no materials: no «للمزيد» line.
+    expect(out).not.toContain(ar.content.bySurah.more.read);
   });
 });
 

@@ -600,6 +600,18 @@ button.humanity__station.is-active {
   margin-inline-start: auto;
 }
 
+/* R210 — «للمزيد من التفاصيل والتعمّق:» leads to the button, beside it. */
+.humanity__surah-lead {
+  margin-inline-start: auto;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.humanity__surah-lead + .humanity__surah {
+  margin-inline-start: 0;
+}
+
 /* The children: compact cards, five or six on one line on a laptop (R204). */
 .humanity__path {
   display: grid;
@@ -748,8 +760,12 @@ button.humanity__station.is-active {
   .humanity__hero {
     padding: var(--space-3) var(--space-4);
   }
-  .humanity__surah {
+  .humanity__surah,
+  .humanity__surah-lead {
     margin-inline-start: 0;
+  }
+  .humanity__surah-lead {
+    flex-basis: 100%;
   }
 }
 

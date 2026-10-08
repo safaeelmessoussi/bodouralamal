@@ -263,6 +263,9 @@ describe('R203 — the page', () => {
     const html = renderToStaticMarkup(<HumanityTimeline />);
     expect(html).toContain('سورة الفاتحة');
     expect(html).toContain('href="/resources?surah=1"');
+    // R210 — the way deeper is said before the button.
+    expect(html.indexOf(t('content.history.openSurahLead'))).toBeLessThan(html.indexOf('href="/resources?surah=1"'));
+    expect(html.indexOf(t('content.history.openSurahLead'))).toBeGreaterThan(-1);
     expect(html).toContain('أم القرآن والسبع المثاني');
   });
 });

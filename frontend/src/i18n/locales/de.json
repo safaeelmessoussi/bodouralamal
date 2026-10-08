@@ -607,5 +607,9 @@
   "Schawwal",
   "Dhu l-Qada",
   "Dhu l-Hiddscha"
- ]
+ ],
+ "content.history.openSurahLead": "Für mehr Details und Vertiefung:",
+ "content.bySurah.more.both": "Für mehr Details: die Aufnahmen der Unterrichtsstunden unten anhören und die Materialien der Sure unten lesen.",
+ "content.bySurah.more.listen": "Für mehr Details: die Aufnahmen der Unterrichtsstunden unten anhören.",
+ "content.bySurah.more.read": "Für mehr Details: die Materialien der Sure unten lesen."
 }

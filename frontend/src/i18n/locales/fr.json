@@ -607,5 +607,9 @@
   "Chawwal",
   "Dhou al-Qi’da",
   "Dhou al-Hijja"
- ]
+ ],
+ "content.history.openSurahLead": "Pour plus de détails et d’approfondissement :",
+ "content.bySurah.more.both": "Pour plus de détails : écouter les enregistrements des cours ci-dessous, et lire les supports de la sourate ci-dessous.",
+ "content.bySurah.more.listen": "Pour plus de détails : écouter les enregistrements des cours ci-dessous.",
+ "content.bySurah.more.read": "Pour plus de détails : lire les supports de la sourate ci-dessous."
 }

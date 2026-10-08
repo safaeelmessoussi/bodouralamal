@@ -607,5 +607,9 @@
   "Cuwwal",
   "Ḍu lqiɛda",
   "Ḍu lḥijja"
- ]
+ ],
+ "content.history.openSurahLead": "I ugar n tfṛdiyin d usgʷdl:",
+ "content.bySurah.more.both": "I ugar n tfṛdiyin: izḍar ad ittusflid i isklasn n ilmuden lli ddaw, d ad ttuɣrnt tsnalin n ssurt lli ddaw.",
+ "content.bySurah.more.listen": "I ugar n tfṛdiyin: izḍar ad ittusflid i isklasn n ilmuden lli ddaw.",
+ "content.bySurah.more.read": "I ugar n tfṛdiyin: izḍar ad ttuɣrnt tsnalin n ssurt lli ddaw."
 }

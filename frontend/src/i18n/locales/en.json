@@ -607,5 +607,9 @@
   "Shawwal",
   "Dhu al-Qada",
   "Dhu al-Hijja"
- ]
+ ],
+ "content.history.openSurahLead": "For more detail and depth:",
+ "content.bySurah.more.both": "For more detail: the lesson recordings can be listened to below, and the Surah’s materials read below.",
+ "content.bySurah.more.listen": "For more detail: the lesson recordings can be listened to below.",
+ "content.bySurah.more.read": "For more detail: the Surah’s materials can be read below."
 }

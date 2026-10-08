@@ -253,3 +253,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-08 — «تثبيت التطبيق» disappeared after R209
 - Cause: R209 loads the application after the page's language is settled, so `install-app-button.tsx`'s `beforeinstallprompt` listener could register after Chrome's one-time offer. `lib/install-capture.ts` catches it on the first tick (`main.tsx` imports it first); the button reads it from there.
 - Verified: Localhost, a synthetic offer dispatched before the app loads — without the module no button (as on the Owner's screenshot), with it «تثبيت التطبيق» / «Install the app»; frontend 1658, lint, build.
+
+## 2026-10-08 — SRS Revision 210: a Surah's diagrams in «حسب السورة»
+- `surah-library.tsx`: the panel opens with the Surah's diagrams (`history/surah-diagrams.ts`), then `content.bySurah.more.{both,listen,read}` as the Surah has recordings/materials, then its content; `withDiagramSurahs` lists diagrammed Surahs without content.
+- `humanity-timeline.tsx`: `content.history.openSurahLead` before «فتح محتوى السورة».
+- The four strings in six translations; Amazigh «التعمّق» renderings to review (E12).
+- Verified: frontend tests/lint/build; Localhost «حسب السورة» al-Fatiha (6 diagrams, 9 Surahs listed), hero lead ar 1366 / en 390.

@@ -573,6 +573,12 @@ function NodeHero({
         <p className="humanity__summary">{node.summary}</p>
       ) : null}
       {node.surah ? (
+        // R210 — the way deeper, said before the button.
+        <span className="humanity__surah-lead">
+          {t("content.history.openSurahLead")}
+        </span>
+      ) : null}
+      {node.surah ? (
         <ButtonLink
           variant="primary"
           className="humanity__surah"
