@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { Navigation } from '../../hooks/use-navigation.js';
 import { InstallAppButton } from '../install/install-app-button.js';
+import { LanguageMenu } from './language-menu.js';
 import { NavigationMenu } from './navigation-menu.js';
 import { RoleSwitcher } from './role-switcher.js';
 import { AccountButton, DashboardButton, SignInButton, SignOutButton } from './auth-buttons.js';
@@ -40,6 +41,12 @@ export function MobileMenu({
           className="mobile-menu__list"
           onNavigate={onNavigate}
         />
+
+        {/* R209 — the language, in the sheet too: the bar has no room for it
+            beside a signed-in reader's bell, nor on the narrowest phones. */}
+        <div className="mobile-menu__actions mobile-menu__actions--language">
+          <LanguageMenu inline />
+        </div>
 
         {/* R167 §4 — «تثبيت التطبيق», where a phone user will look for it. */}
         <div className="mobile-menu__actions mobile-menu__actions--install">

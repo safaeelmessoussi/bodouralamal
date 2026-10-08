@@ -241,3 +241,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - LTR variants: zoom wedge, road arrows, show slide-in, step arrows; verses isolated RTL; expedition names wrap. Noto Sans Tifinagh self-hosted (Tifinagh range only).
 - Translations drafted by the agent (six translators in parallel, verses spliced from source); review owed (TASKS E12).
 - Verified: frontend 1658 (tsc/lint/build), guards; `i18n/locales.test.ts`; Localhost 5 languages × 7 views × 1366/390, no overflow.
+
+## 2026-10-08 — R209 follow-up: the phone header fits at 320 px
+- CI's public-reader harness failed for signed-in roles at 320 px: the bar held logo, language mark, bell and burger. Signed in, the language moves to the sheet (`mobile-menu.tsx`); signed out, the bar keeps it from 360 px (384 px left-to-right); below 360 px left-to-right the logo shows its mark only.
+- Verified: integration `content` 86 (the harness), frontend 1658; Localhost header ar/en/zgh × signed in/out × 320/360/390, nothing outside the bar.

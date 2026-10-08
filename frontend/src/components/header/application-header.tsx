@@ -109,8 +109,10 @@ export function ApplicationHeader(): ReactNode {
                 2026-09-25): a notice she cannot see on the device she uses
                 is one that was not delivered. One component, two slots. */}
             <div className="app-header__actions app-header__actions--mobile">
-              {/* R209 — beside the burger on a phone, where it is found. */}
-              <LanguageMenu compact />
+              {/* R209 — beside the burger on a phone for a visitor; a
+                  signed-in reader's bar holds the bell, and the sheet
+                  offers the language (as it does below 360 px). */}
+              {navigation.isAuthenticated ? null : <LanguageMenu compact />}
               {navigation.isAuthenticated ? <NotificationBell token={accessToken} /> : null}
             </div>
             <button

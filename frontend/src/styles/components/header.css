@@ -116,6 +116,23 @@
 .app-header__actions--mobile + .app-header__burger {
   margin-inline-start: 0;
 }
+/* R209 — on the narrowest phones the bar keeps the logo and the burger; the
+   language is in the sheet. Left-to-right the Latin name runs wider, so the
+   bar gives the language up a little earlier, and below 360 px the logo's
+   name gives way to its mark (the page's title says where the reader is). */
+@media (max-width: 22.49rem) {
+  .app-header__actions--mobile .language-menu {
+    display: none;
+  }
+  [dir='ltr'] .app-header .logo-link__text {
+    display: none;
+  }
+}
+@media (max-width: 23.99rem) {
+  [dir='ltr'] .app-header__actions--mobile .language-menu {
+    display: none;
+  }
+}
 
 .nav-menu {
   display: flex;
