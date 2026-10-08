@@ -259,3 +259,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `humanity-timeline.tsx`: `content.history.openSurahLead` before «فتح محتوى السورة».
 - The four strings in six translations; Amazigh «التعمّق» renderings to review (E12).
 - Verified: frontend tests/lint/build; Localhost «حسب السورة» al-Fatiha (6 diagrams, 9 Surahs listed), hero lead ar 1366 / en 390.
+
+## 2026-10-08 — Diagrams: buttons on every tree, one column
+- «فتح الكل / طيّ الكل» were offered only with two branching boxes, so a trunk of leaves (مدار الأسماء والصفات، مراتب العلم) had none; now any branch offers them (`humanity-diagram.tsx`).
+- `.humanity__diagrams` is one column: every diagram the full width, one under another («نظرة شاملة» and «حسب السورة»).
+- Verified: Localhost al-Fatiha in both views — six diagrams, same left edge and width, two buttons each; frontend tests and lint.

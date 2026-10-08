@@ -256,6 +256,13 @@ describe('R203 — the page', () => {
     expect(html).toContain(t('content.history.diagram.hint'));
     expect(html).toContain('<span class="humanity__verse" dir="rtl" lang="ar">﴿اقْرَأْ﴾</span>');
     expect(html).toContain(t('content.history.diagram.openAll'));
+    // R211 — a trunk whose branches are all leaves (مدار الأسماء والصفات،
+    // مراتب العلم) still offers «فتح الكل» and «طيّ الكل».
+    const flat = renderToStaticMarkup(
+      <HumanityDiagram diagram={{ title: 'مراتب العلم', root: { label: 'مراتب العلم', children: [{ label: 'العلم' }, { label: 'المعرفة' }] } }} />,
+    );
+    expect(flat).toContain(t('content.history.diagram.openAll'));
+    expect(flat).toContain(t('content.history.diagram.closeAll'));
   });
 
   it('opens a Surah with its ideas and a link to «حسب السورة» on it', () => {

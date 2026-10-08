@@ -837,9 +837,11 @@ button.humanity__station.is-active {
  * colour family the data gives it (`.tone-*` on its `li`), inherited below.
  */
 
+/* R211 — one column, every diagram the same full width (the Owner: a small
+   one beside another read as a second column). */
 .humanity__diagrams {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
 }
@@ -853,10 +855,6 @@ button.humanity__station.is-active {
   border: 1px solid var(--color-border-subtle);
   border-block-start: 4px solid var(--tone-line, var(--color-border));
   box-shadow: var(--shadow-sm);
-}
-
-.hdiagram.is-wide {
-  grid-column: 1 / -1;
 }
 
 .hdiagram__head {

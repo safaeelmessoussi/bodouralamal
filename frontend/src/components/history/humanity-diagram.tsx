@@ -3,7 +3,6 @@ import { useState, type ReactNode } from "react";
 import { t } from "../../i18n/index.js";
 import {
   branchKeys,
-  diagramSize,
   initiallyOpen,
   verseRuns,
   type DiagramNode,
@@ -35,12 +34,11 @@ export function HumanityDiagram({
       return next;
     });
   const all = branchKeys(diagram.root);
-  const wide = diagramSize(diagram.root) > 8;
   return (
-    <figure className={`hdiagram${wide ? " is-wide" : ""}`}>
+    <figure className="hdiagram">
       <figcaption className="hdiagram__head">
         <span className="hdiagram__title">{diagram.title}</span>
-        {all.length > 1 ? (
+        {all.length > 0 ? (
           <span className="hdiagram__actions">
             <button
               type="button"
