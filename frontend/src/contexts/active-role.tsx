@@ -46,7 +46,7 @@ import { useSession } from './session.js';
  * would silently change *whose data* a page requests after a link is revoked.
  * A role is different in both respects — it selects a portal rather than a
  * person, and **switching navigates**, which in this application is a full page
- * load (`main.tsx` switches on `window.location.pathname`). Without persistence
+ * load (`app.tsx` switches on `window.location.pathname`). Without persistence
  * the selection would be discarded by the very navigation it causes.
  *
  * `sessionStorage`, not `localStorage`: the choice belongs to this browsing

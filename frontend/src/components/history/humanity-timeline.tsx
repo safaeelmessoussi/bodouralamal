@@ -13,6 +13,7 @@ import { counted } from "../../lib/arabic-years.js";
 import { ButtonLink } from "../ui/button.js";
 import { EXPEDITIONS, HUMANITY, PHASES, TIMELINE } from "./humanity-data.js";
 import { HumanityDiagram, Verse } from "./humanity-diagram.js";
+import { humanityDictionary, localiseHumanity } from "./humanity-i18n.js";
 import {
   TODAY,
   descendantCount,
@@ -25,6 +26,12 @@ import {
   type TimelineSpan,
 } from "./humanity-model.js";
 import { TodayInTheAssociation } from "./humanity-today.js";
+
+/** R209 — the content in this page's language (Arabic when none is loaded). */
+const LOCAL = localiseHumanity(
+  { root: HUMANITY, timeline: TIMELINE, phases: PHASES, expeditions: EXPEDITIONS },
+  humanityDictionary(),
+);
 
 /** `?node=` read as an address: a node of the tree, or «اليوم» (R205). */
 function readPath(root: HistoryNode, raw: string | null): string[] {
@@ -49,10 +56,10 @@ function readPath(root: HistoryNode, raw: string | null): string[] {
  *   the browser's back button walks back up and a link opens the same node.
  */
 export function HumanityTimeline({
-  root = HUMANITY,
-  markers = TIMELINE,
-  phases = PHASES,
-  expeditions = EXPEDITIONS,
+  root = LOCAL.root,
+  markers = LOCAL.timeline,
+  phases = LOCAL.phases,
+  expeditions = LOCAL.expeditions,
   token = null,
 }: {
   root?: HistoryNode;
@@ -222,7 +229,9 @@ export function HumanityTimeline({
                       go([...path.slice(0, -1), siblings[at - 1]!.id])
                     }
                   >
-                    <span aria-hidden="true">→</span> {siblings[at - 1]!.title}
+                    <span className="humanity__step-arrow" aria-hidden="true">
+                      →
+                    </span> {siblings[at - 1]!.title}
                   </button>
                 ) : (
                   <span />
@@ -235,7 +244,9 @@ export function HumanityTimeline({
                       go([...path.slice(0, -1), siblings[at + 1]!.id])
                     }
                   >
-                    {siblings[at + 1]!.title} <span aria-hidden="true">←</span>
+                    {siblings[at + 1]!.title} <span className="humanity__step-arrow" aria-hidden="true">
+                      ←
+                    </span>
                   </button>
                 ) : null}
               </div>

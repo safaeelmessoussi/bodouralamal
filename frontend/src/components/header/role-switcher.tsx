@@ -26,7 +26,7 @@ import { Menu, MenuOption } from './menu.js';
  * (`/admin`, `/teacher`, `/dashboard/student`), and staying put would leave a
  * مؤطِّرة looking at the back office she just left.
  *
- * **A full page load, deliberately.** `main.tsx` routes on
+ * **A full page load, deliberately.** `app.tsx` routes on
  * `window.location.pathname` rather than through a router, so `assign` is how
  * this application navigates. It also guarantees every screen re-reads the new
  * active role rather than half of them keeping the old one.

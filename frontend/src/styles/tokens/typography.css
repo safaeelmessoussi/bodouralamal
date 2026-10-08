@@ -16,6 +16,19 @@
  * `/assets/` path, so a returning visitor never fetches them twice.
  * `font-display: swap` keeps the text readable in the system face for the
  * fraction of a second before they land. Licences: `../fonts/OFL-*.txt`. */
+/* SRS Revision 209 — **Noto Sans Tifinagh** for the Amazigh public pages
+ * (ⵜⴰⵎⴰⵣⵉⵖⵜ): Tifinagh is missing from many phones, so it is self-hosted like
+ * the others, and its unicode-range limits it to Tifinagh — it is fetched only
+ * by a page that shows Tifinagh, and never draws Arabic or Latin text.
+ * Licence: `../fonts/OFL-noto-sans-tifinagh.txt`. */
+@font-face {
+  font-family: 'Noto Sans Tifinagh';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/noto-sans-tifinagh.woff2') format('woff2');
+  unicode-range: U+2D30-2D7F;
+}
 @font-face {
   font-family: 'Readex Pro';
   font-style: normal;
@@ -62,8 +75,8 @@
   --font-size-xl: clamp(1.9rem, 1.55rem + 1.6vw, 2.6rem);
   --font-size-2xl: clamp(2.3rem, 1.7rem + 2.8vw, 3.6rem);
 
-  --font-family-base: 'Readex Pro', 'Noto Naskh Arabic', 'Segoe UI', system-ui, -apple-system, 'Tahoma', sans-serif;
-  --font-family-display: 'El Messiri', 'Readex Pro', 'Noto Kufi Arabic', 'Segoe UI', system-ui, sans-serif;
+  --font-family-base: 'Readex Pro', 'Noto Sans Tifinagh', 'Noto Naskh Arabic', 'Segoe UI', system-ui, -apple-system, 'Tahoma', sans-serif;
+  --font-family-display: 'El Messiri', 'Readex Pro', 'Noto Sans Tifinagh', 'Noto Kufi Arabic', 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   --line-height-base: 1.7;

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { HijriDay, Occurrence } from '../../adapters/calendar.js';
 import { toIsoDate } from '../../lib/dates.js';
 import { t, tList } from '../../i18n/index.js';
+import { hijriMonthName } from '../../lib/month-names.js';
 import { Dialog } from '../ui/dialog.js';
 
 /**
@@ -42,7 +43,7 @@ export function DayEventsDialog({
     : '';
   const hijriLabel =
     hijri?.hijri_day != null && hijri.hijri_month_ar
-      ? `${hijri.hijri_day} ${hijri.hijri_month_ar} ${hijri.hijri_year ?? ''}`.trim()
+      ? `${hijri.hijri_day} ${hijriMonthName(hijri.hijri_month, hijri.hijri_month_ar)} ${hijri.hijri_year ?? ''}`.trim()
       : null;
 
   return (

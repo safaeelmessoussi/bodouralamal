@@ -600,3 +600,21 @@
     max-height: clamp(8rem, calc(100vh - 24rem), 22rem);
   }
 }
+
+/* R209 — left-to-right: «رجوع» points left, and a card slides in from the right. */
+[dir='ltr'] .show__back svg {
+  transform: rotate(90deg);
+}
+@keyframes show-slide-in-ltr {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+[dir='ltr'] .show__slide {
+  animation-name: show-slide-in-ltr;
+}

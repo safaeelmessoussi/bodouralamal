@@ -12,6 +12,7 @@ import { MobileMenu } from './mobile-menu.js';
 import { NavigationMenu } from './navigation-menu.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { InstallAppButton } from '../install/install-app-button.js';
+import { LanguageMenu } from './language-menu.js';
 import { NotificationBell } from '../notifications/notification-bell.js';
 import { RoleSwitcher } from './role-switcher.js';
 import { UserMenu } from './user-menu.js';
@@ -77,6 +78,8 @@ export function ApplicationHeader(): ReactNode {
             </nav>
 
             <div className="app-header__actions app-header__actions--desktop">
+              {/* R209 — the language, on the public pages only. */}
+              <LanguageMenu />
               {/* R167 §4 — for everybody, signed in or not; renders nothing
                   where the device has nothing to offer or it is installed. */}
               <InstallAppButton />
@@ -105,11 +108,11 @@ export function ApplicationHeader(): ReactNode {
             {/* The bell rides beside the burger on a phone (the Owner,
                 2026-09-25): a notice she cannot see on the device she uses
                 is one that was not delivered. One component, two slots. */}
-            {navigation.isAuthenticated ? (
-              <div className="app-header__actions app-header__actions--mobile">
-                <NotificationBell token={accessToken} />
-              </div>
-            ) : null}
+            <div className="app-header__actions app-header__actions--mobile">
+              {/* R209 — beside the burger on a phone, where it is found. */}
+              <LanguageMenu compact />
+              {navigation.isAuthenticated ? <NotificationBell token={accessToken} /> : null}
+            </div>
             <button
               type="button"
               className="app-header__burger"

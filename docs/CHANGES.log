@@ -234,3 +234,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `lib/surah-list.ts`: own Surahs else the Level's; «سورة X» / «السور: …» in full to four, «الأولى … الأخيرة» beyond — chips (`chip-parts.ts`) and «اليوم»; the details dialog lists all.
 - «اليوم»: the Categories with `holds_own_login` only (women), each item with its Level and Surahs. «عرض بملء الشاشة»: `LevelCard surahsInFull` — the whole list, no «…».
 - Verified: backend 385 + frontend 1649 (tsc/lint/build), integration 51 (calendar, scheduling-surahs, R176); Localhost: «اليوم» women-only with Levels, chip «السور: الفاتحة، البقرة».
+
+## 2026-10-08 — SRS Revision 209: the public pages in seven languages
+- `/`, `/calendar`, `/resources` in ar, en, fr, es, de, `zgh` (Tifinagh), `shi-Latn`; other pages Arabic. `main.tsx` settles the language (`lib/locale.ts`: `?lang=`, `bodour.locale`) then loads `app.tsx`; `<html lang dir>`; header `LanguageMenu` (short mark on phones).
+- `i18n/index.ts`: per-key Arabic fallback; `i18n/locales/*.json` (562 keys each); «نظرة شاملة» `components/history/locales/*.json` (1,021 strings) via `humanity-i18n.ts`, fetched only on `/resources`; `lib/month-names.ts` (+ `calendar.hijriMonths`).
+- LTR variants: zoom wedge, road arrows, show slide-in, step arrows; verses isolated RTL; expedition names wrap. Noto Sans Tifinagh self-hosted (Tifinagh range only).
+- Translations drafted by the agent (six translators in parallel, verses spliced from source); review owed (TASKS E12).
+- Verified: frontend 1658 (tsc/lint/build), guards; `i18n/locales.test.ts`; Localhost 5 languages × 7 views × 1366/390, no overflow.

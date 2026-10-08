@@ -17,7 +17,7 @@ Binding; several are CI-enforced.
 - **Naming:** `camelCase` variables/functions · `PascalCase` components/classes/types · `snake_case` DB columns and JSON fields · `kebab-case` files and API paths. UUID primary keys (exception: Surah 1–114).
 - **Validation:** Zod at every API boundary is the single home of field limits; constants shared with the frontend.
 - **Raw SQL:** migrations; in app code only inside repositories for `SELECT … FOR UPDATE` and job-row inserts via `JobsRepository`.
-- **i18n:** every user-facing string is a key in `frontend/src/i18n/ar.ts` (the Owner's catalogue).
+- **i18n:** every user-facing string is a key in `frontend/src/i18n/ar.ts` (the Owner's catalogue); the public pages' translations live beside it ([internationalization](../architecture/internationalization.md)).
 - **Styling:** semantic tokens only; a new component = a file + a line in `styles.css` (import order is the cascade); verify with `css-resolve.py` + built-CSS diff + `shoot-pages.sh`. → [design-system](../architecture/design-system.md), [`design.mmd`](../../design.mmd)
 - **Comments** explain *why* and what was rejected, not what the code does.
 

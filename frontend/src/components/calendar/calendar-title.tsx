@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { GregorianMonthRef, HijriMonthRef } from '../../adapters/calendar.js';
 import { t, tList } from '../../i18n/index.js';
+import { gregorianMonthName, hijriMonthName } from '../../lib/month-names.js';
 
 /**
  * The dual-calendar title: **Gregorian on the right, Hijri on the left**, with a
@@ -77,9 +78,9 @@ function formatGregorian(months: GregorianMonthRef[]): string {
   if (months.length === 0) return '';
   const years = new Set(months.map((m) => m.year));
   if (years.size === 1) {
-    return `${months.map((m) => m.month_ar).join(' / ')} ${months[0]?.year ?? ''}`.trim();
+    return `${months.map((m) => gregorianMonthName(m.month, m.month_ar)).join(' / ')} ${months[0]?.year ?? ''}`.trim();
   }
-  return months.map((m) => `${m.month_ar} ${m.year}`).join(' / ');
+  return months.map((m) => `${gregorianMonthName(m.month, m.month_ar)} ${m.year}`).join(' / ');
 }
 
 /** The same rule for the Hijri side, over the months the backend resolved. */
@@ -87,9 +88,9 @@ function formatHijri(months: HijriMonthRef[]): string {
   if (months.length === 0) return '';
   const years = new Set(months.map((m) => m.hijri_year));
   if (years.size === 1) {
-    return `${months.map((m) => m.hijri_month_ar).join(' / ')} ${months[0]?.hijri_year ?? ''}`.trim();
+    return `${months.map((m) => hijriMonthName(m.hijri_month, m.hijri_month_ar)).join(' / ')} ${months[0]?.hijri_year ?? ''}`.trim();
   }
-  return months.map((m) => `${m.hijri_month_ar} ${m.hijri_year}`).join(' / ');
+  return months.map((m) => `${hijriMonthName(m.hijri_month, m.hijri_month_ar)} ${m.hijri_year}`).join(' / ');
 }
 
 /** Gregorian only, from the month the page is displaying (see the note above). */

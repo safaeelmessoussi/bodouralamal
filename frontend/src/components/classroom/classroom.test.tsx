@@ -13,7 +13,7 @@ import CLASSROOM from './online-classroom.tsx?raw';
 import CLASSROOM_PAGE from '../../pages/classroom.tsx?raw';
 import DIALOG from '../calendar/event-details-dialog.tsx?raw';
 import ADAPTER from '../../adapters/online-class.ts?raw';
-import MAIN from '../../main.tsx?raw';
+import MAIN from '../../app.tsx?raw';
 import recordingSource from './recording.tsx?raw';
 import { recordingProblem, statusLabel } from './recording.js';
 import type { Occurrence } from '../../adapters/calendar.js';

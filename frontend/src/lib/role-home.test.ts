@@ -67,7 +67,7 @@ describe('every role home is a path the router actually serves', () => {
     // The invariant that would have caught the original defect: a link target
     // that no route matches is a blank page, and this asserts there are none.
     // `/admin` is resolved by the module registry; the rest are explicit cases
-    // in the path switch, which `main.tsx` derives from ROLE_HOME_PATHS.
+    // in the path switch, which `app.tsx` derives from ROLE_HOME_PATHS.
     for (const path of ROLE_HOME_PATHS) {
       const served = isAdminPath(path) || ROLE_HOME_PATHS.includes(path);
       expect(served, `${path} must be routed`).toBe(true);

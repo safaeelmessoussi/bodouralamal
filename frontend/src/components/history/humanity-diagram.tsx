@@ -171,7 +171,9 @@ export function Verse({ text }: { text: string }): ReactNode {
     <>
       {verseRuns(text).map((run, i) =>
         run.verse ? (
-          <span key={i} className="humanity__verse">
+          // R209 — a verse is Arabic in every language: isolated right-to-left,
+          // so its ﴿ ﴾ stay in place inside left-to-right text.
+          <span key={i} className="humanity__verse" dir="rtl" lang="ar">
             {run.text}
           </span>
         ) : (

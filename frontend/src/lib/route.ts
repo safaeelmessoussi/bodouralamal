@@ -6,7 +6,7 @@ import { ROLE_HOME_PATHS } from './role-home.js';
  * Which page a path resolves to (§14.1).
  *
  * **The decision is a pure function so it can be tested exhaustively.** It used
- * to live inline in `main.tsx`'s path switch, where the `default` branch
+ * to live inline in `app.tsx`'s path switch, where the `default` branch
  * returned `null` — and a router that can return "nothing" produces a **blank
  * white page**, which §14.4 forbids outright. That defect shipped and was
  * reachable from the header's own Dashboard button.

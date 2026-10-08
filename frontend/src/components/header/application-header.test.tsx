@@ -165,6 +165,9 @@ describe('the switchers appear only when they mean something', () => {
       person({ roles: ['parent'], approved_child_links: [{ id: 'c1', display_name: 'مريم بنعلي' }] }),
     );
     expect(html).not.toContain('اختر الطفل الذي تتابع بياناته');
-    expect(html.match(/menu__trigger/g) ?? []).toHaveLength(2); // role switcher + account
+    // Role switcher + account; R209's language menu (desktop and phone slots,
+    // on a public page) is not a family menu and is counted apart.
+    const languageMenus = (html.match(/class="language-menu"/g) ?? []).length;
+    expect((html.match(/menu__trigger/g) ?? []).length - languageMenus).toBe(2);
   });
 });

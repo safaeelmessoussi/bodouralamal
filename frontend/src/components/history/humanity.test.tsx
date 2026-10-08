@@ -254,7 +254,7 @@ describe('R203 — the page', () => {
     expect(html).toContain('<span class="hdiagram__step" aria-hidden="true">2</span>');
     expect(html).toContain('class="tone-makki"');
     expect(html).toContain(t('content.history.diagram.hint'));
-    expect(html).toContain('<span class="humanity__verse">﴿اقْرَأْ﴾</span>');
+    expect(html).toContain('<span class="humanity__verse" dir="rtl" lang="ar">﴿اقْرَأْ﴾</span>');
     expect(html).toContain(t('content.history.diagram.openAll'));
   });
 

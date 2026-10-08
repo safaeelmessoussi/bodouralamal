@@ -9,6 +9,7 @@ import {
 import { useActiveRoleOrNull } from '../../contexts/active-role.js';
 import { SessionContext } from '../../contexts/session.js';
 import { t, tList } from '../../i18n/index.js';
+import { hijriMonthName } from '../../lib/month-names.js';
 import { Button, ButtonLink } from '../ui/button.js';
 import { levelLabel } from '../scope/level-select.js';
 import { Dialog } from '../ui/dialog.js';
@@ -714,7 +715,7 @@ function hijriLabel(occurrence: {
   const day = Number(occurrence.hijri_date.slice(8, 10));
   const year = occurrence.hijri_date.slice(0, 4);
   return occurrence.hijri_month_ar && Number.isFinite(day)
-    ? `${day} ${occurrence.hijri_month_ar} ${year}`.trim()
+    ? `${day} ${hijriMonthName(Number(occurrence.hijri_date.slice(5, 7)), occurrence.hijri_month_ar)} ${year}`.trim()
     : occurrence.hijri_date;
 }
 

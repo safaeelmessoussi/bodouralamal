@@ -819,3 +819,16 @@
     height: 18rem;
   }
 }
+
+/* ── R209 — the public pages read left-to-right in a translation ──────────
+ * The road and its arrows are drawn for Arabic (the road climbs to the left);
+ * left-to-right they are mirrored, so «back» points left and «forward» right. */
+[dir='ltr'] .journey__arrow--back svg {
+  transform: rotate(90deg);
+}
+[dir='ltr'] .journey__arrow--forward svg {
+  transform: rotate(-90deg);
+}
+[dir='ltr'] svg.journey__arrow {
+  transform: scaleX(-1);
+}
