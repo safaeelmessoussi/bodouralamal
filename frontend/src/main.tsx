@@ -1,3 +1,5 @@
+// First: Chrome's one-time install offer must find its listener (R167 §4).
+import './lib/install-capture.js';
 import { prepareLocale } from './lib/locale.js';
 
 /**

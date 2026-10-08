@@ -36,7 +36,7 @@ RTL-first and Arabic everywhere, except the three public pages, which read in se
 
 - الرئيسية, الجدول الزمني, المحتوى التعليمي (`/`, `/calendar`, `/resources`) read in Arabic, English, French, Spanish, German, Standard Moroccan Amazigh in Tifinagh (`zgh`) and Tachelhit in Latin letters (`shi-Latn`); every other page is Arabic whatever was chosen.
 - The header's language menu (those pages only; on a phone beside the burger for a visitor from 360 px, else in the menu sheet) keeps the choice on the device (`bodour.locale`); a link may carry it (`?lang=en`); Arabic is the default.
-- The language is settled before the application loads (`main.tsx` → `lib/locale.ts` → `app.tsx`), so a label computed at import time is already translated; a change reloads the page.
+- The language is settled before the application loads (`main.tsx` → `lib/locale.ts` → `app.tsx`), so a label computed at import time is already translated; a change reloads the page. Anything that must listen from the first tick (the browser's one-time install offer, `lib/install-capture.ts`) is imported by `main.tsx` itself.
 - Translations: `frontend/src/i18n/locales/<locale>.json`, flat keys of `ar.ts`'s public namespaces; a missing key reads in Arabic. «نظرة شاملة»'s text: `components/history/locales/<locale>.json`, keyed by where a string sits; fetched only on `/resources`.
 - Stays Arabic in every language: names staff enter (levels, branches, subjects, classes, events), server messages, and the Qur'an's verses (﴿…﴾).
 - Drafted by the agent; the Owner reviews, a native speaker reviews the two Amazigh catalogues before they are trusted.

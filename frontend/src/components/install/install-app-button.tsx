@@ -1,11 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
+import { installOffer, type InstallOffer } from '../../lib/install-app.js';
 import {
-  installOffer,
-  type InstallOffer,
-  type InstallPromptEvent,
-} from '../../lib/install-app.js';
+  announceInstallOfferChange,
+  heldInstallPrompt,
+  onInstallOfferChange,
+  releaseInstallPrompt,
+} from '../../lib/install-capture.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
 
@@ -14,30 +16,14 @@ import { Dialog } from '../ui/dialog.js';
  * on the device — see `installOffer`, which owns that decision. Renders nothing
  * where there is nothing to offer, so it takes no room in an installed app.
  *
- * The browser's event is held at MODULE level: it fires once, often before the
- * header has mounted, and the header mounts twice (desktop bar, mobile sheet).
+ * The browser's event is caught by `lib/install-capture.ts`, which `main.tsx`
+ * loads first: it fires once, often before the header has mounted (since R209,
+ * before this module has even loaded), and the header mounts twice.
  */
-let heldPrompt: InstallPromptEvent | null = null;
-const listeners = new Set<() => void>();
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeinstallprompt', (event) => {
-    // Without this Chrome shows its own mini-infobar, once, at a moment of its
-    // choosing; the Owner asked for a button she can find.
-    event.preventDefault();
-    heldPrompt = event as InstallPromptEvent;
-    listeners.forEach((notify) => notify());
-  });
-  window.addEventListener('appinstalled', () => {
-    heldPrompt = null;
-    listeners.forEach((notify) => notify());
-  });
-}
-
 function currentOffer(): InstallOffer {
   if (typeof window === 'undefined') return 'none';
   return installOffer({
-    promptAvailable: heldPrompt !== null,
+    promptAvailable: heldInstallPrompt() !== null,
     standalone:
       // Not every WebView has `matchMedia`; absent means «not standalone».
       (typeof window.matchMedia === 'function' &&
@@ -54,23 +40,23 @@ export function InstallAppButton({ block = false }: { block?: boolean }): ReactN
 
   useEffect(() => {
     const refresh = (): void => setOffer(currentOffer());
-    listeners.add(refresh);
+    const stop = onInstallOfferChange(refresh);
     refresh();
     return () => {
-      listeners.delete(refresh);
+      stop();
     };
   }, []);
 
   if (offer === 'none') return null;
 
   async function install(): Promise<void> {
-    if (offer === 'prompt' && heldPrompt !== null) {
-      const prompt = heldPrompt;
+    const prompt = heldInstallPrompt();
+    if (offer === 'prompt' && prompt !== null) {
       // The event is single-use: once shown it can never be shown again.
-      heldPrompt = null;
+      releaseInstallPrompt();
       await prompt.prompt();
       await prompt.userChoice.catch(() => undefined);
-      listeners.forEach((notify) => notify());
+      announceInstallOfferChange();
       return;
     }
     setHelpOpen(true);

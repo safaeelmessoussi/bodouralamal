@@ -249,3 +249,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-08 — The phone menu's dropdowns could not be read
 - Owner's screenshots: in the phone sheet, the role switcher's and the language menu's options were light text on a white panel. `.mobile-menu .menu__panel` now takes the sheet's dark ground (`header.css`); the options keep the on-primary set.
 - Verified: Localhost 390 px, signed in, sheet open — every option ≥ 10:1 contrast; frontend tests and lint.
+
+## 2026-10-08 — «تثبيت التطبيق» disappeared after R209
+- Cause: R209 loads the application after the page's language is settled, so `install-app-button.tsx`'s `beforeinstallprompt` listener could register after Chrome's one-time offer. `lib/install-capture.ts` catches it on the first tick (`main.tsx` imports it first); the button reads it from there.
+- Verified: Localhost, a synthetic offer dispatched before the app loads — without the module no button (as on the Owner's screenshot), with it «تثبيت التطبيق» / «Install the app»; frontend 1658, lint, build.
