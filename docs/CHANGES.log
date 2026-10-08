@@ -245,3 +245,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-08 — R209 follow-up: the phone header fits at 320 px
 - CI's public-reader harness failed for signed-in roles at 320 px: the bar held logo, language mark, bell and burger. Signed in, the language moves to the sheet (`mobile-menu.tsx`); signed out, the bar keeps it from 360 px (384 px left-to-right); below 360 px left-to-right the logo shows its mark only.
 - Verified: integration `content` 86 (the harness), frontend 1658; Localhost header ar/en/zgh × signed in/out × 320/360/390, nothing outside the bar.
+
+## 2026-10-08 — The phone menu's dropdowns could not be read
+- Owner's screenshots: in the phone sheet, the role switcher's and the language menu's options were light text on a white panel. `.mobile-menu .menu__panel` now takes the sheet's dark ground (`header.css`); the options keep the on-primary set.
+- Verified: Localhost 390 px, signed in, sheet open — every option ≥ 10:1 contrast; frontend tests and lint.

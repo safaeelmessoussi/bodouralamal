@@ -436,13 +436,18 @@
   background: var(--color-border);
 }
 
-/* Inside the mobile sheet the menus render inline rather than as popovers. */
+/* Inside the mobile sheet the menus render inline rather than as popovers —
+   on the sheet itself, so the panel takes the sheet's dark ground: its options
+   are drawn in the on-primary set above, which on the popover's light ground
+   could not be read (the role switcher and, since R209, the language menu). */
 .mobile-menu .menu__panel {
   position: static;
   box-shadow: none;
   border: 0;
   padding: 0;
   min-width: 0;
+  background: transparent;
+  color: var(--color-on-primary);
 }
 .mobile-menu .menu__trigger {
   width: 100%;
