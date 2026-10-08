@@ -68,7 +68,7 @@ Ends when the Moroccan VPS exists: restore there, OVH returns to Staging, the si
 | E5 | Restate `verify-assessment-library.sh` against R136's source/occurrence split (stale, 24/31) | S |
 | E6 | `verify-backup-restore.sh` into hosted CI; integration/backup stacks off ephemeral host ports (55438, 58083, 59005, 59006) | S |
 | E7 | «حالة النظام»: backup freshness + certificate expiry via a host-published status file (blocked on D7) | M |
-| E12 | R209 translations: the Owner reviews en/fr/es/de; a native speaker reviews `zgh` (Tifinagh) and `shi-Latn` (Tachelhit) — `frontend/src/i18n/locales/*.json`, `components/history/locales/*.json` | M |
+| E12 | R209–R211 translations: the Owner reviews en/fr/es/de; a native speaker reviews `zgh` (Tifinagh) and `shi-Latn` (Tachelhit) — `frontend/src/i18n/locales/*.json`, `components/history/locales/*.json` | M |
 | E11 | «نظرة شاملة» (R203, R204): the present era has no text yet (its header only) — the Owner's to write. Retire `staging.bodouralamal.com` fully: DNS record (Owner), then certificate without the name (deployment.md) | S |
 | E10 | Tables (R198 §6 built the rest): server sort still missing for columns that are sets or derived — users (e-mail, roles, branches), approvals (type, bundle, branch, requested, framing; three sources merged per page), Trash (record label in per-entity JSONB, purgeable/restorable) — they sort on screen only once one page holds the whole list; add the «maximum related details» columns per table — which columns is the Owner's per table | M |
 

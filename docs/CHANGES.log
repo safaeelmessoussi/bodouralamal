@@ -264,3 +264,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - «فتح الكل / طيّ الكل» were offered only with two branching boxes, so a trunk of leaves (مدار الأسماء والصفات، مراتب العلم) had none; now any branch offers them (`humanity-diagram.tsx`).
 - `.humanity__diagrams` is one column: every diagram the full width, one under another («نظرة شاملة» and «حسب السورة»).
 - Verified: Localhost al-Fatiha in both views — six diagrams, same left edge and width, two buttons each; frontend tests and lint.
+
+## 2026-10-08 — SRS Revision 211: «نظرة شاملة» enriched from «دورة في علوم القرآن»
+- `humanity-data.ts`: node `seal/ulum-al-quran` (five children), Meccan/Medinan traits, جمع أبي بكر/عثمان, علوم الآلة, `abbasid-qiraat`, `mamluk-qiraat`, modern works; al-Baqara's diagram rebuilt from the Owner's pages (Adam المقتصد / Iblis الفاشل apart).
+- 143 new strings in six translations (`components/history/locales/*.json`), 13 retired keys removed; the empty-node test now expects none.
+- Three PDFs for the Owner to upload (booklet as printed, exam, study guide) — built outside the repository.
+- Verified: frontend tests/lint/build; Localhost al-Baqara ar 1366, en 390, `ulum-al-quran` fr 390 (no overflow).

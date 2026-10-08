@@ -96,9 +96,9 @@ describe('R203 — «نظرة شاملة», the content from the Owner’s board
     expect(umayyad.children![0]!.when).toEqual({ gregorian: '661م', hijri: '41 هـ' });
     expect(umayyad.children![0]!.lines!.join(' ')).toContain('حقنًا لدماء المسلمين');
     expect(resolvePath(HUMANITY, ['ummah', 'abbasid', 'hadith-imams', 'nasai']).at(-1)!.lines!.length).toBeGreaterThan(0);
-    // Only the present era waits for its text — and says nothing about it.
+    // R211 — every node now says something (the present era lists modern works).
     const empty = all(HUMANITY).filter((n) => !n.lines?.length && !n.children?.length && !n.diagrams?.length);
-    expect(empty.map((n) => n.id)).toEqual(['present']);
+    expect(empty.map((n) => n.id)).toEqual([]);
   });
 
   it('R204 — leaves out what the scholars do not agree upon, and the errors the review found', () => {
