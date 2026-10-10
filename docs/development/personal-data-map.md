@@ -29,6 +29,8 @@ ORDER BY 1, 2;
 | `attendance.marked_by` | R123 | PRESERVE | «who marked this» is the accountability half |
 | `exam.student_id` | R125 | PRESERVE | the individual target of an assessment, a fact on somebody else's row |
 | `framing_preference.user_id` | R115 | DELETE | R88.2 planning data granting nothing, like `teacher_availability` |
+| `framing_preference_level.user_id` | R215 | DELETE | the Levels of that same planning preference |
+| `educational_content.author_id` | R215 | NULL (with `author_role`) | the content is the association's; it stops naming her as who made it |
 | `legal_consent_text.created_by_id` | R119 | PRESERVE | authorship of immutable legal wording |
 | `legal_consent_text.activated_by_id` | R119 | PRESERVE | «who put this wording in force» backs every consent given against it |
 | `notification.subject_user_id` | R116 | PRESERVE | sits in somebody else's inbox (R111 deletes `user_id` because the subject has no inbox); tombstone renders «حساب محذوف». The one judgment call, by the Owner's rule «do not guess when deletion would destroy another person's record»; deleting it would be a narrowing decision, not a defect |

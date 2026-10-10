@@ -173,6 +173,8 @@ PUT /admin/users/{id}/teaching-profile        # R88; replaced whole; Admin-owned
 GET /me/teaching-profile                      # R106; her own, read by her; whole profile so the ranges have context
 PUT /me/teaching-profile/availability         # R106; AVAILABILITY ONLY — capabilities stay Admin-owned (R88.2); grants nothing (R88.3)
 PUT /me/teaching-profile/capabilities         # Owner 2026-08-30; CAPABILITIES ONLY — supersedes R88.2's refusal; planning metadata, grants nothing (R88.3)
+PUT /me/teaching-profile/framing              # R215; her framing preference (when, position, mode, branches, levels); grants nothing
+PUT /admin/users/{id}/teaching-profile/framing # R215; the same by an administrator; grants nothing
 GET /admin/teaching-candidates                # R90; the staff picker's planning appraisal — WARNINGS, never a filtered list
 GET /sessions/{id}/roster                     # R92; who is expected at ONE occurrence — venue and audience as separate facts
 

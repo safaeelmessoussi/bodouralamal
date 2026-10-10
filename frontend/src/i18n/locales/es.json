@@ -604,5 +604,9 @@
  ],
  "content.history.era.rashidun": "Un califato según el camino de la profecía",
  "content.bySurah.section.diagrams": "Los esquemas de la sura",
- "content.bySurah.section.slides": "Diapositivas de las clases"
+ "content.bySurah.section.slides": "Diapositivas de las clases",
+ "content.author.role.teacher": "Docente principal",
+ "content.author.role.assistant": "Docente asistente",
+ "content.author.role.admin": "Administración",
+ "content.author.role.student": "Beneficiaria"
 }

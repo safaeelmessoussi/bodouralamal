@@ -160,14 +160,6 @@ export function GroupsPage(): ReactNode {
   const columns: Column<AdministrativeGroup>[] = [
     { key: 'name', header: t('admin.groups.colName'), sortKey: 'name', cell: (r) => r.name },
     {
-      key: 'members',
-      sortKey: 'members',
-      header: t('admin.groups.colMembers'),
-      // R198 §6 — sorted by the SERVER's count of live members, so the order
-      // is the whole set's, never one page's.
-      cell: (r) => String(r.member_count),
-    },
-    {
       key: 'level',
       sortKey: 'level',
       header: t('admin.groups.colLevel'),
@@ -183,6 +175,15 @@ export function GroupsPage(): ReactNode {
       header: t('admin.groups.colBranch'),
       secondary: true,
       cell: (r) => nameOf(branches, r.branch_id),
+    },
+    // R215 — the count last, just before the row's actions (the Owner, 2026-10-10).
+    {
+      key: 'members',
+      sortKey: 'members',
+      header: t('admin.groups.colMembers'),
+      // R198 §6 — sorted by the SERVER's count of live members, so the order
+      // is the whole set's, never one page's.
+      cell: (r) => String(r.member_count),
     },
     /* **No «الترتيب» column** (R76.8) — the order is the sequence of the rows,
        changed by dragging one within a Level. */

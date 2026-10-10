@@ -30,9 +30,12 @@ import {
 } from '../components/registration/children.js';
 import {
   AdministrationSectionFields,
+  EMPTY_TEACHING_SECTION,
   StudentSectionFields,
   TeachingSectionFields,
+  framingLevelOptions,
   framingPayload,
+  type TeachingSectionValue,
   studentSectionPayload,
   useCircleSlots,
   validateStudentSection,
@@ -143,6 +146,9 @@ export function Register(): ReactNode {
   const [framingMode, setFramingMode] = useState<'' | 'in_person' | 'online' | 'both'>('');
   const [allFramingBranches, setAllFramingBranches] = useState(false);
   const [framingBranchIds, setFramingBranchIds] = useState<string[]>([]);
+  // R215 — when, in which position, for which Levels.
+  const [framingRest, setFramingRest] = useState<FramingRest>(EMPTY_FRAMING_REST);
+  const [framingLevels, setFramingLevels] = useState<{ id: string; label: string }[]>([]);
   const [dataProcessing, setDataProcessing] = useState(false);
   /**
    * **The exact wording this form will record** (R119).
@@ -205,6 +211,7 @@ export function Register(): ReactNode {
       const today = new Date().toISOString().slice(0, 10);
       const bootstrap = await fetchCalendarBootstrap({ from: today, to: today });
       setCategories(bootstrap.categories);
+      setFramingLevels(framingLevelOptions(bootstrap));
     } catch {
       // The branch is required, so a failed list is a blocking failure rather
       // than a degraded one — offering the form without it would let someone
@@ -244,6 +251,7 @@ export function Register(): ReactNode {
     framingMode,
     allFramingBranches,
     framingBranchIds,
+    framingRest,
     dataProcessing,
     selfManagedCode,
   });
@@ -286,6 +294,7 @@ export function Register(): ReactNode {
           framingMode,
           allFramingBranches,
           framingBranchIds,
+          framingRest,
           // R119 — the id of the wording that was actually on screen. Guarded
           // above: `valid` is false without it.
           consentTextId: consentText!.id,
@@ -529,13 +538,16 @@ export function Register(): ReactNode {
               <fieldset className="register-form__group" data-role-section="teaching">
                 <legend>{t('register.framingLegend')}</legend>
                 <TeachingSectionFields
-                  value={{ mode: framingMode, allBranches: allFramingBranches, branchIds: framingBranchIds }}
+                  value={{ ...framingRest, mode: framingMode, allBranches: allFramingBranches, branchIds: framingBranchIds }}
                   onChange={(next) => {
-                    setFramingMode(next.mode);
-                    setAllFramingBranches(next.allBranches);
-                    setFramingBranchIds(next.branchIds);
+                    const { mode, allBranches, branchIds, ...rest } = next;
+                    setFramingMode(mode);
+                    setAllFramingBranches(allBranches);
+                    setFramingBranchIds(branchIds);
+                    setFramingRest(rest);
                   }}
                   branches={branches}
+                  levels={framingLevels}
                   errors={touched ? errors : {}}
                 />
               </fieldset>
@@ -783,6 +795,14 @@ export function mapServerIssues(error: unknown): ServerErrors {
       fields['framingBranches'] = t('register.errFramingBranches');
       continue;
     }
+    if (framingPath.startsWith('framing.period')) {
+      fields['framingPeriod'] = t('framing.errDates');
+      continue;
+    }
+    if (framingPath.startsWith('framing.levels')) {
+      fields['framingLevels'] = t('framing.errLevels');
+      continue;
+    }
     if (path.startsWith('consents')) {
       fields['dataProcessing'] = t('register.errConsent');
       continue;
@@ -888,6 +908,8 @@ interface FormState {
   framingMode: '' | 'in_person' | 'online' | 'both';
   allFramingBranches: boolean;
   framingBranchIds: string[];
+  /** R215 — absent reads as nothing stated. */
+  framingRest?: FramingRest;
   dataProcessing: boolean;
 }
 
@@ -994,6 +1016,7 @@ export function validate(state: FormState): Record<string, string> {
     Object.assign(
       errors,
       validateTeachingSection({
+        ...(state.framingRest ?? EMPTY_FRAMING_REST),
         mode: state.framingMode,
         allBranches: state.allFramingBranches,
         branchIds: state.framingBranchIds,
@@ -1020,6 +1043,8 @@ export function buildPayload(state: {
   framingMode: '' | 'in_person' | 'online' | 'both';
   allFramingBranches: boolean;
   framingBranchIds: string[];
+  /** R215 — absent reads as nothing stated. */
+  framingRest?: FramingRest;
   /**
    * **R119 — the id of the wording that was on screen**, not *whatever is
    * active*. Passed in rather than fetched here: this function is pure and
@@ -1085,6 +1110,7 @@ export function buildPayload(state: {
       ? {
           teaching: {
             framing: framingPayload({
+              ...(state.framingRest ?? EMPTY_FRAMING_REST),
               mode: state.framingMode,
               allBranches: state.allFramingBranches,
               branchIds: state.framingBranchIds,
@@ -1096,3 +1122,14 @@ export function buildPayload(state: {
     consents: { data_processing: true, consent_text_id: state.consentTextId },
   };
 }
+
+/** R215 — the framing fields beyond mode and branches. */
+type FramingRest = Omit<TeachingSectionValue, 'mode' | 'allBranches' | 'branchIds'>;
+const EMPTY_FRAMING_REST: FramingRest = {
+  period: EMPTY_TEACHING_SECTION.period,
+  from: EMPTY_TEACHING_SECTION.from,
+  until: EMPTY_TEACHING_SECTION.until,
+  position: EMPTY_TEACHING_SECTION.position,
+  allLevels: EMPTY_TEACHING_SECTION.allLevels,
+  levelIds: EMPTY_TEACHING_SECTION.levelIds,
+};

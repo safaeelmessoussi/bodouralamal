@@ -36,6 +36,9 @@ export interface UploadMeta {
   visibility?: 'public' | 'private' | 'hidden';
   /** R177 §7 — the one Surah the item is about (1–114); absent means none. */
   surah_id?: number;
+  /** R215 — who made it, and in which capacity; absent names nobody. */
+  author_id?: string;
+  author_role?: 'teacher' | 'assistant' | 'admin' | 'student';
   /**
    * **R99.12 — *this is a class recording*, stated at the boundary.**
    *
@@ -225,6 +228,9 @@ export interface ContentMetadataPatch {
   academic_year_id?: string;
   /** R201 — the branches, home first; `[]` is Global; replaces the set. */
   branch_ids?: string[];
+  /** R215 — who made it (`null` names nobody) and in which capacity. */
+  author_id?: string | null;
+  author_role?: 'teacher' | 'assistant' | 'admin' | 'student' | null;
 }
 
 export async function updateContent(

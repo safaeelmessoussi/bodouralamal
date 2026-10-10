@@ -1066,6 +1066,33 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
     await prisma.categorySubject.deleteMany({ where: { subjectId: fiqh.id } });
   });
 
+  it("R215 — an item may name who made it, and the edit may change or clear it", async () => {
+    const author = await prisma.user.create({
+      data: { nameArabic: `${TAG} مؤطرة المادة`, publicDisplayName: "أم أنس", sex: "female", accountStatus: "active" },
+    });
+    try {
+      const { id } = await uploadPdf(admin(), "مادة لها من أعدّها", { authorId: author.id, authorRole: "teacher" });
+      expect(
+        await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { authorId: true, authorRole: true } }),
+      ).toEqual({ authorId: author.id, authorRole: "teacher" });
+      await updateContentMetadata(prisma, clients, admin(), id, { authorRole: "assistant" });
+      expect(
+        (await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { authorRole: true } })).authorRole,
+      ).toBe("assistant");
+      await updateContentMetadata(prisma, clients, admin(), id, { authorId: null });
+      expect(
+        await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { authorId: true, authorRole: true } }),
+      ).toEqual({ authorId: null, authorRole: null });
+      // A person who does not exist is refused, not stored.
+      await expect(uploadPdf(admin(), "مادة لشخص غير موجود", { authorId: randomUUID() })).rejects.toMatchObject({
+        code: "VALIDATION_FAILED",
+      });
+    } finally {
+      await prisma.educationalContent.updateMany({ where: { authorId: author.id }, data: { authorId: null, authorRole: null } });
+      await prisma.user.delete({ where: { id: author.id } });
+    }
+  });
+
   it("R212 fix — a whole Category whose first Level is a preparatory programme files the item under the first Level that teaches the Subject", async () => {
     const category = await prisma.level.findUniqueOrThrow({ where: { id: levelId }, select: { categoryId: true } });
     // The Owner's «فرصة أمل»: first in the Category's order, and preparatory —

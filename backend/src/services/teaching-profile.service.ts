@@ -6,6 +6,8 @@ import { firstOverlap } from '../policies/teaching-profile.js';
 import * as audit from '../repositories/audit.repository.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 import { ADMIN_ORDER } from '../lib/sorting.js';
+import type { FramingPreferenceInput } from '../validators/registration.validators.js';
+import { FRAMING_SELECT, currentSpan, framingView, writeFramingPreference, type FramingView } from './framing-preference.service.js';
 
 /**
  * **The teaching profile (§E, R88) — planning data, never authority.**
@@ -48,11 +50,7 @@ export interface TeachingProfile {
    * read-only here: a weekly range and an approval-time preference answer
    * different planning questions, and neither is authority.
    */
-  framing: {
-    mode: 'in_person' | 'online' | 'both';
-    all_branches: boolean;
-    branches: { id: string; name: string }[];
-  } | null;
+  framing: FramingView | null;
   subjects: { id: string; name: string }[];
   categories: { id: string; name: string }[];
   availability: {
@@ -181,18 +179,8 @@ function assertNoOverlap(availability: readonly AvailabilityInput[]): void {
  *  has already decided whose profile it may read, and doing it once is what
  *  keeps the two readers returning the same shape. */
 async function loadProfile(prisma: PrismaClient, userId: string): Promise<TeachingProfile> {
-  const [framing, subjects, categories, availability] = await Promise.all([
-    prisma.framingPreference.findUnique({
-      where: { userId },
-      select: {
-        mode: true,
-        allBranches: true,
-        branches: {
-          select: { branch: { select: { id: true, name: true } } },
-          orderBy: { branch: { name: 'asc' } },
-        },
-      },
-    }),
+  const [framing, subjects, categories, availability, span] = await Promise.all([
+    prisma.framingPreference.findUnique({ where: { userId }, select: FRAMING_SELECT }),
     prisma.teacherSubjectCapability.findMany({
       where: { userId },
       select: { subject: { select: { id: true, name: true } } },
@@ -207,17 +195,12 @@ async function loadProfile(prisma: PrismaClient, userId: string): Promise<Teachi
       where: { userId },
       orderBy: [{ weekday: 'asc' }, { startTime: 'asc' }],
     }),
+    currentSpan(prisma),
   ]);
 
   return {
     userId,
-    framing: framing
-      ? {
-          mode: framing.mode,
-          all_branches: framing.allBranches,
-          branches: framing.branches.map((entry) => entry.branch),
-        }
-      : null,
+    framing: framing ? framingView(framing, span) : null,
     subjects: subjects.map((r) => r.subject),
     categories: categories.map((r) => r.category),
     availability: availability.map((r) => ({
@@ -540,4 +523,63 @@ export async function replaceOwnAvailability(
   });
 
   return readOwnTeachingProfile(prisma, actor);
+}
+
+/**
+ * **R215 — her framing preference, said by her or by an administrator** (the
+ * Owner, 2026-10-10: entered at registration, in her dashboard, and by the
+ * administration). When, in which position, remote or in class, which
+ * branches, which Levels — planning data, replaced whole, never authority.
+ */
+export async function replaceOwnFraming(
+  prisma: PrismaClient,
+  actor: Actor,
+  framing: FramingPreferenceInput,
+): Promise<OwnTeachingProfile> {
+  assertIsTeacher(actor);
+  await saveFraming(prisma, actor, actor.userId, framing, true);
+  return readOwnTeachingProfile(prisma, actor);
+}
+
+export async function replaceFraming(
+  prisma: PrismaClient,
+  actor: Actor,
+  userId: string,
+  framing: FramingPreferenceInput,
+): Promise<TeachingProfile> {
+  assertMayManage(actor);
+  const user = await prisma.user.findFirst({ where: { id: userId, deletedAt: null }, select: { id: true } });
+  if (!user) throw new AppError('NOT_FOUND', 'no such user');
+  await saveFraming(prisma, actor, userId, framing, false);
+  return readTeachingProfile(prisma, actor, userId);
+}
+
+async function saveFraming(
+  prisma: PrismaClient,
+  actor: Actor,
+  userId: string,
+  framing: FramingPreferenceInput,
+  selfService: boolean,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    // The same R111 lock every planning writer takes.
+    await assertStaffAccountsAvailable(tx, [userId]);
+    await writeFramingPreference(tx, userId, framing);
+    await audit.write(tx as unknown as Prisma.TransactionClient, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'settings.change',
+      targetEntity: 'User',
+      targetId: userId,
+      detail: {
+        teaching_profile: {
+          framing: framing.mode,
+          period: framing.period?.kind ?? null,
+          position: framing.position ?? null,
+          levels: framing.levels && !framing.levels.all_levels ? framing.levels.level_ids.length : 'all',
+        },
+        ...(selfService ? { self_service: true } : {}),
+      },
+    });
+  });
 }

@@ -1,3 +1,4 @@
+import { writeFramingPreference } from './framing-preference.service.js';
 import { assertCategoryFitsApplicant } from '../policies/category-login.policy.js';
 import type { PrismaClient, User } from '../generated/prisma/client.js';
 import { ConsentMethod, ConsentType } from '../generated/prisma/enums.js';
@@ -378,21 +379,8 @@ export async function register(
       });
 
       if (staffRequest && framing) {
-        const physical = framing.mode !== 'online' ? framing.willingness : null;
-        await tx.framingPreference.create({
-          data: {
-            userId: applicant.id,
-            mode: framing.mode,
-            allBranches: physical?.all_branches ?? false,
-            ...(framingBranchIds.length > 0
-              ? {
-                  branches: {
-                    create: framingBranchIds.map((branchId) => ({ branchId })),
-                  },
-                }
-              : {}),
-          },
-        });
+        // R215 — with when, which position and which Levels (one writer).
+        await writeFramingPreference(tx, applicant.id, framing);
       }
 
       // Data-processing consent: recorded for the applicant themselves.

@@ -764,3 +764,10 @@
   flex: 1 1 13rem;
   min-inline-size: 0;
 }
+
+/* R215 — two fields side by side (a span's two dates), stacked on a phone. */
+.field-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--space-3);
+}

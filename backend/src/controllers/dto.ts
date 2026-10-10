@@ -25,6 +25,7 @@
  * being one.
  */
 
+import { publicDisplayName } from '../lib/display-name.js';
 import type { LegalConsentTextRow } from '../services/legal-consent-text.service.js';
 import type { LegalDocumentRow } from '../services/legal-document.service.js';
 import type { Prisma } from "../generated/prisma/client.js";
@@ -1082,6 +1083,11 @@ export interface LibraryItemDto {
   /** R170 §3 — `true` when a student of this recording's audience has no media
    *  release; `null` for every reader who is not staff. */
   media_consent_missing: boolean | null;
+  /** R215 — who made it, under their PUBLIC display name (§7); `null` when it
+   *  names nobody. `author_id` is for staff only (the edit form). */
+  author_name: string | null;
+  author_role: string | null;
+  author_id: string | null;
   level_id: string;
   /** R167 §5 — addressed to EVERY Level of `category_id`; `level_id` is then
    *  only where it is filed. Rendered under «كل مستويات الفئة». */
@@ -1145,6 +1151,10 @@ export function libraryItemDto(row: {
   visibility: string;
   origin: string;
   mediaConsentMissing: boolean | null;
+  authorId: string | null;
+  authorPublicName: string | null;
+  authorNameArabic: string | null;
+  authorRole: string | null;
   levelId: string;
   wholeCategory: boolean;
   additionalLevels: { id: string; name: string }[];
@@ -1174,6 +1184,13 @@ export function libraryItemDto(row: {
     origin: row.origin,
     // R170 §3 — the warning; `null` unless the reader is staff.
     media_consent_missing: row.mediaConsentMissing,
+    // R215 — the one rule for a public name (§7), never the inputs.
+    author_name:
+      row.authorNameArabic === null
+        ? null
+        : publicDisplayName({ publicDisplayName: row.authorPublicName, nameArabic: row.authorNameArabic }),
+    author_role: row.authorNameArabic === null ? null : row.authorRole,
+    author_id: row.authorId,
     level_id: row.levelId,
     whole_category: row.wholeCategory,
     // R169 §10 — the item's OTHER Levels (`level_id` is its home), so a card can

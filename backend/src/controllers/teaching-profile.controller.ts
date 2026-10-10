@@ -5,10 +5,13 @@ import { requireActor } from '../middleware/authenticate.js';
 import {
   readOwnTeachingProfile,
   readTeachingProfile,
+  replaceFraming,
   replaceOwnAvailability,
   replaceOwnCapabilities,
+  replaceOwnFraming,
   replaceTeachingProfile,
 } from '../services/teaching-profile.service.js';
+import { framingPreference } from '../validators/registration.validators.js';
 import { listTeachingCandidates } from '../services/teaching-candidates.service.js';
 import {
   ownAvailabilitySchema,
@@ -139,5 +142,25 @@ export function replaceMyAvailability(prisma: PrismaClient) {
         })),
       ),
     });
+  };
+}
+
+/**
+ * **R215 — `PUT /me/teaching-profile/framing`** — her framing preference, by
+ * her: when, in which position, remote or in class, which branches and Levels.
+ * No `{id}`: the subject is the token's `sub`.
+ */
+export function replaceMyFraming(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(framingPreference, req.body ?? {});
+    res.json({ data: await replaceOwnFraming(prisma, requireActor(req), body) });
+  };
+}
+
+/** **R215 — `PUT /admin/users/{id}/teaching-profile/framing`** — the same, by an administrator. */
+export function replaceUserFraming(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(framingPreference, req.body ?? {});
+    res.json({ data: await replaceFraming(prisma, requireActor(req), idParam(req, 'id'), body) });
   };
 }

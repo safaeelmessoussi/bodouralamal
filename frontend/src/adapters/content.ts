@@ -74,6 +74,10 @@ export interface ContentItem {
    * `null` where no instructor is attributed to the item.
    */
   teacher_display_name: string | null;
+  /** R215 — the capacity that person made it in; `null` when none is said. */
+  author_role?: 'teacher' | 'assistant' | 'admin' | 'student' | null;
+  /** R215 — their id, for staff (the edit form); `null` for everyone else. */
+  author_id?: string | null;
   /** Optional subject label. A BADGE, not a hierarchy tier — see the note in
    *  `resources.tsx` about §5.2's third tier. */
   subject_name: string | null;
@@ -172,7 +176,10 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
       mime_type: row.mime_type,
       size_bytes: row.size_bytes,
       published_on: row.created_at.slice(0, 10),
-      teacher_display_name: null,
+      // R215 — who made it, under their public name (resolved by the server).
+      teacher_display_name: row.author_name ?? null,
+      author_role: (row.author_role as ContentItem['author_role']) ?? null,
+      author_id: row.author_id ?? null,
       subject_name: row.subject_name,
       whole_category: row.whole_category,
     };
@@ -338,6 +345,10 @@ interface LibraryItemWire {
   title: string;
   description: string | null;
   visibility: string;
+  /** R215 — who made it (public name), in which capacity, and (staff only) who. */
+  author_name?: string | null;
+  author_role?: string | null;
+  author_id?: string | null;
   level_id: string;
   whole_category: boolean;
   /** R169 §10 — the item's OTHER Levels (`level_id` is its home), in the
@@ -439,8 +450,10 @@ async function shelfOf(
       size_bytes: row.size_bytes,
       // TD-11: an upload is an instant; the card shows the calendar date of it.
       published_on: row.created_at.slice(0, 10),
-      // `EducationalContent` records no uploader — see the note at the top.
-      teacher_display_name: null,
+      // R215 — who made it, under their public name (resolved by the server).
+      teacher_display_name: row.author_name ?? null,
+      author_role: (row.author_role as ContentItem['author_role']) ?? null,
+      author_id: row.author_id ?? null,
       subject_name: row.subject_name,
       whole_category: row.whole_category,
     });

@@ -90,6 +90,9 @@ export interface UploadTicketClaims {
   /** R177 §7 — the one Surah the item is about, decided and checked at
    *  initiation like every other scope fact; absent means none. */
   surah_id?: number;
+  /** R215 — who made it, and in which capacity. */
+  author_id?: string;
+  author_role?: string;
   /** Set when this upload replaces the file on an existing content record
    *  (TD-9: a new key, the old object quarantined, never an overwrite). */
   replaces?: string;

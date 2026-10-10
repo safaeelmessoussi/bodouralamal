@@ -140,7 +140,7 @@ const RECORDING_INCLUDE = {
       },
       staff: {
         where: { deletedAt: null, position: "teacher" },
-        select: { user: { select: { nameArabic: true, publicDisplayName: true } } },
+        select: { user: { select: { id: true, nameArabic: true, publicDisplayName: true } } },
         orderBy: { createdAt: "asc" },
         take: 1,
       },
@@ -405,6 +405,9 @@ export async function ingestRecording(
         subjectId: recording.session.schedule.subjectId,
         academicYearId: recording.session.schedule.academicYearId,
         surahId,
+        // R215 — a class recording is its main teacher's work; an
+        // administrator may change it, or name nobody, afterwards.
+        ...(lead === null ? {} : { authorId: lead.id, authorRole: "teacher" as const }),
         // §4.9's Global scope is a deliberate act; a recording belongs to the
         // branch whose class produced it.
         branchId: recording.session.schedule.branchId,

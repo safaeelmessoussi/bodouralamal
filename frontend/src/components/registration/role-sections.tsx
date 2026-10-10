@@ -6,7 +6,8 @@ import type { CategoryRef } from '../../adapters/calendar.js';
 import { fetchCircleSlots, type CircleSlots } from '../../adapters/registrations.js';
 import { t } from '../../i18n/index.js';
 import { BranchSelector } from '../ui/branch-selector.js';
-import { CheckboxField, SelectField } from '../ui/field.js';
+import { CheckboxField, DateField, SelectField } from '../ui/field.js';
+import type { FramingPreferenceView } from '../../types/framing.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { CircleRanking } from './circle-ranking.js';
 
@@ -194,29 +195,72 @@ export interface TeachingSectionValue {
   mode: '' | 'in_person' | 'online' | 'both';
   allBranches: boolean;
   branchIds: string[];
+  /** R215 — when: '' not stated; the current year or semester; or two dates. */
+  period: '' | 'academic_year' | 'academic_period' | 'date_range';
+  from: string;
+  until: string;
+  /** R215 — main teacher, assistant, or either; '' not stated. */
+  position: '' | 'teacher' | 'assistant' | 'both';
+  /** R215 — every Level, or `levelIds`. */
+  allLevels: boolean;
+  levelIds: string[];
 }
 
-export const EMPTY_TEACHING_SECTION: TeachingSectionValue = { mode: '', allBranches: false, branchIds: [] };
+export const EMPTY_TEACHING_SECTION: TeachingSectionValue = {
+  mode: '',
+  allBranches: false,
+  branchIds: [],
+  period: '',
+  from: '',
+  until: '',
+  position: '',
+  allLevels: true,
+  levelIds: [],
+};
+
+/** R215 — a saved preference, back into the form (dashboard and admin dialog). */
+export function teachingSectionFrom(view: FramingPreferenceView | null): TeachingSectionValue {
+  if (!view) return EMPTY_TEACHING_SECTION;
+  return {
+    mode: view.mode,
+    allBranches: view.all_branches,
+    branchIds: view.branches.map((b) => b.id),
+    period: view.period?.kind ?? '',
+    from: view.period?.kind === 'date_range' ? view.period.from : '',
+    until: view.period?.kind === 'date_range' ? view.period.until : '',
+    position: view.position ?? '',
+    allLevels: view.all_levels ?? true,
+    levelIds: (view.levels ?? []).map((l) => l.id),
+  };
+}
 
 export function TeachingSectionFields({
   value,
   onChange,
   branches,
+  levels = [],
   errors,
+  notice = true,
 }: {
   value: TeachingSectionValue;
   onChange: (next: TeachingSectionValue) => void;
-  branches: PublicBranch[];
-  /** Keys: `framingMode`, `framingBranches`. */
+  branches: Pick<PublicBranch, 'id' | 'name'>[];
+  /** R215 — the Levels she may name, labelled `{Category} — {Level}`. */
+  levels?: { id: string; label: string }[];
+  /** Keys: `framingMode`, `framingBranches`, `framingPeriod`, `framingLevels`. */
   errors: Record<string, string>;
+  /** The «asks for something a person grants» line — a request's, not an edit's. */
+  notice?: boolean;
 }): ReactNode {
   return (
     <>
       {/* Said plainly rather than implied: submitting this asks for
           something a person has to grant. */}
-      <p className="state" role="status">
-        {t('register.teacherNotice')}
-      </p>
+      {notice ? (
+        <p className="state" role="status">
+          {t('register.teacherNotice')}
+        </p>
+      ) : null}
       <SelectField
         label={t('register.framingModeLabel')}
         value={value.mode}
@@ -226,7 +270,7 @@ export function TeachingSectionFields({
           // is never trusted to a later payload builder to omit.
           onChange(
             mode === 'online' || mode === ''
-              ? { mode, allBranches: false, branchIds: [] }
+              ? { ...value, mode, allBranches: false, branchIds: [] }
               : { ...value, mode },
           );
         }}
@@ -265,6 +309,58 @@ export function TeachingSectionFields({
           )}
         </>
       ) : null}
+
+      {/* R215 — when, in which position, for which Levels. Each optional. */}
+      <SelectField
+        label={t('framing.periodLabel')}
+        value={value.period}
+        onChange={(next) => onChange({ ...value, period: next as TeachingSectionValue['period'] })}
+        options={[
+          { value: '', label: t('framing.unset') },
+          { value: 'academic_year', label: t('framing.period_academic_year') },
+          { value: 'academic_period', label: t('framing.period_academic_period') },
+          { value: 'date_range', label: t('framing.period_date_range') },
+        ]}
+        error={errors['framingPeriod'] ?? null}
+      />
+      {value.period === 'date_range' ? (
+        <div className="field-pair">
+          <DateField label={t('framing.from')} value={value.from} onChange={(from) => onChange({ ...value, from })} required />
+          <DateField
+            label={t('framing.until')}
+            value={value.until}
+            onChange={(until) => onChange({ ...value, until })}
+            required
+            {...(value.from ? { min: value.from } : {})}
+          />
+        </div>
+      ) : null}
+      <SelectField
+        label={t('framing.positionLabel')}
+        value={value.position}
+        onChange={(next) => onChange({ ...value, position: next as TeachingSectionValue['position'] })}
+        options={[
+          { value: '', label: t('framing.unset') },
+          { value: 'teacher', label: t('framing.position_teacher') },
+          { value: 'assistant', label: t('framing.position_assistant') },
+          { value: 'both', label: t('framing.position_both') },
+        ]}
+      />
+      <CheckboxField
+        label={t('framing.allLevels')}
+        checked={value.allLevels}
+        onChange={(checked) => onChange({ ...value, allLevels: checked, levelIds: checked ? [] : value.levelIds })}
+      />
+      {value.allLevels ? null : (
+        <MultiSelectField
+          label={t('framing.levelsLabel')}
+          options={levels.map((level) => ({ value: level.id, label: level.label }))}
+          selected={value.levelIds}
+          onChange={(levelIds) => onChange({ ...value, levelIds })}
+          required
+          error={errors['framingLevels'] ?? null}
+        />
+      )}
     </>
   );
 }
@@ -275,25 +371,46 @@ export function validateTeachingSection(value: TeachingSectionValue): Record<str
   if ((value.mode === 'in_person' || value.mode === 'both') && !value.allBranches && value.branchIds.length === 0) {
     errors['framingBranches'] = t('register.errFramingBranches');
   }
+  if (value.period === 'date_range' && (value.from === '' || value.until === '' || value.from > value.until)) {
+    errors['framingPeriod'] = t('framing.errDates');
+  }
+  if (!value.allLevels && value.levelIds.length === 0) errors['framingLevels'] = t('framing.errLevels');
   return errors;
 }
 
+/** R215 — when, position and Levels, each sent only when stated. */
+interface FramingExtras {
+  period?: { kind: 'academic_year' } | { kind: 'academic_period' } | { kind: 'date_range'; from: string; until: string };
+  position?: 'teacher' | 'assistant' | 'both';
+  levels?: { all_levels: true } | { all_levels: false; level_ids: string[] };
+}
+
 export type FramingPayload =
-  | { mode: 'online' }
-  | {
+  | ({ mode: 'online' } & FramingExtras)
+  | ({
       mode: 'in_person' | 'both';
       willingness: { all_branches: true } | { all_branches: false; branch_ids: string[] };
-    };
+    } & FramingExtras);
 
 export function framingPayload(value: TeachingSectionValue): FramingPayload {
   const mode = value.mode as Exclude<TeachingSectionValue['mode'], ''>;
+  const extras: FramingExtras = {
+    ...(value.period === 'date_range'
+      ? { period: { kind: 'date_range' as const, from: value.from, until: value.until } }
+      : value.period !== ''
+        ? { period: { kind: value.period } }
+        : {}),
+    ...(value.position !== '' ? { position: value.position } : {}),
+    ...(value.allLevels ? {} : { levels: { all_levels: false as const, level_ids: value.levelIds } }),
+  };
   return mode === 'online'
-    ? { mode }
+    ? { mode, ...extras }
     : {
         mode,
         willingness: value.allBranches
           ? { all_branches: true as const }
           : { all_branches: false as const, branch_ids: value.branchIds },
+        ...extras,
       };
 }
 
@@ -329,4 +446,16 @@ export function AdministrationSectionFields({
       />
     </>
   );
+}
+
+/** R215 — the Levels a framing preference may name, `{Category} — {Level}`, from the public bootstrap. */
+export function framingLevelOptions(bootstrap: {
+  levels: { id: string; name: string; category_id: string }[];
+  categories: { id: string; name: string }[];
+}): { id: string; label: string }[] {
+  const category = new Map(bootstrap.categories.map((c) => [c.id, c.name]));
+  return bootstrap.levels.map((level) => ({
+    id: level.id,
+    label: category.has(level.category_id) ? `${category.get(level.category_id)} — ${level.name}` : level.name,
+  }));
 }

@@ -991,3 +991,41 @@
 .surah-library__diagrams {
   margin: 0;
 }
+
+/* R215 — «إعداد»: who made an item. */
+.author-picker {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.author-picker__chosen {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-weight: 700;
+}
+.author-picker__results {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.author-picker__result {
+  inline-size: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.author-picker__result:hover,
+.author-picker__result:focus-visible {
+  background: var(--color-primary-soft);
+}

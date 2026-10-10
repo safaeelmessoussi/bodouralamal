@@ -604,5 +604,9 @@
  ],
  "content.history.era.rashidun": "ⵍⵅⵉⵍⴰⴼⴰ ⵅⴼ ⵓⴱⵔⵉⴷ ⵏ ⵜⵏⴱⵓⵜ",
  "content.bySurah.section.diagrams": "ⵉⵙⴽⵉⵍⵏ ⵏ ⵜⵙⵓⵕⵜ",
- "content.bySurah.section.slides": "ⵉⵙⵍⴰⵢⴷⵏ ⵏ ⵜⵖⵓⵔⵉⵡⵉⵏ"
+ "content.bySurah.section.slides": "ⵉⵙⵍⴰⵢⴷⵏ ⵏ ⵜⵖⵓⵔⵉⵡⵉⵏ",
+ "content.author.role.teacher": "ⴰⵙⵍⵎⴷ ⴰⴳⵊⴷⴰⵏ",
+ "content.author.role.assistant": "ⵜⴰⵡⵉⵙⵉ ⴳ ⵓⵙⵍⵎⴷ",
+ "content.author.role.admin": "ⴰⵙⵡⵓⴷⴷⵓ",
+ "content.author.role.student": "ⵜⴰⵏⵍⵎⴰⴷⵜ"
 }

@@ -221,6 +221,37 @@ const allBranchWillingness = z
   .object({ all_branches: z.literal(true) })
   .strict();
 
+/**
+ * **R215 — when, in which position, for which Levels** (the Owner,
+ * 2026-10-10). Each optional: absent is «not stated», never a default that
+ * reads as a promise. «This year» and «this semester» are resolved to the
+ * current year / semester when saved, by the service.
+ */
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'a date is YYYY-MM-DD');
+const framingPeriod = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('academic_year') }).strict(),
+  z.object({ kind: z.literal('academic_period') }).strict(),
+  z
+    .object({ kind: z.literal('date_range'), from: isoDate, until: isoDate })
+    .strict()
+    .refine((value) => value.from <= value.until, { message: 'from must not be after until', path: ['until'] }),
+]);
+const framingLevels = z.discriminatedUnion('all_levels', [
+  z.object({ all_levels: z.literal(true) }).strict(),
+  z
+    .object({ all_levels: z.literal(false), level_ids: z.array(z.uuid()).min(1).max(200) })
+    .strict()
+    .refine((value) => new Set(value.level_ids).size === value.level_ids.length, {
+      message: 'level_ids must not contain duplicates',
+      path: ['level_ids'],
+    }),
+]);
+const framingExtras = {
+  period: framingPeriod.optional(),
+  position: z.enum(['teacher', 'assistant', 'both']).optional(),
+  levels: framingLevels.optional(),
+};
+
 const physicalFraming = (mode: 'in_person' | 'both') =>
   z
     .object({
@@ -229,14 +260,16 @@ const physicalFraming = (mode: 'in_person' | 'both') =>
         allBranchWillingness,
         explicitBranchWillingness,
       ]),
+      ...framingExtras,
     })
     .strict();
 
-const framingPreference = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('online') }).strict(),
+export const framingPreference = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('online'), ...framingExtras }).strict(),
   physicalFraming('in_person'),
   physicalFraming('both'),
 ]);
+export type FramingPreferenceInput = z.infer<typeof framingPreference>;
 
 /**
  * Adult self-registration (§4.1). No child, no media release.

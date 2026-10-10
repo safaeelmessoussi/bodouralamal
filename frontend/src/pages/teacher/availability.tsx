@@ -4,13 +4,12 @@ import {
   fetchMyTeachingProfile,
   saveMyAvailability,
   saveMyCapabilities,
+  saveMyFraming,
   type AvailabilityRange,
 } from '../../adapters/teaching-profile.js';
 import { AvailabilityEditor } from '../../components/teaching/availability-editor.js';
-import {
-  FramingPreferenceSummary,
-  type FramingPreferenceView,
-} from '../../components/teaching/framing-preference-summary.js';
+import { FramingPreferenceEditor } from '../../components/teaching/framing-preference-editor.js';
+import type { FramingPreferenceView } from '../../components/teaching/framing-preference-summary.js';
 import {
   CapabilitiesEditor,
   type CapabilityOption,
@@ -194,7 +193,15 @@ export function TeacherAvailabilityPage(): ReactNode {
         <>
           <p className="field__hint">{t('teacher.availability.planningOnly')}</p>
 
-          <FramingPreferenceSummary framing={framing} />
+          {/* R215 — her framing preference, said by her. */}
+          <FramingPreferenceEditor
+            framing={framing}
+            onSave={async (payload) => {
+              const saved = await saveMyFraming(payload, accessToken);
+              setFraming(saved.framing);
+              return saved.framing;
+            }}
+          />
 
           {/* Hers to state since 2026-08-30, through the SHARED editor — the
               administrator's dialog renders the identical controls. */}

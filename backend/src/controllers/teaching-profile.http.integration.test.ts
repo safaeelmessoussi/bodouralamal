@@ -81,6 +81,7 @@ async function clear(): Promise<void> {
   // commit and are therefore correctly refused.
   await prisma.$transaction(async (tx) => {
     await tx.framingPreferenceBranch.deleteMany({ where: { userId: { in: ids } } });
+    await tx.framingPreferenceLevel.deleteMany({ where: { userId: { in: ids } } });
     await tx.framingPreference.deleteMany({ where: { userId: { in: ids } } });
   });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
@@ -435,6 +436,12 @@ describe("R106 — a مؤطِّرة states her own availability", () => {
       mode: "both",
       all_branches: false,
       branches: [{ id: branchId, name: `${TAG} الفرع` }],
+      // R215 — nothing stated yet: no period, no position, every Level.
+      period: null,
+      position: null,
+      all_levels: true,
+      levels: [],
+      available_now: null,
     });
   });
 
@@ -700,5 +707,63 @@ describe("R106 — a مؤطِّرة states her own availability", () => {
     expect(
       (students.body.data as unknown as { students: unknown[] }).students,
     ).toHaveLength(0);
+  });
+});
+
+/** R215 — when, in which position, for which Levels: said by her or by an administrator. */
+describe("PUT …/teaching-profile/framing (R215)", () => {
+  type Framing = {
+    period: { kind: string; from?: string; until?: string } | null;
+    position: string | null;
+    all_levels: boolean;
+    levels: { id: string }[];
+    available_now: boolean | null;
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  const year = Number(today.slice(0, 4));
+
+  it("she states a span, a position and her Levels, and reads whether she is available now", async () => {
+    const res = await call("PUT", "/me/teaching-profile/framing", teacherToken, {
+      mode: "in_person",
+      willingness: { all_branches: false, branch_ids: [branchId] },
+      period: { kind: "date_range", from: `${year - 1}-01-01`, until: `${year + 1}-12-31` },
+      position: "assistant",
+      levels: { all_levels: false, level_ids: [levelId] },
+    });
+    expect(res.status).toBe(200);
+    const framing = (res.body as { data: { framing: Framing } }).data.framing;
+    expect(framing.period).toMatchObject({ kind: "date_range", from: `${year - 1}-01-01`, until: `${year + 1}-12-31` });
+    expect(framing.position).toBe("assistant");
+    expect(framing.all_levels).toBe(false);
+    expect(framing.levels.map((l) => l.id)).toEqual([levelId]);
+    expect(framing.available_now).toBe(true);
+  });
+
+  it("a span in the past reads as not available now; an administrator may say it for her", async () => {
+    const res = await call("PUT", `/admin/users/${teacherId}/teaching-profile/framing`, adminToken, {
+      mode: "online",
+      period: { kind: "date_range", from: "2001-01-01", until: "2001-06-30" },
+    });
+    expect(res.status).toBe(200);
+    const framing = (res.body as { data: { framing: Framing } }).data.framing;
+    expect(framing.available_now).toBe(false);
+    expect(framing.all_levels).toBe(true);
+    expect(framing.position).toBeNull();
+  });
+
+  it("refuses an inverted span and a retired Level, and is not open to someone without the teaching role", async () => {
+    expect(
+      (await call("PUT", "/me/teaching-profile/framing", teacherToken, {
+        mode: "online",
+        period: { kind: "date_range", from: "2026-06-30", until: "2026-01-01" },
+      })).status,
+    ).toBe(400);
+    expect(
+      (await call("PUT", "/me/teaching-profile/framing", teacherToken, {
+        mode: "online",
+        levels: { all_levels: false, level_ids: [randomUUID()] },
+      })).status,
+    ).toBe(400);
+    expect((await call("PUT", "/me/teaching-profile/framing", adminToken, { mode: "online" })).status).toBe(403);
   });
 });

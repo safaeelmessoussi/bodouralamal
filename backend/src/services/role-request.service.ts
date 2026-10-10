@@ -1,3 +1,4 @@
+import { writeFramingPreference } from './framing-preference.service.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { ConsentMethod, ConsentType, RefreshRevokedReason } from '../generated/prisma/enums.js';
 import { knownBirthDate } from '../lib/birth-date.js';
@@ -446,26 +447,9 @@ export async function requestFurtherRole(
     }
 
     if (input.kind === 'teaching') {
-      const framing = input.teaching.framing;
-      const physical = framing.mode !== 'online' ? framing.willingness : null;
-      const branchIds = physical && !physical.all_branches ? physical.branch_ids : [];
-      if (branchIds.length > 0) {
-        const live = await tx.branch.count({ where: { id: { in: branchIds }, deletedAt: null } });
-        if (live !== branchIds.length) {
-          throw new AppError('VALIDATION_FAILED', 'framing branch_ids must each name a live branch');
-        }
-      }
-      // What she says NOW replaces what she said before (planning data, R115).
-      await tx.framingPreferenceBranch.deleteMany({ where: { userId: me.id } });
-      await tx.framingPreference.deleteMany({ where: { userId: me.id } });
-      await tx.framingPreference.create({
-        data: {
-          userId: me.id,
-          mode: framing.mode,
-          allBranches: physical?.all_branches ?? false,
-          ...(branchIds.length > 0 ? { branches: { create: branchIds.map((branchId) => ({ branchId })) } } : {}),
-        },
-      });
+      // What she says NOW replaces what she said before (planning data,
+      // R115; R215 — with when, which position and which Levels).
+      await writeFramingPreference(tx, me.id, input.teaching.framing);
     }
 
     if (input.kind === 'administration' && input.administration.branch_id !== null) {

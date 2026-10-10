@@ -1,3 +1,4 @@
+import { AuthorPicker, type AuthorValue } from '../components/content/author-picker.js';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { kindOf, type ContentKind } from '../adapters/content.js';
@@ -106,6 +107,7 @@ function ContentEditDialog({
   onCancel,
   onSave,
   facts,
+  token,
 }: {
   row: LibraryRow;
   levels: { value: string; label: string }[];
@@ -131,7 +133,10 @@ function ContentEditDialog({
     description: string;
     academicYearId: string;
     branchIds: string[];
+    author: AuthorValue;
   }) => void;
+  /** R215 — the directory the author is found in is the administration's. */
+  token: string | null;
 }): ReactNode {
   const pristine = {
     title: row.title,
@@ -150,6 +155,12 @@ function ContentEditDialog({
     description: row.description ?? '',
     academicYearId: row.academic_year_id,
     branchIds: row.branch_id === null ? [] : [row.branch_id, ...(row.additional_branches ?? []).map((b) => b.id)],
+    // R215 — who made it, from the row.
+    author: {
+      id: row.author_id ?? null,
+      name: row.author_name ?? null,
+      role: (row.author_role ?? '') as AuthorValue['role'],
+    },
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
@@ -292,6 +303,10 @@ function ContentEditDialog({
         value={form.visibility}
         onChange={(v) => setForm((f) => ({ ...f, visibility: v }))}
       />
+      {/* R215 — who made it (an administrator's choice: the directory is hers). */}
+      {mayAssignGlobal ? (
+        <AuthorPicker value={form.author} onChange={(author) => setForm((f) => ({ ...f, author }))} token={token} />
+      ) : null}
     </FormDialog>
   );
 }
@@ -310,6 +325,10 @@ interface LibraryRow {
    * the visibility control stays hers, and this is what she reads beside it.
    */
   media_consent_missing: boolean | null;
+  /** R215 — who made it: public name, capacity, and (staff) id. */
+  author_name?: string | null;
+  author_role?: string | null;
+  author_id?: string | null;
   level_id: string;
   /** R167 §5 — «لكل مستويات الفئة». */
   whole_category: boolean;
@@ -574,6 +593,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     description: string;
     academicYearId: string;
     branchIds: string[];
+    author: AuthorValue;
   }): Promise<void> {
     if (!editing) return;
     setBusy(true);
@@ -610,6 +630,12 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
             : {}),
           ...(patch.academicYearId !== editing.academic_year_id ? { academic_year_id: patch.academicYearId } : {}),
           ...branchesPatch(editing, patch.branchIds),
+          // R215 — sent only when the person or the capacity changed.
+          ...(patch.author.id !== (editing.author_id ?? null)
+            ? { author_id: patch.author.id, author_role: patch.author.id === null || patch.author.role === '' ? null : patch.author.role }
+            : patch.author.role !== (editing.author_role ?? '')
+              ? { author_role: patch.author.role === '' ? null : patch.author.role }
+              : {}),
         },
         accessToken,
       );
@@ -796,6 +822,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           busy={busy}
           onCancel={() => setEditing(null)}
           onSave={(patch) => void confirmEdit(patch)}
+          token={accessToken}
         />
       )}
 

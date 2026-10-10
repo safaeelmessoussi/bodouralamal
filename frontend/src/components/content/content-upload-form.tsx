@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import type { ScopeValue } from '../../hooks/use-scope-options.js';
+import { AuthorPicker, authorMeta, NO_AUTHOR, type AuthorValue } from './author-picker.js';
 import { FileUploader } from './file-uploader.js';
 import { GLOBAL, useContentScope } from './content-scope-fields.js';
 
@@ -89,11 +90,19 @@ export function ContentUploadForm({
     ...(replacing ? { lockedVisibility: replacing.visibility } : {}),
   });
 
-  const uploadMeta = { ...meta, ...(replacing ? { replaces_content_id: replacing.id } : {}) };
+  // R215 — who made it; the directory it searches is the administration's.
+  const [author, setAuthor] = useState<AuthorValue>(NO_AUTHOR);
+  const pickAuthor = mayAssignGlobal && !locked;
+  const uploadMeta = {
+    ...meta,
+    ...(replacing ? { replaces_content_id: replacing.id } : {}),
+    ...(pickAuthor ? authorMeta(author) : {}),
+  };
 
   return (
     <>
       {fields}
+      {pickAuthor ? <AuthorPicker value={author} onChange={setAuthor} token={token} /> : null}
 
       <FileUploader
         meta={uploadMeta}

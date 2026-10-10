@@ -8,7 +8,7 @@ import { HumanityDiagram } from '../history/humanity-diagram.js';
 import { SURAH_DIAGRAMS } from '../history/surah-diagrams.js';
 import { Button } from '../ui/button.js';
 import { Icon } from '../ui/icon.js';
-import { ContentCard } from './content-card.js';
+import { authorLine, ContentCard } from './content-card.js';
 
 /** An item of the library filed under a Surah, with the Subject it was taught in. */
 export type SurahItem = ContentItem & { subjectName: string | null };
@@ -206,6 +206,7 @@ function AudioTrack({
         <p className="surah-track__title">{item.title}</p>
         {item.description ? <p className="surah-track__description">{item.description}</p> : null}
         <p className="surah-track__meta">
+          {item.teacher_display_name ? <span>{authorLine(item)}</span> : null}
           {item.subjectName ? <span>{item.subjectName}</span> : null}
           <time dateTime={item.published_on}>{formatDate(item.published_on)}</time>
         </p>

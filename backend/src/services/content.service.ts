@@ -248,7 +248,22 @@ export interface InitiateInput {
     surahId?: number;
     /** TD-9: replacing a file mints a NEW key and quarantines the old object. */
     replacesContentId?: string;
+    /** R215 — who made it, and in which capacity. */
+    authorId?: string;
+    authorRole?: ContentAuthorRoleValue;
   };
+}
+
+/** R215 — the capacity in which a person made an item. */
+export type ContentAuthorRoleValue = 'teacher' | 'assistant' | 'admin' | 'student';
+
+/** R215 — an author must be a live person; a capacity needs a person. */
+async function assertAuthor(prisma: Pick<PrismaClient, 'user'>, authorId: string | null | undefined): Promise<void> {
+  if (!authorId) return;
+  const live = await prisma.user.count({ where: { id: authorId, deletedAt: null } });
+  if (live !== 1) {
+    throw new AppError('VALIDATION_FAILED', 'the author must be a live account', { reason: 'UNKNOWN_AUTHOR' });
+  }
 }
 
 export interface InitiateResult {
@@ -331,6 +346,9 @@ export async function initiateUpload(
    * `SUBJECT_NOT_IN_LEVEL`. With no Level teaching it, the first Level stays,
    * and the check below refuses the pair in words, as before.
    */
+  // R215 — the author named is a live person.
+  await assertAuthor(prisma, input.meta.authorId);
+
   const wholeCategory = input.meta.levelId === undefined;
   const teaching =
     wholeCategory && input.meta.subjectId !== null
@@ -434,6 +452,9 @@ export async function initiateUpload(
       ...(input.meta.surahId !== undefined ? { surah_id: input.meta.surahId } : {}),
       ...(input.meta.replacesContentId ? { replaces: input.meta.replacesContentId } : {}),
       ...(replacesVersion === undefined ? {} : { replaces_version: replacesVersion }),
+      // R215 — decided at initiation, like every other fact here.
+      ...(input.meta.authorId ? { author_id: input.meta.authorId } : {}),
+      ...(input.meta.authorId && input.meta.authorRole ? { author_role: input.meta.authorRole } : {}),
     },
     signingKey,
   );
@@ -828,6 +849,9 @@ async function createContentFromFinalization(
           : {}),
         // R177 §7 — decided at initiation, like every other fact here.
         surahId: claims.surah_id ?? null,
+        // R215 — who made it, decided at initiation.
+        authorId: claims.author_id ?? null,
+        authorRole: claims.author_id ? ((claims.author_role as ContentAuthorRoleValue | undefined) ?? null) : null,
         storageBucket: claims.bucket,
         storageKey: canonicalKey,
         originalFilename: claims.filename,
@@ -1285,6 +1309,9 @@ export interface ContentMetadataPatch {
   additionalLevelIds?: string[];
   /** R201 — the description; `null` clears it. */
   description?: string | null;
+  /** R215 — who made it (`null` names nobody) and in which capacity. */
+  authorId?: string | null;
+  authorRole?: ContentAuthorRoleValue | null;
   /** R201 — the academic year it is filed under. */
   academicYearId?: string;
   /** R201 — its branches, home first; `[]` is Global (§4.9). Replaces the set. */
@@ -1400,7 +1427,21 @@ export async function updateContentMetadata(
       data: branchIds.slice(1).map((branchId) => ({ contentId, branchId })),
     });
   };
+  // R215 — who made it. A new person comes with their capacity (or none);
+  // naming nobody clears both; a capacity alone needs the person already named.
+  await assertAuthor(prisma, patch.authorId);
+  let authorData: { authorId?: string | null; authorRole?: ContentAuthorRoleValue | null } = {};
+  if (patch.authorId !== undefined) {
+    authorData = patch.authorId === null ? { authorId: null, authorRole: null } : { authorId: patch.authorId, authorRole: patch.authorRole ?? null };
+  } else if (patch.authorRole !== undefined) {
+    const current = await prisma.educationalContent.findUniqueOrThrow({ where: { id: contentId }, select: { authorId: true } });
+    if (current.authorId === null && patch.authorRole !== null) {
+      throw new AppError('VALIDATION_FAILED', 'a capacity needs the person it describes', { reason: 'ROLE_WITHOUT_AUTHOR' });
+    }
+    authorData = { authorRole: patch.authorRole };
+  }
   const scopeData = {
+    ...authorData,
     ...(patch.description !== undefined ? { description: patch.description } : {}),
     ...(patch.academicYearId !== undefined ? { academicYearId: patch.academicYearId } : {}),
     ...(branchIds !== null ? { branchId: branchIds[0] ?? null } : {}),

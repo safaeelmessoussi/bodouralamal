@@ -604,5 +604,9 @@
  ],
  "content.history.era.rashidun": "Lxilafa f nnhj n nnubuwwa",
  "content.bySurah.section.diagrams": "Iɣawasn n ssurt",
- "content.bySurah.section.slides": "Tisniwin n ilmuden"
+ "content.bySurah.section.slides": "Tisniwin n ilmuden",
+ "content.author.role.teacher": "Aslmd agejdan",
+ "content.author.role.assistant": "Aɛawn ɣ uslmd",
+ "content.author.role.admin": "Tanbaḍt",
+ "content.author.role.student": "Tamstafidt"
 }

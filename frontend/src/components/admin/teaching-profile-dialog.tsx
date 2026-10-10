@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-
-
 import {
   fetchTeachingProfile,
   saveTeachingProfile,
+  saveUserFraming,
   type AvailabilityRange,
 } from '../../adapters/teaching-profile.js';
 import { t } from '../../i18n/index.js';
 import { AvailabilityEditor } from '../teaching/availability-editor.js';
-import { FramingPreferenceSummary } from '../teaching/framing-preference-summary.js';
+import { FramingPreferenceEditor } from '../teaching/framing-preference-editor.js';
 import { FormDialog } from '../ui/form-dialog.js';
 import { CapabilitiesEditor } from '../teaching/capabilities-editor.js';
 import { isDirty } from '../../lib/form-dirty.js';
@@ -68,6 +67,7 @@ export function TeachingProfileDialog({
   token,
   onClose,
   onSaved,
+  onFramingSaved,
 }: {
   userId: string;
   userName: string;
@@ -76,6 +76,8 @@ export function TeachingProfileDialog({
   token: string | null;
   onClose: () => void;
   onSaved: () => void;
+  /** R215 — the framing preference saved on its own (the dialog stays open). */
+  onFramingSaved?: () => void;
 }): ReactNode {
   const [subjectIds, setSubjectIds] = useState<string[]>([]);
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
@@ -163,7 +165,16 @@ export function TeachingProfileDialog({
         })();
       }}
     >
-      <FramingPreferenceSummary framing={framing} />
+      {/* R215 — the administration may say it too. */}
+      <FramingPreferenceEditor
+        framing={framing}
+        onSave={async (payload) => {
+          const saved = await saveUserFraming(userId, payload, token);
+          setFraming(saved.framing);
+          onFramingSaved?.();
+          return saved.framing;
+        }}
+      />
 
       {/* **The shared editor**, for the same reason `AvailabilityEditor` is
           shared: a مؤطِّرة now has these two controls on her own page, and a

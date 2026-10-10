@@ -296,3 +296,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-10 — R213 §2: «سورة مريم» in «نظرة شاملة»
 - `seal/makki/maryam` from the Owner's 53 lesson slides: four lines and five diagrams (al-Kahf link; opening and Zakariya; Maryam and 'Isa; the Day of Regret and the prophets; the rest of the Surah).
 - Every ﴿…﴾ in `humanity-data.ts` checked against the Mushaf (Tanzil, letters only): one quote joining an-Nisa 157–158 split in two; «مَلِكِ يَوْمِ الدِّينِ» is Warsh's reading and stays.
+
+## 2026-10-10 — SRS Revision 215: availability with period/position/levels; content authors
+- Migrations `r215_framing_availability` (period, position, all_levels + `framing_preference_level`, CHECK and commit-time level rule) and `r215_content_author` (`author_id`, `author_role`, CHECK).
+- `framing-preference.service.ts` writes for registration, role request, `PUT /me/teaching-profile/framing`, `PUT /admin/users/{id}/teaching-profile/framing`; reads add `available_now`. `TeachingSectionFields` asks period/position/levels; `FramingPreferenceEditor` in «الأوقات المتاحة» and the admin dialog.
+- «المؤطِّرات»: «الفرع» + «الإتاحة هذا الفصل» (`teacherMatches`), all pages loaded, «هذا الفصل» column. «مجموعات المستويات»: «المستفيدات» last.
+- Content: `AuthorPicker` (upload and edit, administrators), cards show «الاسم · الصفة»; recordings name their lead teacher; account deletion clears authorship. Chatbot postponed.

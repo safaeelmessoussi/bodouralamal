@@ -604,5 +604,9 @@
  ],
  "content.history.era.rashidun": "Ein Kalifat nach dem Weg des Prophetentums",
  "content.bySurah.section.diagrams": "Die Schaubilder der Sure",
- "content.bySurah.section.slides": "Folien der Unterrichtsstunden"
+ "content.bySurah.section.slides": "Folien der Unterrichtsstunden",
+ "content.author.role.teacher": "Hauptlehrkraft",
+ "content.author.role.assistant": "Assistenzlehrkraft",
+ "content.author.role.admin": "Verwaltung",
+ "content.author.role.student": "Teilnehmerin"
 }

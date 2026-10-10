@@ -415,6 +415,34 @@ enum FramingMode {
   @@map("framing_mode")
 }
 
+/// R215 — the capacity in which a person made an educational content.
+enum ContentAuthorRole {
+  teacher
+  assistant
+  admin
+  student
+
+  @@map("content_author_role")
+}
+
+/// R215 — the span a framing preference speaks for.
+enum FramingPeriod {
+  academic_year
+  academic_period
+  date_range
+
+  @@map("framing_period")
+}
+
+/// R215 — main teacher, assistant, or either.
+enum FramingPosition {
+  teacher
+  assistant
+  both
+
+  @@map("framing_position")
+}
+
 /// **R97 — what an online occurrence carries.** Meaningful only when
 /// `delivery_mode = 'online'`, and refused otherwise by CHECK: an in-person
 /// class has no media mode, and a nullable column that is sometimes set for one
@@ -564,6 +592,8 @@ enum ConsumedTokenPurpose {
 /// they are login-less and reached only through an approved FamilyLink
 /// (§4.3, BR-5).
 model User {
+  /// R215 — the educational content this person made.
+  authoredContent      EducationalContent[]        @relation("EducationalContentAuthor")
   /// R88 — the teaching profile: planning data, never authority.
   subjectCapabilities  TeacherSubjectCapability[]
   categoryCapabilities TeacherCategoryCapability[]
@@ -1058,7 +1088,7 @@ model Branch {
 
   rooms Room[]
 
-  teachingGroups TeachingGroup[]
+  teachingGroups       TeachingGroup[]
   // Revision 43 (expand phase) — see the educational-model block below.
   administrativeGroups AdministrativeGroup[]
   courseSchedules      RecurringCourseSchedule[]
@@ -1072,7 +1102,7 @@ model Branch {
   courseScheduleScopes CourseScheduleBranch[]
   /// Revision 39 — applicants who REQUESTED this branch at registration. Not
   /// the people placed here; that is `groups → StudentGroup`.
-  intendedBy           User[]                    @relation("UserIntendedBranch")
+  intendedBy           User[]                     @relation("UserIntendedBranch")
   framingWillingness   FramingPreferenceBranch[]
   /// Revision 64 — the branch a child-registration request asked for.
   childApplications    ChildApplication[]
@@ -1193,10 +1223,12 @@ model Category {
 /// Level numbering is NOT uniform across categories — Women 0–7, Teens 1–6,
 /// Children 0–6. No logic may assume every category has a level 0 (§4.4b).
 model Level {
-  id         String   @id @default(uuid()) @db.Uuid
-  name       String   @db.VarChar(120)
-  categoryId String   @map("category_id") @db.Uuid
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  /// R215 — framing preferences that name this Level.
+  framingPreferences FramingPreferenceLevel[]
+  id                 String                   @id @default(uuid()) @db.Uuid
+  name               String                   @db.VarChar(120)
+  categoryId         String                   @map("category_id") @db.Uuid
+  category           Category                 @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
   /// Checked generically by progression logic — never hardcoded against a
   /// level name (§4.4b).
@@ -1210,17 +1242,17 @@ model Level {
   /// **R180 §4 — the Level's age range**, INFORMATIONAL (R170 §6, R64.7: gates
   /// nothing). A Category's range is derived from its first and last Level.
   /// 0–120 whole years, never inverted (`level_age_range_check`).
-  minAge Int? @map("min_age") @db.SmallInt
-  maxAge Int? @map("max_age") @db.SmallInt
+  minAge           Int?             @map("min_age") @db.SmallInt
+  maxAge           Int?             @map("max_age") @db.SmallInt
   /// **R180 §6 — what this Level is on the journey**, as a column (§4.4b):
   /// `step`, the ordinary next rung; `preparatory`, a programme (such as a
   /// literacy programme) that leads INTO the Category's first step and is not
   /// required of a learner who enters there.
-  journeyRole LevelJourneyRole @default(step) @map("journey_role")
+  journeyRole      LevelJourneyRole @default(step) @map("journey_role")
   /// **R181 §6 — «مقرر الحفظ» in Hizb**, the Owner's measure of a Level's
   /// memorisation curriculum (0–60; `level_memorisation_hizb_check`).
   /// Informational: the Surah list stays what the platform reads.
-  memorisationHizb Int? @map("memorisation_hizb") @db.SmallInt
+  memorisationHizb Int?             @map("memorisation_hizb") @db.SmallInt
 
   // NOTE: the per-level passing grade is NOT a column here — §7 defines Level
   // as carrying only `name`, `gender_restriction`, and `display_order`, and
@@ -1310,7 +1342,7 @@ model Subject {
   createdById String?   @map("created_by") @db.Uuid
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  levels LevelSubject[]
+  levels     LevelSubject[]
   /// R172 §1 — the Categories this Subject is taught to WHOLE.
   categories CategorySubject[]
 
@@ -1490,8 +1522,8 @@ model TeachingGroup {
   /// were back-filled from their own classes' branch where that was one branch,
   /// and stay «بلا فرع» otherwise; a new circle names one. The branch a CLASS
   /// is held at is still the class's own (§4.4c); this is where the circle LIVES.
-  branchId String? @map("branch_id") @db.Uuid
-  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  branchId  String? @map("branch_id") @db.Uuid
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
   displayOrder Int? @map("display_order")
 
@@ -3173,9 +3205,9 @@ model Event {
   administrativeGroupScopes EventAdministrativeGroup[]
 
   /// R82 — the notices sent about this event, if the actor chose to send any.
-  notifications Notification[]
+  notifications     Notification[]
   /// R199 §5 — the occurrences this عطلة cancelled.
-  cancelledSessions Session[] @relation("HolidayCancellations")
+  cancelledSessions Session[]      @relation("HolidayCancellations")
 
   @@index([startDate, visibility])
   @@map("event")
@@ -3748,9 +3780,11 @@ model GradeQuestionScore {
 /// Arabic label is derived from it in the interface rather than stored, so a
 /// third period would need no schema change and no migration.
 model AcademicPeriod {
-  id             String       @id @default(uuid()) @db.Uuid
-  academicYearId String       @map("academic_year_id") @db.Uuid
-  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  /// R215 — framing preferences stated for this semester.
+  framingPreferences FramingPreference[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  academicYearId     String              @map("academic_year_id") @db.Uuid
+  academicYear       AcademicYear        @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
 
   /// 1 = the first semester, 2 = the second. Unique within its year.
   sequence Int
@@ -3778,18 +3812,20 @@ model AcademicPeriod {
 }
 
 model AcademicYear {
-  exams     Exam[]
+  /// R215 — framing preferences stated for this year.
+  framingPreferences FramingPreference[]
+  exams              Exam[]
   /// R122 — the year's semesters. The year itself carries NO dates: they would
   /// be a second, driftable copy of `min(start_date)`/`max(end_date)` here.
-  periods   AcademicPeriod[]
-  id        String           @id @default(uuid()) @db.Uuid
+  periods            AcademicPeriod[]
+  id                 String              @id @default(uuid()) @db.Uuid
   /// Validated `YYYY-YYYY`; free-text year strings are prohibited (§4.10).
   /// **Unique among live rows** (partial index, R137) — a soft-deleted year
   /// must not haunt its own label forever, the same reasoning
   /// `SchedulingType.name` states beside its own partial index.
-  label     String           @db.VarChar(9)
+  label              String              @db.VarChar(9)
   /// Exactly one `true` row application-wide — partial unique index in SQL.
-  isCurrent Boolean          @default(false) @map("is_current")
+  isCurrent          Boolean             @default(false) @map("is_current")
 
   /// TD-15 — R137 gives this row real writes (create/edit/delete) for the
   /// first time; two administrators correcting the label or the current-year
@@ -3847,8 +3883,8 @@ model EducationalContent {
 
   /// NULL = the Global / بدون فرع scope. Assignable only by Admins and Super
   /// Admins; Teachers are locked to their own branch scope (BR-20, §4.9).
-  branchId String? @map("branch_id") @db.Uuid
-  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  branchId           String?                    @map("branch_id") @db.Uuid
+  branch             Branch?                    @relation(fields: [branchId], references: [id], onDelete: Restrict)
   /// R198 §2 — the item's OTHER branches; `branchId` stays its home (NULL =
   /// Global, which holds none — a trigger refuses both, in hand-written SQL).
   additionalBranches EducationalContentBranch[]
@@ -3869,6 +3905,16 @@ model EducationalContent {
   /// filters by it. Partial index in the migration SQL.
   surahId Int?        @map("surah_id")
   surah   QuranSurah? @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
+
+  /// **R215 — who made it** (the Owner, 2026-10-10): the مؤطِّرة who recorded a
+  /// class, or the teacher, administrator or student who prepared a file.
+  /// Optional — an item may say nobody. Shown to every reader under the
+  /// person's PUBLIC display name (§7), never the legal one. `createdById` is
+  /// who put it on the platform; this is whose work it is.
+  authorId   String?            @map("author_id") @db.Uuid
+  author     User?              @relation("EducationalContentAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  /// R215 — in which capacity: main teacher, assistant, administrator, student.
+  authorRole ContentAuthorRole? @map("author_role")
 
   /// Immutable hash-segmented key (TD-9). Replacing a file mints a NEW key and
   /// quarantines the old object — keys are never reused or overwritten
@@ -3906,6 +3952,7 @@ model EducationalContent {
 
   @@index([levelId, academicYearId, branchId])
   @@index([visibility])
+  @@index([authorId])
   @@map("educational_content")
 }
 
@@ -4213,10 +4260,43 @@ model FramingPreference {
   allBranches Boolean                   @default(false) @map("all_branches")
   branches    FramingPreferenceBranch[]
 
+  /// **R215 — when she is available** (the Owner, 2026-10-10): the current
+  /// academic year, the current semester, or a span of dates. «Current» is
+  /// resolved when she says it and STORED (`academicYearId` /
+  /// `academicPeriodId`), so next semester the statement is about last
+  /// semester and no longer reads as now. `null` — not stated (every
+  /// preference recorded before R215). A CHECK keeps each kind to its columns.
+  period           FramingPeriod?           @map("period")
+  academicYearId   String?                  @map("academic_year_id") @db.Uuid
+  academicYear     AcademicYear?            @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  academicPeriodId String?                  @map("academic_period_id") @db.Uuid
+  academicPeriod   AcademicPeriod?          @relation(fields: [academicPeriodId], references: [id], onDelete: Restrict)
+  availableFrom    DateTime?                @map("available_from") @db.Date
+  availableUntil   DateTime?                @map("available_until") @db.Date
+  /// R215 — main teacher, assistant, or either. `null` — not stated.
+  position         FramingPosition?         @map("position")
+  /// R215 — every Level, or only `levels`. Planning data: never authority.
+  allLevels        Boolean                  @default(true) @map("all_levels")
+  levels           FramingPreferenceLevel[]
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("framing_preference")
+}
+
+/// R215 — the Levels she is willing to teach, when not every Level.
+model FramingPreferenceLevel {
+  userId     String            @map("user_id") @db.Uuid
+  preference FramingPreference @relation(fields: [userId], references: [userId], onDelete: Restrict)
+  levelId    String            @map("level_id") @db.Uuid
+  level      Level             @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([userId, levelId])
+  @@index([levelId])
+  @@map("framing_preference_level")
 }
 
 /// Explicit current-branch willingness for a general framing preference.

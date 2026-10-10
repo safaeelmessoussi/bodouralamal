@@ -18,6 +18,7 @@ import {
   EMPTY_TEACHING_SECTION,
   StudentSectionFields,
   TeachingSectionFields,
+  framingLevelOptions,
   framingPayload,
   studentSectionPayload,
   useCircleSlots,
@@ -133,6 +134,8 @@ export function RequestRolePage(): ReactNode {
   const [failure, setFailure] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
+  // R215 — the Levels a framing preference may name.
+  const [framingLevels, setFramingLevels] = useState<{ id: string; label: string }[]>([]);
   const load = useCallback(async () => {
     setLoadFailed(false);
     try {
@@ -147,6 +150,7 @@ export function RequestRolePage(): ReactNode {
       setNeedsBirthDate(profile.birth_date === null);
       setBranches(live);
       setCategories(bootstrap.categories);
+      setFramingLevels(framingLevelOptions(bootstrap));
     } catch {
       // All four are required: offering the form without them would let her
       // fill it in and fail at submit.
@@ -310,6 +314,7 @@ export function RequestRolePage(): ReactNode {
                     value={teaching}
                     onChange={setTeaching}
                     branches={branches}
+                    levels={framingLevels}
                     errors={touched ? errors : {}}
                   />
                 </fieldset>

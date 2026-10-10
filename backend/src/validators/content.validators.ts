@@ -83,6 +83,9 @@ export const initiateUploadSchema = z
         surah_id: z.number().int().min(1).max(114).nullable().optional(),
         /** TD-9 replacement: a new key for an existing record, never an overwrite. */
         replaces_content_id: uuid.optional(),
+        /** R215 — who made it, and in which capacity; optional, either may be absent. */
+        author_id: uuid.nullable().optional(),
+        author_role: z.enum(['teacher', 'assistant', 'admin', 'student']).nullable().optional(),
       })
       .strict()
       .refine((meta) => (meta.level_id === undefined) !== (meta.category_id === undefined), {
@@ -92,6 +95,10 @@ export const initiateUploadSchema = z
       .refine((meta) => (meta.branch_id === undefined) !== (meta.branch_ids === undefined), {
         message: 'name exactly one of branch_id and branch_ids',
         path: ['branch_ids'],
+      })
+      .refine((meta) => meta.author_role == null || meta.author_id != null, {
+        message: 'a capacity needs the person it describes',
+        path: ['author_role'],
       }),
   })
   .strict();

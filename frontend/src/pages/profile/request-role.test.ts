@@ -54,7 +54,7 @@ describe('what is asked of her', () => {
   it('a teaching or administration request needs no consent and no birth date', () => {
     expect(validateRequest({ ...base, kind: 'administration' })).toEqual({});
     expect(
-      validateRequest({ ...base, kind: 'teaching', teaching: { mode: 'online', allBranches: false, branchIds: [] } }),
+      validateRequest({ ...base, kind: 'teaching', teaching: { ...EMPTY_TEACHING_SECTION, mode: 'online' } }),
     ).toEqual({});
   });
 });
@@ -62,7 +62,7 @@ describe('what is asked of her', () => {
 describe('what is sent is decided by the chosen role alone', () => {
   it('another section that still holds a value is never sent', () => {
     const body = buildRequest(
-      { ...base, kind: 'administration', student, teaching: { mode: 'online', allBranches: false, branchIds: [] } },
+      { ...base, kind: 'administration', student, teaching: { ...EMPTY_TEACHING_SECTION, mode: 'online' } },
       'b-9',
       'text-1',
     );

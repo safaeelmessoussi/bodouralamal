@@ -153,6 +153,12 @@ export interface LibraryItem {
    * people who decide the visibility and to nobody else.
    */
   mediaConsentMissing: boolean | null;
+  /** R215 — who made it: their id for staff only (the edit form), their
+   *  public display name for everyone, and in which capacity. */
+  authorId: string | null;
+  authorPublicName: string | null;
+  authorNameArabic: string | null;
+  authorRole: string | null;
   levelId: string;
   /** R167 §5 — addressed to every Level of `categoryId`, not to `levelId` alone. */
   wholeCategory: boolean;
@@ -457,6 +463,12 @@ export async function listLibrary(
              c."origin"::text            AS "origin",
              -- R170 §3: the warning reaches STAFF and nobody else.
              ${staff ? Prisma.sql`c."media_consent_missing"` : Prisma.sql`NULL::boolean`} AS "mediaConsentMissing",
+             -- R215 — who made it. Their PUBLIC name reaches every reader
+             -- (resolved by \`publicDisplayName\`); their id, only staff.
+             ${staff ? Prisma.sql`c."author_id"` : Prisma.sql`NULL::uuid`} AS "authorId",
+             CASE WHEN au."deleted_at" IS NULL THEN au."public_display_name" END AS "authorPublicName",
+             CASE WHEN au."deleted_at" IS NULL THEN au."name_arabic" END AS "authorNameArabic",
+             c."author_role"::text       AS "authorRole",
              c."level_id"                AS "levelId",
              c."whole_category"          AS "wholeCategory",
              COALESCE((
@@ -500,6 +512,7 @@ export async function listLibrary(
       LEFT JOIN "subject" s   ON s."id"  = c."subject_id"
       JOIN "academic_year" y  ON y."id"  = c."academic_year_id"
       LEFT JOIN "branch" b    ON b."id"  = c."branch_id"
+      LEFT JOIN "user" au     ON au."id" = c."author_id"
       ${where}
       -- **The reader's sort comes FIRST, then the bucket.** R76's ordering is
       -- what she asked for; the bucket is the default grouping she gets when

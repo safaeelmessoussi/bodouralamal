@@ -1,5 +1,6 @@
 import { api } from '../lib/api.js';
 import type { FramingPreferenceView } from '../types/framing.js';
+import type { FramingPayload } from '../components/registration/role-sections.js';
 
 /**
  * The teaching profile (R88) — **planning data, not permissions**.
@@ -129,6 +130,30 @@ export async function saveMyAvailability(
     method: 'PUT',
     token,
     body: { availability },
+  });
+  return body.data;
+}
+
+/**
+ * **R215 — her framing preference, replaced whole**: when, in which position,
+ * remote or in class, which branches and Levels. By her
+ * (`PUT /me/teaching-profile/framing`) or by an administrator
+ * (`PUT /admin/users/{id}/teaching-profile/framing`). Planning data only.
+ */
+export async function saveMyFraming(framing: FramingPayload, token: string | null): Promise<OwnTeachingProfile> {
+  const body = await api<{ data: OwnTeachingProfile }>('/me/teaching-profile/framing', { method: 'PUT', token, body: framing });
+  return body.data;
+}
+
+export async function saveUserFraming(
+  userId: string,
+  framing: FramingPayload,
+  token: string | null,
+): Promise<TeachingProfile> {
+  const body = await api<{ data: TeachingProfile }>(`/admin/users/${encodeURIComponent(userId)}/teaching-profile/framing`, {
+    method: 'PUT',
+    token,
+    body: framing,
   });
   return body.data;
 }

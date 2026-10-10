@@ -7,6 +7,7 @@ import {
 } from '../../adapters/teaching-profile.js';
 import { listSubjects } from '../../adapters/reference-data.js';
 import { listCategories } from '../../adapters/taxonomy.js';
+import { fetchBranches } from '../../adapters/branches.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { BranchScopeCell } from '../../components/admin/branch-scope-cell.js';
 import { TeachingProfileDialog } from '../../components/admin/teaching-profile-dialog.js';
@@ -64,8 +65,11 @@ export function TeachersPage(): ReactNode {
    */
   const [sort, setSort] = useState<SortState | null>(null);
   const [query, setQuery] = useState('');
-  const [subjectFilter, setSubjectFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  // R215 — «الفرع» and «هذا الفصل» (the Owner: by Subject and Category it
+  // was «not logic»; what is asked is where she can teach and whether now).
+  const [branchFilter, setBranchFilter] = useState('');
+  const [nowFilter, setNowFilter] = useState<'' | 'yes' | 'no' | 'unknown'>('');
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
 
   /** Every listed مؤطِّرة's profile, so the table can summarise it. */
@@ -83,18 +87,26 @@ export function TeachersPage(): ReactNode {
       // search, and the server refuses it — sending it would turn a deliberate
       // limit into an error message mid-typing.
       const trimmed = query.trim();
-      const page = await searchDirectory(accessToken, {
-        role: 'teacher',
-        ...(trimmed.length >= 2 ? { q: trimmed } : {}),
-      }, 1, sort);
-      setRows(page.data);
+      // R215 — EVERY مؤطِّرة, page after page: the filters below narrow by
+      // planning data the list does not carry, so narrowing one page of 25
+      // would hide whoever was on page two.
+      const all: DirectoryEntry[] = [];
+      for (let page = 1; ; page += 1) {
+        const batch = await searchDirectory(accessToken, {
+          role: 'teacher',
+          ...(trimmed.length >= 2 ? { q: trimmed } : {}),
+        }, page, sort);
+        all.push(...batch.data);
+        if (batch.data.length === 0 || page * batch.meta.page_size >= batch.meta.total) break;
+      }
+      setRows(all);
       setStatus('ready');
 
       // One profile read per listed person. They are small, bounded by the
       // page, and the alternative — a summary column the list endpoint would
       // have to carry — puts planning data on a general-purpose contract.
       const loaded = await Promise.all(
-        page.data.map((u) =>
+        all.map((u) =>
           fetchTeachingProfile(u.id, accessToken)
             .then((p) => [u.id, p] as const)
             .catch(() => null),
@@ -111,32 +123,25 @@ export function TeachersPage(): ReactNode {
   }, [load]);
 
   useEffect(() => {
-    void Promise.all([listSubjects(accessToken), listCategories(accessToken)])
-      .then(([s, c]) => {
+    void Promise.all([listSubjects(accessToken), listCategories(accessToken), fetchBranches()])
+      .then(([s, c, b]) => {
         setSubjects(s.map((x) => ({ id: x.id, name: x.name })));
         setCategories(c.map((x) => ({ id: x.id, name: x.name })));
+        setBranches(b.map((x) => ({ id: x.id, name: x.name })));
       })
       .catch(() => undefined);
   }, [accessToken]);
 
   /**
-   * The Subject and Category filters narrow by **declared capability**, which
-   * only this screen holds — so they are applied here rather than sent to a
-   * list endpoint that knows nothing about planning data. That is not the
-   * "client filtering a list it was handed" defect: the population came from
-   * the server, and this narrows it by a fact the server did not carry.
+   * **R215 — «الفرع» and «هذا الفصل»** narrow by planning data only this
+   * screen holds (each مؤطِّرة's profile), so they are applied here: the
+   * population came from the server, and this narrows it by facts the list
+   * does not carry. A branch matches where she is assigned (a role over it or
+   * over every branch) or where she said she is willing to teach.
    */
   const visible = useMemo(
-    () =>
-      rows.filter((row) => {
-        const profile = profiles[row.id];
-        if (subjectFilter && !profile?.subjects.some((s) => s.id === subjectFilter)) return false;
-        if (categoryFilter && !profile?.categories.some((c) => c.id === categoryFilter)) {
-          return false;
-        }
-        return true;
-      }),
-    [rows, profiles, subjectFilter, categoryFilter],
+    () => rows.filter((row) => teacherMatches(row, profiles[row.id], branchFilter, nowFilter)),
+    [rows, profiles, branchFilter, nowFilter],
   );
 
   const actions: RowAction<DirectoryEntry>[] = [
@@ -202,6 +207,12 @@ export function TeachersPage(): ReactNode {
             cell: (r: DirectoryEntry) => chips(profiles[r.id]?.categories ?? []),
           },
           {
+            // R215 — available this semester, by what she said.
+            key: 'now',
+            header: t('admin.teachers.colNow'),
+            cell: (r: DirectoryEntry) => <NowBadge available={profiles[r.id]?.framing?.available_now ?? null} />,
+          },
+          {
             key: 'availability',
             header: t('admin.teachers.colAvailability'),
             // A count, not the ranges: seven days of ranges in a cell is a
@@ -221,11 +232,11 @@ export function TeachersPage(): ReactNode {
         status={status}
         actions={actions}
         onRetry={() => void load()}
-        filtered={query.trim() !== '' || subjectFilter !== '' || categoryFilter !== ''}
+        filtered={query.trim() !== '' || branchFilter !== '' || nowFilter !== ''}
         onClearFilters={() => {
           setQuery('');
-          setSubjectFilter('');
-          setCategoryFilter('');
+          setBranchFilter('');
+          setNowFilter('');
         }}
         toolbar={
           <>
@@ -237,21 +248,23 @@ export function TeachersPage(): ReactNode {
               hint={t('admin.users.searchHint')}
             />
             <SelectField
-              label={t('admin.teachers.filterSubject')}
-              value={subjectFilter}
-              onChange={setSubjectFilter}
+              label={t('admin.teachers.filterBranch')}
+              value={branchFilter}
+              onChange={setBranchFilter}
               options={[
                 { value: '', label: t('calendar.filters.all') },
-                ...subjects.map((s) => ({ value: s.id, label: s.name })),
+                ...branches.map((b) => ({ value: b.id, label: b.name })),
               ]}
             />
             <SelectField
-              label={t('admin.teachers.filterCategory')}
-              value={categoryFilter}
-              onChange={setCategoryFilter}
+              label={t('admin.teachers.filterNow')}
+              value={nowFilter}
+              onChange={(v) => setNowFilter(v as typeof nowFilter)}
               options={[
                 { value: '', label: t('calendar.filters.all') },
-                ...categories.map((c) => ({ value: c.id, label: c.name })),
+                { value: 'yes', label: t('framing.availableNow') },
+                { value: 'no', label: t('framing.unavailableNow') },
+                { value: 'unknown', label: t('framing.availabilityUnknown') },
               ]}
             />
           </>
@@ -273,8 +286,37 @@ export function TeachersPage(): ReactNode {
             setNotice(t('admin.teachingProfile.saved'));
             void load();
           }}
+          onFramingSaved={() => void load()}
         />
       ) : null}
     </AdminLayout>
   );
+}
+
+/** R215 — does this row pass «الفرع» and «هذا الفصل»? */
+export function teacherMatches(
+  row: Pick<DirectoryEntry, 'roles'>,
+  profile: Pick<TeachingProfile, 'framing'> | undefined,
+  branchId: string,
+  now: '' | 'yes' | 'no' | 'unknown',
+): boolean {
+  if (branchId) {
+    const assigned = row.roles.some((r) => r.role === 'teacher' && (r.branch_id === null || r.branch_id === branchId));
+    const framing = profile?.framing ?? null;
+    const willing =
+      framing !== null && framing.mode !== 'online' && (framing.all_branches || framing.branches.some((b) => b.id === branchId));
+    if (!assigned && !willing) return false;
+  }
+  if (now) {
+    const available = profile?.framing?.available_now ?? null;
+    if (now === 'yes' && available !== true) return false;
+    if (now === 'no' && available !== false) return false;
+    if (now === 'unknown' && available !== null) return false;
+  }
+  return true;
+}
+
+function NowBadge({ available }: { available: boolean | null }): ReactNode {
+  if (available === null) return <span className="muted">{t('framing.availabilityUnknown')}</span>;
+  return <Badge tone={available ? 'ok' : 'warn'}>{t(available ? 'framing.availableNow' : 'framing.unavailableNow')}</Badge>;
 }

@@ -57,6 +57,11 @@ export function initiate(prisma: PrismaClient, clients: StorageClients, config: 
           ...(body.content_meta.replaces_content_id
             ? { replacesContentId: body.content_meta.replaces_content_id }
             : {}),
+          // R215 — who made it.
+          ...(body.content_meta.author_id ? { authorId: body.content_meta.author_id } : {}),
+          ...(body.content_meta.author_id && body.content_meta.author_role
+            ? { authorRole: body.content_meta.author_role }
+            : {}),
         },
       },
     );
@@ -120,6 +125,9 @@ const updateContentSchema = z
       .max(40)
       .refine((ids) => new Set(ids).size === ids.length, 'a branch may be named once')
       .optional(),
+    // R215 — who made it (`null` names nobody) and in which capacity.
+    author_id: z.uuid().nullable().optional(),
+    author_role: z.enum(['teacher', 'assistant', 'admin', 'student']).nullable().optional(),
   })
   .strict();
 
@@ -137,6 +145,8 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
       description?: string | null;
       academic_year_id?: string;
       branch_ids?: string[];
+      author_id?: string | null;
+      author_role?: 'teacher' | 'assistant' | 'admin' | 'student' | null;
     };
     // An empty patch is a request that asks for nothing; answering 204 would
     // report a change that did not happen.
@@ -164,6 +174,8 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
         ...(body.description !== undefined ? { description: body.description === '' ? null : body.description } : {}),
         ...(body.academic_year_id !== undefined ? { academicYearId: body.academic_year_id } : {}),
         ...(body.branch_ids !== undefined ? { branchIds: body.branch_ids } : {}),
+        ...(body.author_id !== undefined ? { authorId: body.author_id } : {}),
+        ...(body.author_role !== undefined ? { authorRole: body.author_role } : {}),
       },
     );
     res.status(204).end();

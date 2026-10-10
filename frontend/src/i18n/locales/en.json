@@ -604,5 +604,9 @@
  ],
  "content.history.era.rashidun": "A caliphate on the way of prophethood",
  "content.bySurah.section.diagrams": "The Surah's diagrams",
- "content.bySurah.section.slides": "Lesson slides"
+ "content.bySurah.section.slides": "Lesson slides",
+ "content.author.role.teacher": "Main teacher",
+ "content.author.role.assistant": "Assistant teacher",
+ "content.author.role.admin": "Administration",
+ "content.author.role.student": "Student"
 }

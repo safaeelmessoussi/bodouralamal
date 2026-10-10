@@ -64,7 +64,8 @@ export function ContentCard({
           {item.teacher_display_name ? (
             <span className="content-card__teacher">
               <Icon name="user" size={14} />
-              {item.teacher_display_name}
+              {/* R215 — who made it, and in which capacity. */}
+              {authorLine(item)}
             </span>
           ) : null}
         </span>
@@ -100,4 +101,10 @@ function formatSize(bytes: number): string {
   }
   const rounded = value >= 10 || unit === 0 ? Math.round(value) : Math.round(value * 10) / 10;
   return `${rounded} ${units[unit] ?? ''}`;
+}
+
+/** R215 — «الاسم · الصفة», the capacity only when one is said. */
+export function authorLine(item: Pick<ContentItem, 'teacher_display_name' | 'author_role'>): string {
+  const name = item.teacher_display_name ?? '';
+  return item.author_role ? `${name} · ${t(`content.author.role.${item.author_role}`)}` : name;
 }

@@ -1,3 +1,4 @@
+import { teacherMatches } from './teachers.js';
 import { describe, expect, it } from 'vitest';
 
 import { ar } from '../../i18n/ar.js';
@@ -188,11 +189,11 @@ describe('the weekday labels are Arabic, and come from the catalogue', () => {
     expect(dialog).not.toContain('scheduling.weekday');
   });
 
-  it('shows the same read-only general framing preference on both profile views', () => {
+  it('R215 — edits the same framing preference on both profile views', () => {
     const dialog = code('/src/components/admin/teaching-profile-dialog.tsx');
     const own = code('/src/pages/teacher/availability.tsx');
-    expect(dialog).toContain('FramingPreferenceSummary');
-    expect(own).toContain('FramingPreferenceSummary');
+    expect(dialog).toContain('FramingPreferenceEditor');
+    expect(own).toContain('FramingPreferenceEditor');
     // One formatter owns the future-inclusive all-branches meaning; neither
     // profile view hand-builds or edits the registration preference.
     expect(dialog).not.toContain('framing.allBranches');
@@ -214,5 +215,24 @@ describe('the weekday labels are Arabic, and come from the catalogue', () => {
     // And the length test is gone rather than merely supplemented — an `||`
     // beside the real comparison would restore the whole defect.
     expect(dialog).not.toMatch(/subjectIds\.length > 0/);
+  });
+});
+
+describe('R215 — «الفرع» and «هذا الفصل»', () => {
+  const row = (branchId: string | null) => ({ roles: [{ role: 'teacher', branch_id: branchId, branch_name: null }] });
+  const framing = (over: Record<string, unknown>) =>
+    ({ framing: { mode: 'in_person', all_branches: false, branches: [], available_now: null, ...over } }) as never;
+  it('a branch matches where she is assigned or willing', () => {
+    expect(teacherMatches(row('A'), undefined, 'A', '')).toBe(true);
+    expect(teacherMatches(row(null), undefined, 'B', '')).toBe(true);
+    expect(teacherMatches(row('A'), framing({ branches: [{ id: 'B', name: 'ب' }] }), 'B', '')).toBe(true);
+    expect(teacherMatches(row('A'), framing({ all_branches: true }), 'C', '')).toBe(true);
+    expect(teacherMatches(row('A'), framing({ mode: 'online' }), 'C', '')).toBe(false);
+  });
+  it('«هذا الفصل» reads what she said: available, not, or not stated', () => {
+    expect(teacherMatches(row('A'), framing({ available_now: true }), '', 'yes')).toBe(true);
+    expect(teacherMatches(row('A'), framing({ available_now: false }), '', 'yes')).toBe(false);
+    expect(teacherMatches(row('A'), framing({ available_now: false }), '', 'no')).toBe(true);
+    expect(teacherMatches(row('A'), undefined, '', 'unknown')).toBe(true);
   });
 });

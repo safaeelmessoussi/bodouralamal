@@ -623,6 +623,7 @@ export async function deIdentifyAccount(
     const removed = [
       await tx.userIdentity.deleteMany({ where: { userId: targetId } }),
       await tx.framingPreferenceBranch.deleteMany({ where: { userId: targetId } }),
+      await tx.framingPreferenceLevel.deleteMany({ where: { userId: targetId } }),
       await tx.framingPreference.deleteMany({ where: { userId: targetId } }),
       // R168 §1 — what she asked for at registration, and the circles she
       // ranked: planning data with no institutional meaning once she is gone.
@@ -637,6 +638,9 @@ export async function deIdentifyAccount(
       await tx.teacherSubjectCapability.deleteMany({ where: { userId: targetId } }),
       await tx.teacherCategoryCapability.deleteMany({ where: { userId: targetId } }),
       await tx.notification.deleteMany({ where: { userId: targetId } }),
+      // R215 — the content stays (it is the association's), but it no longer
+      // names her as who made it.
+      await tx.educationalContent.updateMany({ where: { authorId: targetId }, data: { authorId: null, authorRole: null } }),
     ];
 
     // Approval is durable authority, not a second store of login credentials.
