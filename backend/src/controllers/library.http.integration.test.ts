@@ -56,6 +56,10 @@ const ITEM_KEYS = [
   "additional_branches",
   // R169 §10 — the item's OTHER Levels (`level_id` is its home).
   "additional_levels",
+  // R215 — who made it: id (staff only, `null` here), public name, capacity.
+  "author_id",
+  "author_name",
+  "author_role",
   "branch_id",
   "branch_name",
   "category_id",
