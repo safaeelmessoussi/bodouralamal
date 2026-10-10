@@ -142,6 +142,20 @@ describe('R203 — «نظرة شاملة», the content from the Owner’s board
     }
   });
 
+  it('R213 — a Surah says only what the Owner kept: its type, naming, opening and close, prevailing name, axes', () => {
+    const kept = /^(نوع السورة|سبب التسمية|علاقة أولها بآخرها|الاسم المهيمن في السورة|المحور الأساسي|المرتكزات الأساسية|محور السورة|ثمرة التقوى|اسم الله المهيمن في السورة):/;
+    for (const surah of all(HUMANITY).filter((n) => n.surah !== undefined)) {
+      // A heading («…:») titles the lines after it; every other line under a
+      // heading is one of its points.
+      let underHeading = false;
+      for (const line of surah.lines ?? []) {
+        if (line.endsWith(':')) underHeading = true;
+        else if (!underHeading) expect(line, surah.id).toMatch(kept);
+        expect(line, surah.id).not.toMatch(/^(عدد الآيات|مكانتها|زمن النزول|من أسمائها):/);
+      }
+    }
+  });
+
   it('keeps ids unique among siblings, so every address is one node', () => {
     for (const node of all(HUMANITY)) {
       const ids = (node.children ?? []).map((c) => c.id);

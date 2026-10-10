@@ -281,3 +281,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-10 — «كل مستويات الفئة» upload refused for a Category-wide Subject
 - `POST /uploads/initiate` with `category_id` filed the item under the Category's first Level; «المرأة» starts with the preparatory «فرصة أمل», which does not take the Category's Subjects (R181 §8), so «دورة علوم القرآن» was refused `SUBJECT_NOT_IN_LEVEL`. It now files under the first Level that teaches the Subject (`content.service.ts`, `levelsTeaching`).
 - Verified: backend typecheck/lint/unit; content integration incl. a preparatory-first Category test.
+
+## 2026-10-10 — SRS Revision 213: a Surah's traits trimmed
+- `humanity-data.ts`: «عدد الآيات» removed from every Surah; «مكانتها» (al-Fatiha) and «زمن النزول»/«من أسمائها» (al-Anfal, at-Tawba) folded into «نوع السورة»; translations re-keyed, the three merged lines in six languages (Amazigh joined from their own fragments — E12).
+- `humanity.test.tsx`: a Surah's lines keep to the Owner's labels. Maryam's diagrams wait for the slides file.
+- Verified: frontend tests/typecheck; key parity in six locales.
