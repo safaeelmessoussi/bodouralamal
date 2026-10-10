@@ -1066,6 +1066,43 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
     await prisma.categorySubject.deleteMany({ where: { subjectId: fiqh.id } });
   });
 
+  it("R212 fix — a whole Category whose first Level is a preparatory programme files the item under the first Level that teaches the Subject", async () => {
+    const category = await prisma.level.findUniqueOrThrow({ where: { id: levelId }, select: { categoryId: true } });
+    // The Owner's «فرصة أمل»: first in the Category's order, and preparatory —
+    // it does not take the Category's own Subjects (R181 §8).
+    const preparatory = await prisma.level.create({
+      data: { name: `${TAG} برنامج تمهيدي`, categoryId: category.categoryId, displayOrder: 0, journeyRole: "preparatory" },
+    });
+    // Ordered first: its order is the lowest allowed, and «[…» sorts before Arabic names.
+    const firstOfCategory = await prisma.level.findFirstOrThrow({
+      where: { categoryId: category.categoryId, deletedAt: null },
+      select: { id: true },
+      orderBy: [{ displayOrder: { sort: "asc", nulls: "last" } }, { name: "asc" }],
+    });
+    expect(firstOfCategory.id).toBe(preparatory.id);
+    const course = await prisma.subject.create({ data: { name: `${TAG} دورة للفئة كلها` } });
+    await prisma.categorySubject.create({ data: { categoryId: category.categoryId, subjectId: course.id } });
+    try {
+      const { id } = await uploadPdf(admin(), "دورة للفئة كلها", {
+        levelId: undefined,
+        categoryId: category.categoryId,
+        subjectId: course.id,
+      });
+      const row = await prisma.educationalContent.findUniqueOrThrow({
+        where: { id },
+        select: { levelId: true, wholeCategory: true },
+      });
+      expect(row.wholeCategory).toBe(true);
+      expect(row.levelId).not.toBe(preparatory.id);
+      const home = await prisma.level.findUniqueOrThrow({ where: { id: row.levelId }, select: { journeyRole: true, categoryId: true } });
+      expect(home).toMatchObject({ categoryId: category.categoryId });
+      expect(home.journeyRole).not.toBe("preparatory");
+    } finally {
+      await prisma.categorySubject.deleteMany({ where: { subjectId: course.id } });
+      await prisma.level.delete({ where: { id: preparatory.id } });
+    }
+  });
+
   it("changes title, Level and Subject without touching the stored object", async () => {
     const { id } = await uploadPdf(admin(), "عنوان خاطئ");
     const before = await prisma.educationalContent.findUniqueOrThrow({

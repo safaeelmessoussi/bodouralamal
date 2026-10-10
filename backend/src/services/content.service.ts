@@ -33,7 +33,7 @@ import { issueUploadTicket, verifyUploadTicket, type UploadTicketClaims } from '
 import { resolveActingStudent } from '../middleware/child-context.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
-import { assertSubjectTaughtAtLevel, resolveSurahs } from '../policies/curriculum.js';
+import { assertSubjectTaughtAtLevel, levelsTeaching, resolveSurahs } from '../policies/curriculum.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { teacherBranchIds } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -323,16 +323,28 @@ export async function initiateUpload(
    * under the Category's FIRST live Level (its own order) with `whole_category`
    * — the rule the recording ingest already applies to a class addressed to
    * a whole Category (R167 §5) — so every reader keeps reading `level_id`.
+   *
+   * **R212 fix (Owner-reported, 2026-10-10) — the first Level that TEACHES the
+   * Subject.** A Category's first Level may be a preparatory programme, which
+   * does not take the Category's own Subjects (R181 §8): «دورة علوم القرآن»
+   * for every Level of «المرأة» was filed under «فرصة أمل» and refused as
+   * `SUBJECT_NOT_IN_LEVEL`. With no Level teaching it, the first Level stays,
+   * and the check below refuses the pair in words, as before.
    */
   const wholeCategory = input.meta.levelId === undefined;
+  const teaching =
+    wholeCategory && input.meta.subjectId !== null
+      ? new Set(await levelsTeaching(prisma, input.meta.subjectId, [input.meta.categoryId ?? '']))
+      : null;
+  const categoryLevels = wholeCategory
+    ? await prisma.level.findMany({
+        where: { categoryId: input.meta.categoryId ?? '', deletedAt: null, category: { deletedAt: null } },
+        select: { id: true },
+        orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
+      })
+    : [];
   const levelId = wholeCategory
-    ? (
-        await prisma.level.findFirst({
-          where: { categoryId: input.meta.categoryId ?? '', deletedAt: null, category: { deletedAt: null } },
-          select: { id: true },
-          orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }],
-        })
-      )?.id
+    ? (categoryLevels.find((level) => teaching?.has(level.id) ?? true) ?? categoryLevels[0])?.id
     : input.meta.levelId;
   if (levelId === undefined) {
     throw new AppError('VALIDATION_FAILED', 'this category has no level to file the item under', {

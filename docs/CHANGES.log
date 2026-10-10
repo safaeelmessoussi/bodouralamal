@@ -277,3 +277,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Bootstrap subjects carry `level_ids`/`category_ids`; `calendar-filters.tsx` narrows «المادة» ↔ «الفئة»/«المستوى» (`taughtWhere`).
 - Layout: first section 24 px under the header; library head margin 20 px; `.section[id]` scroll margin lands a link on its title (phone «برامجنا التعليمية»).
 - Verified: frontend 1663 / backend 385 / lint / build / guards / OpenAPI; Localhost timeline ar/en/de, Surah pages in both views (1366/390), anchors 390/1366.
+
+## 2026-10-10 — «كل مستويات الفئة» upload refused for a Category-wide Subject
+- `POST /uploads/initiate` with `category_id` filed the item under the Category's first Level; «المرأة» starts with the preparatory «فرصة أمل», which does not take the Category's Subjects (R181 §8), so «دورة علوم القرآن» was refused `SUBJECT_NOT_IN_LEVEL`. It now files under the first Level that teaches the Subject (`content.service.ts`, `levelsTeaching`).
+- Verified: backend typecheck/lint/unit; content integration incl. a preparatory-first Category test.
