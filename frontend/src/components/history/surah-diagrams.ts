@@ -3,19 +3,25 @@ import { humanityDictionary, localiseHumanity } from './humanity-i18n.js';
 import type { HistoryDiagram, HistoryNode } from './humanity-model.js';
 
 /**
- * **SRS Revision 210 — a Surah's diagrams, for «حسب السورة» too.** The same
- * diagrams «نظرة شاملة» draws under a Surah, by Surah number, in the page's
- * language; the name is the Arabic tree's title without «سورة», as the
- * library's own Surah names read.
+ * **SRS Revision 210 — a Surah's diagrams, for «حسب السورة» too; R212 — and
+ * what «نظرة شاملة» says of it.** Everything the tree holds about a Surah, by
+ * Surah number, in the page's language, so one Surah page («حسب السورة» and
+ * «نظرة شاملة» alike) reads the same: its title and subtitle, its lines
+ * («نوع السورة»، «المحاور الأساس»…) and its diagrams. The name is the Arabic
+ * tree's title without «سورة», as the library's own Surah names read.
  */
 export interface SurahDiagrams {
   surah: number;
   name: string;
+  /** The tree's title in the page's language («سورة البقرة», «Surat al-Baqarah»). */
+  title: string;
+  subtitle?: string;
+  lines: string[];
   diagrams: HistoryDiagram[];
 }
 
 function collect(node: HistoryNode, out: Map<number, HistoryNode>): Map<number, HistoryNode> {
-  if (node.surah !== undefined && node.diagrams?.length) out.set(node.surah, node);
+  if (node.surah !== undefined) out.set(node.surah, node);
   for (const child of node.children ?? []) collect(child, out);
   return out;
 }
@@ -30,12 +36,18 @@ const SHOWN = collect(
 );
 
 export const SURAH_DIAGRAMS: ReadonlyMap<number, SurahDiagrams> = new Map(
-  [...ARABIC.entries()].map(([surah, node]) => [
-    surah,
-    {
+  [...ARABIC.entries()].map(([surah, node]) => {
+    const shown = SHOWN.get(surah) ?? node;
+    return [
       surah,
-      name: node.title.replace(/^سورة\s+/, ''),
-      diagrams: SHOWN.get(surah)?.diagrams ?? node.diagrams ?? [],
-    },
-  ]),
+      {
+        surah,
+        name: node.title.replace(/^سورة\s+/, ''),
+        title: shown.title,
+        ...(shown.subtitle ? { subtitle: shown.subtitle } : {}),
+        lines: shown.lines ?? [],
+        diagrams: shown.diagrams ?? [],
+      },
+    ];
+  }),
 );

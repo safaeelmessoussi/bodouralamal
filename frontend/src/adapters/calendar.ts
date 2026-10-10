@@ -384,7 +384,14 @@ export interface CalendarBootstrap {
   levels: LevelRef[];
   branches: BranchRef[];
   /** R84 — the Subjects the public calendar filters by. */
-  subjects: { id: string; name: string; display_order: number | null }[];
+  subjects: {
+    id: string;
+    name: string;
+    display_order: number | null;
+    /** R212 — where it is taught: Levels on their own, Categories as a whole. */
+    level_ids: string[];
+    category_ids: string[];
+  }[];
   /** R176 §4 — all 114 Surahs, in order, for the السورة filter. */
   surahs: { id: number; name: string }[];
   /** R110 — the live catalogue the النوع filter offers (see the service). */

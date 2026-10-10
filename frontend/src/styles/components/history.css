@@ -23,6 +23,11 @@
   --tone-soft: var(--color-era-seal-soft);
   --tone-line: var(--color-era-seal-line);
 }
+.tone-rashidun {
+  --tone: var(--color-era-rashidun);
+  --tone-soft: var(--color-era-rashidun-soft);
+  --tone-line: var(--color-era-rashidun-line);
+}
 .tone-ummah {
   --tone: var(--color-era-ummah);
   --tone-soft: var(--color-era-ummah-soft);
@@ -42,7 +47,6 @@
 .humanity {
   display: grid;
   gap: var(--space-4);
-  margin-block-start: var(--space-3);
 }
 
 /* ── The timeline ─────────────────────────────────────────────────────────── */
@@ -133,19 +137,20 @@ button.humanity__station.is-active {
   background: var(--tone-soft, var(--color-primary-soft));
 }
 
+/* R212 — a station is a short vertical tick across the line, not a disc:
+   the eye goes to the years and the name, not to the marks. */
 .humanity__dot {
   position: relative;
   z-index: 1;
-  inline-size: 1.15rem;
+  inline-size: 3px;
   block-size: 1.15rem;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-pill);
   background: var(--tone, var(--color-primary));
-  box-shadow: 0 0 0 4px var(--color-surface), 0 0 0 6px var(--tone-line, var(--color-border));
   margin-block: var(--space-1);
 }
 
 .humanity__station.is-active .humanity__dot {
-  transform: scale(1.25);
+  inline-size: 5px;
 }
 
 .humanity__station-label {
@@ -178,18 +183,21 @@ button.humanity__station.is-active {
   grid-row: 1;
   align-self: center;
   line-height: var(--line-height-tight);
-  margin-inline: var(--space-1);
-  padding: var(--space-1) var(--space-3);
+  margin-inline: 2px;
+  padding: var(--space-1);
   border: 1px solid var(--tone-line, var(--color-border));
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   background: var(--tone-soft, var(--color-primary-soft));
   color: var(--tone, var(--color-primary));
   font: inherit;
   font-weight: 700;
   font-size: var(--font-size-xs);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* R212 — a one-station era («خلافة على منهاج النبوة») wraps its name
+     rather than cutting it. */
+  text-align: center;
+  text-wrap: balance;
+  hyphens: auto;
+  overflow-wrap: break-word;
   cursor: pointer;
   transition: box-shadow var(--transition-fast), transform var(--transition-fast);
 }
@@ -239,6 +247,14 @@ button.humanity__station.is-active {
   border-end-end-radius: var(--radius-md);
 }
 
+/* R212 — the Medinan phase is selected: a wash from its bracket down into
+   the wedge, so the expeditions read as coming out of it. */
+.humanity__phase.is-zoomed {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--tone-soft, var(--color-primary-soft));
+  padding-block-end: var(--space-1);
+}
+
 .humanity__phase-label {
   padding: 0 var(--space-1);
   border-radius: var(--radius-md);
@@ -265,8 +281,9 @@ button.humanity__station.is-active {
  * column of the area is its right-hand end. */
 .humanity__zoom {
   grid-row: 4;
-  block-size: var(--space-3);
-  margin-block-start: var(--space-1);
+  block-size: var(--space-4);
+  /* R212 — joined to the selected phase above: no gap of the grid's rows. */
+  margin-block-start: calc(-1 * var(--space-1));
   background: var(--tone-soft, var(--color-primary-soft));
   clip-path: polygon(
     calc(100% - var(--far, 1.5) * 100% / var(--n, 7)) 0,
@@ -333,11 +350,11 @@ button.humanity__station.is-active {
 }
 
 .humanity__expedition-dot {
-  inline-size: 0.6rem;
-  block-size: 0.6rem;
-  border-radius: var(--radius-full);
+  /* R212 — a tick, like the stations of the main line. */
+  inline-size: 2px;
+  block-size: 0.8rem;
+  border-radius: var(--radius-pill);
   background: var(--tone, var(--color-primary));
-  box-shadow: 0 0 0 2px var(--color-surface);
 }
 
 .humanity__expedition-label {
@@ -596,22 +613,6 @@ button.humanity__station.is-active {
   font-size: var(--font-size-sm);
 }
 
-.humanity__surah {
-  margin-inline-start: auto;
-}
-
-/* R210 — «للمزيد من التفاصيل والتعمّق:» leads to the button, beside it. */
-.humanity__surah-lead {
-  margin-inline-start: auto;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-}
-
-.humanity__surah-lead + .humanity__surah {
-  margin-inline-start: 0;
-}
-
 /* The children: compact cards, five or six on one line on a laptop (R204). */
 .humanity__path {
   display: grid;
@@ -759,13 +760,6 @@ button.humanity__station.is-active {
 @media (max-width: 44rem) {
   .humanity__hero {
     padding: var(--space-3) var(--space-4);
-  }
-  .humanity__surah,
-  .humanity__surah-lead {
-    margin-inline-start: 0;
-  }
-  .humanity__surah-lead {
-    flex-basis: 100%;
   }
 }
 
@@ -1135,4 +1129,11 @@ button.hdiagram__box:focus-visible {
     inline-size: var(--space-4);
     border-block-start: 2px solid var(--tone-line, var(--color-border));
   }
+}
+
+/* R212 — a Surah here is the library's Surah page, spaced as it is there. */
+.humanity__surah-page {
+  display: grid;
+  gap: var(--space-5);
+  min-inline-size: 0;
 }

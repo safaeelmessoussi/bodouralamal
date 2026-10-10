@@ -3,7 +3,6 @@ import { useState, type ReactNode } from "react";
 import { t } from "../../i18n/index.js";
 import {
   branchKeys,
-  initiallyOpen,
   verseRuns,
   type DiagramNode,
   type DiagramTone,
@@ -16,15 +15,20 @@ import {
  * whole chart drawn). A tree read from the start side: on a laptop each level
  * is a column, the branches flowing to the left like the Owner's drawings; on
  * a phone the same tree is an indented outline. A box with branches opens and
- * closes on a click; «فتح الكل» and «طيّ الكل» do it for the whole tree.
+ * closes on a click; «فتح الكل» and «طيّ الكل» do it for the whole tree, and
+ * since R212 every tree opens closed.
  */
 export function HumanityDiagram({
   diagram,
+  startOpen = false,
 }: {
   diagram: HistoryDiagram;
+  /** Every branch open from the start, as «فتح الكل» leaves it (a static render). */
+  startOpen?: boolean;
 }): ReactNode {
+  // R212 — every tree opens closed («طيّ الكل»): the reader opens a branch.
   const [open, setOpen] = useState<Set<string>>(() =>
-    initiallyOpen(diagram.root),
+    startOpen ? new Set(branchKeys(diagram.root)) : new Set(),
   );
   const toggle = (key: string): void =>
     setOpen((was) => {

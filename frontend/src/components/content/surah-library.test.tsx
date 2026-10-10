@@ -4,13 +4,14 @@ import { describe, expect, it } from 'vitest';
 import type { LibraryEntry } from '../../adapters/content.js';
 import { ar } from '../../i18n/ar.js';
 import RESOURCES_SOURCE from '../../pages/resources.tsx?raw';
-import { byTitle, groupBySurah, moreDetailsKey, SurahLibrary, withDiagramSurahs } from './surah-library.js';
+import { byTitle, groupBySurah, SurahLibrary, withDiagramSurahs } from './surah-library.js';
+import { isSlides } from './surah-page.js';
 
 /** R196 — the library read by Surah. */
-const entry = (id: string, surah: number | null, mime: string, shelf = 'L1'): LibraryEntry => ({
+const entry = (id: string, surah: number | null, mime: string, shelf = 'L1', title = `عنوان ${id}`): LibraryEntry => ({
   item: {
     id,
-    title: `عنوان ${id}`,
+    title,
     description: null,
     kind: mime === 'application/pdf' ? 'pdf' : mime.startsWith('audio/') ? 'audio' : mime.startsWith('image/') ? 'image' : 'document',
     mime_type: mime,
@@ -43,6 +44,7 @@ const ENTRIES = [
   entry('c', 2, 'audio/mpeg', 'L2'), // the same item on a second shelf
   entry('d', null, 'application/pdf'),
   entry('e', 2, 'image/png'),
+  entry('f', 2, 'application/pdf', 'L1', 'شرائح حصة تفسير سورة البقرة'),
 ];
 
 describe('groupBySurah', () => {
@@ -76,21 +78,31 @@ describe('SurahLibrary', () => {
     expect(out).toContain('<figure class="hdiagram');
   });
 
-  it('R210 — a Surah opens with its diagrams, then where to go deeper, then its content', () => {
+  it('R212 — a Surah reads: its name, its traits, its diagrams (closed), then its shelves in the Owner\'s order', () => {
     const out = html(2);
-    const figure = out.indexOf('<figure class="hdiagram');
-    const more = out.indexOf(ar.content.bySurah.more.both);
-    const listen = out.indexOf(ar.content.bySurah.section.listen);
-    expect(figure).toBeGreaterThan(-1);
-    expect(more).toBeGreaterThan(figure);
-    expect(listen).toBeGreaterThan(more);
+    const order = [
+      'class="surah-library__head"',
+      'نوع السورة',
+      ar.content.bySurah.section.diagrams,
+      ar.content.bySurah.section.listen,
+      ar.content.bySurah.section.slides,
+      ar.content.bySurah.section.read,
+      ar.content.bySurah.section.see,
+    ].map((text) => out.indexOf(text));
+    expect(order.every((at) => at > -1)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+    expect(out).not.toContain('aria-expanded="true"');
+    // Nothing that repeats a section or pushes the Surah down.
+    expect(out).not.toContain('surah-library__chip');
+    expect(out).not.toContain('surah-library__lede');
+    expect(out).not.toContain('surah-library__sectionHint');
+    expect(out).not.toContain('surah-library__more');
   });
 
-  it('R210 — names the recordings and the materials only when the Surah has them', () => {
-    expect(moreDetailsKey(2, 1)).toBe('content.bySurah.more.both');
-    expect(moreDetailsKey(2, 0)).toBe('content.bySurah.more.listen');
-    expect(moreDetailsKey(0, 1)).toBe('content.bySurah.more.read');
-    expect(moreDetailsKey(0, 0)).toBeNull();
+  it('R212 — slides are what their title calls «شرائح», or a presentation file', () => {
+    expect(isSlides({ title: 'شرائح حصة تفسير سورة مريم', mime_type: 'application/pdf' })).toBe(true);
+    expect(isSlides({ title: 'درس', mime_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })).toBe(true);
+    expect(isSlides({ title: 'ملخص سورة مريم', mime_type: 'application/pdf' })).toBe(false);
     const merged = withDiagramSurahs(
       [{ id: 36, name: 'يس', items: [] }],
       new Map([[1, { surah: 1, name: 'الفاتحة' }], [36, { surah: 36, name: 'x' }]]),
@@ -114,8 +126,6 @@ describe('SurahLibrary', () => {
     );
     expect(out).not.toContain(ar.content.bySurah.empty);
     expect(out).toContain('سورة الفاتحة');
-    // No recordings and no materials: no «للمزيد» line.
-    expect(out).not.toContain(ar.content.bySurah.more.read);
   });
 });
 

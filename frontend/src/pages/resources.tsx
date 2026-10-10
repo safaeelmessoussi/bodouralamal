@@ -19,7 +19,7 @@ import {
   type ContentFilterState,
 } from '../components/content/content-filters.js';
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
-import { byTitle, SurahLibrary } from '../components/content/surah-library.js';
+import { byTitle, groupBySurah, SurahLibrary } from '../components/content/surah-library.js';
 import { HumanityTimeline } from '../components/history/humanity-timeline.js';
 import { Button } from '../components/ui/button.js';
 import { useActiveChild } from '../contexts/active-child.js';
@@ -157,23 +157,30 @@ function ModeTabs({
 function HistoryView({ tabs }: { tabs: ReactNode }): ReactNode {
   // R205 — «اليوم» lists today's schedule at this reader's visibility.
   const { accessToken } = useSession();
+  const { activeChildId } = useActiveChild();
+  // R212 — a Surah here is the same page as in «حسب السورة»: its items too.
+  const load = useLibraryEntries(accessToken);
+  const [open, setOpen] = useState<ContentItem | null>(null);
+  const bySurah = useMemo(
+    () => new Map(groupBySurah(load.kind === 'ready' ? load.data : []).map((group) => [group.id, group.items])),
+    [load],
+  );
   return (
     <Shell title={t('content.title')} lede={null} tabs={tabs}>
-      <HumanityTimeline token={accessToken} />
+      <HumanityTimeline
+        token={accessToken}
+        activeChildId={activeChildId}
+        surahItems={(surah) => bySurah.get(surah) ?? []}
+        onOpenItem={setOpen}
+      />
+      <ContentPreviewDialog item={open} onClose={() => setOpen(null)} accessToken={accessToken} activeChildId={activeChildId} />
     </Shell>
   );
 }
 
-/** R196 — the Surah view: the same rows, read by Surah (`surah-library.tsx`). */
-function SurahView({ tabs }: { tabs: ReactNode }): ReactNode {
-  const { accessToken } = useSession();
-  const { activeChildId } = useActiveChild();
+/** The library's rows (`GET /library`), as the caller may see them. */
+function useLibraryEntries(accessToken: string | null): Load<LibraryEntry[]> {
   const [load, setLoad] = useState<Load<LibraryEntry[]>>({ kind: 'loading' });
-  const [open, setOpen] = useState<ContentItem | null>(null);
-  const initialSurah = useMemo(() => {
-    const raw = Number(new URLSearchParams(window.location.search).get('surah'));
-    return Number.isInteger(raw) && raw >= 1 && raw <= 114 ? raw : null;
-  }, []);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -188,6 +195,19 @@ function SurahView({ tabs }: { tabs: ReactNode }): ReactNode {
       cancelled = true;
     };
   }, [accessToken]);
+  return load;
+}
+
+/** R196 — the Surah view: the same rows, read by Surah (`surah-library.tsx`). */
+function SurahView({ tabs }: { tabs: ReactNode }): ReactNode {
+  const { accessToken } = useSession();
+  const { activeChildId } = useActiveChild();
+  const load = useLibraryEntries(accessToken);
+  const [open, setOpen] = useState<ContentItem | null>(null);
+  const initialSurah = useMemo(() => {
+    const raw = Number(new URLSearchParams(window.location.search).get('surah'));
+    return Number.isInteger(raw) && raw >= 1 && raw <= 114 ? raw : null;
+  }, []);
   return (
     <Shell title={t('content.title')} lede={t('content.bySurah.pageLede')} tabs={tabs}>
       {load.kind === 'loading' ? <YearSkeletons /> : null}

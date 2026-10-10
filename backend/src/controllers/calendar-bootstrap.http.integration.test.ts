@@ -32,6 +32,7 @@ interface Body {
     categories: { id: string; name: string }[];
     levels: { id: string; name: string; category_id: string }[];
     branches: { id: string; name: string }[];
+    subjects: { id: string; level_ids: string[]; category_ids: string[] }[];
   };
 }
 
@@ -316,6 +317,33 @@ describe("GET /calendar/bootstrap — the Levels in the Super Admin's order", ()
       expect(at(earlyFirst.id)).toBeLessThan(at(earlyLast.id));
       expect(at(earlyLast.id)).toBeLessThan(at(lateFirst.id));
     } finally {
+      await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
+      await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
+    }
+  });
+});
+
+/** R212 — each Subject says where it is taught, so «المادة» narrows with «المستوى». */
+describe("GET /calendar/bootstrap — where each Subject is taught", () => {
+  it("lists a Subject's own Levels and the Categories it is taught to, live rows only", async () => {
+    const TAG = "[bootstrap-taught-test]";
+    const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
+    const level = await prisma.level.create({ data: { name: `${TAG} مستوى`, categoryId: category.id } });
+    const gone = await prisma.level.create({ data: { name: `${TAG} محذوف`, categoryId: category.id, deletedAt: new Date() } });
+    const subject = await prisma.subject.create({ data: { name: `${TAG} مادة` } });
+    await prisma.levelSubject.createMany({ data: [{ levelId: level.id, subjectId: subject.id }, { levelId: gone.id, subjectId: subject.id }] });
+    await prisma.categorySubject.create({ data: { categoryId: category.id, subjectId: subject.id } });
+    try {
+      const res = await call("/calendar/bootstrap?from=2026-09-01&to=2026-09-30");
+      expect(res.status).toBe(200);
+      const row = res.body.data!.subjects.find(
+        (s) => s.id === subject.id,
+      );
+      expect(row).toMatchObject({ level_ids: [level.id], category_ids: [category.id] });
+    } finally {
+      await prisma.categorySubject.deleteMany({ where: { subjectId: subject.id } });
+      await prisma.levelSubject.deleteMany({ where: { subjectId: subject.id } });
+      await prisma.subject.delete({ where: { id: subject.id } });
       await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
       await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
     }

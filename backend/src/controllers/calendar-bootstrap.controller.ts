@@ -99,6 +99,9 @@ export function read(prisma: PrismaClient) {
           id: s.id,
           name: s.name,
           display_order: s.displayOrder,
+          // R212 — where it is taught, so «المادة» narrows with the Level.
+          level_ids: s.levelIds,
+          category_ids: s.categoryIds,
         })),
         // R176 §4 — see the note on `surahs` in the service.
         surahs: bootstrap.surahs,

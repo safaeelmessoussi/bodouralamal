@@ -61,7 +61,14 @@ export interface CalendarBootstrap {
    * whole month to discover which Subjects exist. `GET /admin/subjects` stays
    * Admin-only for everything else it carries.
    */
-  subjects: { id: string; name: string; displayOrder: number | null }[];
+  subjects: {
+    id: string;
+    name: string;
+    displayOrder: number | null;
+    /** R212 — the Levels that teach it on their own, and the Categories that teach it to every Level. */
+    levelIds: string[];
+    categoryIds: string[];
+  }[];
   /**
    * **R176 §4 — the Surahs the calendar's السورة filter offers**: all 114, in
    * the Quran's own order. Public for the same reason `subjects` is: every
@@ -184,7 +191,17 @@ export async function calendarBootstrap(
     }),
     prisma.subject.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true, displayOrder: true },
+      select: {
+        id: true,
+        name: true,
+        displayOrder: true,
+        // R212 — where each Subject is taught (the curriculum the home page's
+        // programmes already publish), so «المادة» narrows with «الفئة» and
+        // «المستوى» (R198 §3). A Level of its own (`LevelSubject`) or a whole
+        // Category (`CategorySubject`, R172 §1).
+        levels: { where: { deletedAt: null, level: { deletedAt: null } }, select: { levelId: true } },
+        categories: { where: { deletedAt: null, category: { deletedAt: null } }, select: { categoryId: true } },
+      },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
     }),
     /* Live types only. A retired type still resolves when a stored row names
@@ -250,7 +267,11 @@ export async function calendarBootstrap(
     })),
     levels,
     branches,
-    subjects,
+    subjects: subjects.map(({ levels: taughtAt, categories: taughtTo, ...subject }) => ({
+      ...subject,
+      levelIds: taughtAt.map((row) => row.levelId),
+      categoryIds: taughtTo.map((row) => row.categoryId),
+    })),
     schedulingTypes,
     surahs: surahRows.map((s) => ({ id: s.surahId, name: s.nameArabic })),
   };

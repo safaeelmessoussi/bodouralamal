@@ -101,6 +101,11 @@
   --era-violet-50: #f4f2fd;
   --era-violet-300: #8f7fee;
   --era-violet-700: #5626b8;
+  /* R212 — teal for «خلافة على منهاج النبوة», between the Prophet's ﷺ
+     violet and the ummah's blue. */
+  --era-teal-50: #ecf8f8;
+  --era-teal-300: #4fb8b8;
+  --era-teal-700: #0b6b6e;
   --era-blue-50: #f0f5fd;
   --era-blue-300: #659df2;
   --era-blue-700: #305bab;

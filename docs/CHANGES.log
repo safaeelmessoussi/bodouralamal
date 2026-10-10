@@ -270,3 +270,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - 143 new strings in six translations (`components/history/locales/*.json`), 13 retired keys removed; the empty-node test now expects none.
 - Three PDFs for the Owner to upload (booklet as printed, exam, study guide) — built outside the repository.
 - Verified: frontend tests/lint/build; Localhost al-Baqara ar 1366, en 390, `ulum-al-quran` fr 390 (no overflow).
+
+## 2026-10-10 — SRS Revision 212: one Surah page, a fourth era, linked «المادة», tighter pages
+- `content/surah-page.tsx` is the Surah page of «حسب السورة» and «نظرة شاملة»: name, traits, «خطاطات السورة» (closed), recordings, slides («شرائح» in the title), summaries, drawings, videos; chips/lede/hints/«للمزيد…» removed with their keys.
+- `rashidun` is a root era (tone teal); «مرحلة النبوة»; ticks instead of dots; the Medinan phase selected over the expeditions; every diagram opens closed.
+- Bootstrap subjects carry `level_ids`/`category_ids`; `calendar-filters.tsx` narrows «المادة» ↔ «الفئة»/«المستوى» (`taughtWhere`).
+- Layout: first section 24 px under the header; library head margin 20 px; `.section[id]` scroll margin lands a link on its title (phone «برامجنا التعليمية»).
+- Verified: frontend 1663 / backend 385 / lint / build / guards / OpenAPI; Localhost timeline ar/en/de, Surah pages in both views (1366/390), anchors 390/1366.

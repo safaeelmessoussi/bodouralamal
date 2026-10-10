@@ -48,7 +48,9 @@ export function CalendarFilters({
   branches?: { id: string; name: string }[];
   categories?: CategoryRef[];
   levels?: LevelRef[];
-  subjects?: { id: string; name: string }[];
+  /** R212 — with `level_ids`/`category_ids` (the public bootstrap), «المادة»
+   *  and «الفئة»/«المستوى» narrow each other; without them, nothing narrows. */
+  subjects?: TaughtSubject[];
   groups?: { id: string; name: string }[];
   circles?: { id: string; name: string }[];
   /** R176 §4 — the 114 Surahs, from the bootstrap, in the Quran's order. */
@@ -59,6 +61,13 @@ export function CalendarFilters({
 }): ReactNode {
   const has = (field: CalendarFilterField): boolean => filters.fields.includes(field);
   const value = (field: CalendarFilterField): string | null => filters.value[field] ?? null;
+  const allLevels = levels ?? [];
+  const allSubjects = subjects ?? [];
+  const chosenSubject = allSubjects.find((s) => s.id === value('subjectId')) ?? null;
+  /** R212 — a Subject no longer taught where the reader now looks is cleared. */
+  const keepSubject = (levelId: string | null, categoryId: string | null): void => {
+    if (chosenSubject && !taughtWhere(chosenSubject, levelId, categoryId, allLevels)) filters.set('subjectId', null);
+  };
 
   return (
     <>
@@ -76,7 +85,10 @@ export function CalendarFilters({
         <CategorySelector
           categories={categories ?? []}
           value={value('categoryId')}
-          onChange={(id) => filters.set('categoryId', id)}
+          onChange={(id) => {
+            filters.set('categoryId', id);
+            keepSubject(null, id);
+          }}
         />
       ) : null}
 
@@ -86,8 +98,11 @@ export function CalendarFilters({
         <LevelSelector
           // R198 §3 — the Category narrows the Levels, and a Level chosen
           // sets its Category: the two never disagree on screen.
-          levels={(levels ?? []).filter(
-            (l) => value('categoryId') === null || l.category_id === '' || l.category_id === value('categoryId'),
+          // R212 — and a Subject chosen keeps the Levels that teach it.
+          levels={allLevels.filter(
+            (l) =>
+              (value('categoryId') === null || l.category_id === '' || l.category_id === value('categoryId')) &&
+              (chosenSubject === null || taughtWhere(chosenSubject, l.id, null, allLevels)),
           )}
           categories={categories ?? []}
           value={value('levelId')}
@@ -96,6 +111,7 @@ export function CalendarFilters({
             const category = id === null ? undefined : (levels ?? []).find((l) => l.id === id)?.category_id;
             if (has('categoryId') && category && value('categoryId') !== category) filters.set('categoryId', category);
             filters.set('levelId', id);
+            keepSubject(id, id === null ? value('categoryId') : (category ?? null));
           }}
         />
       ) : null}
@@ -107,7 +123,11 @@ export function CalendarFilters({
           onChange={(v) => filters.set('subjectId', v || null)}
           options={[
             { value: '', label: t('calendar.filters.all') },
-            ...(subjects ?? []).map((s) => ({ value: s.id, label: s.name })),
+            // R212 — only the Subjects taught at the chosen Level, else in the
+            // chosen Category (R198 §3: the dropdowns narrow each other).
+            ...allSubjects
+              .filter((s) => taughtWhere(s, value('levelId'), value('categoryId'), allLevels))
+              .map((s) => ({ value: s.id, label: s.name })),
           ]}
         />
       ) : null}
@@ -158,4 +178,37 @@ export function CalendarFilters({
       ) : null}
     </>
   );
+}
+
+/** A Subject, and — from the public bootstrap — where it is taught. */
+export interface TaughtSubject {
+  id: string;
+  name: string;
+  level_ids?: string[];
+  category_ids?: string[];
+}
+
+/**
+ * **R212 — is this Subject taught here?** At a Level: on its own
+ * (`LevelSubject`) or to its whole Category (`CategorySubject`, R172 §1). In a
+ * Category: to the Category, or at one of its Levels. Nothing chosen, or a list
+ * that does not say where its Subjects are taught: yes.
+ */
+export function taughtWhere(
+  subject: TaughtSubject,
+  levelId: string | null,
+  categoryId: string | null,
+  levels: readonly LevelRef[],
+): boolean {
+  if (subject.level_ids === undefined) return true;
+  const categories = subject.category_ids ?? [];
+  const categoryOf = (id: string): string | undefined => levels.find((l) => l.id === id)?.category_id;
+  if (levelId !== null) {
+    const category = categoryOf(levelId);
+    return subject.level_ids.includes(levelId) || (category !== undefined && categories.includes(category));
+  }
+  if (categoryId !== null) {
+    return categories.includes(categoryId) || subject.level_ids.some((id) => categoryOf(id) === categoryId);
+  }
+  return true;
 }

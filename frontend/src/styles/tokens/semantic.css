@@ -73,6 +73,10 @@
   --color-era-seal-soft: var(--era-violet-50);
   --color-era-seal-line: var(--era-violet-300);
   --color-era-seal: var(--era-violet-700);
+  /* R212 — «خلافة على منهاج النبوة», an era of its own. */
+  --color-era-rashidun-soft: var(--era-teal-50);
+  --color-era-rashidun-line: var(--era-teal-300);
+  --color-era-rashidun: var(--era-teal-700);
   --color-era-ummah-soft: var(--era-blue-50);
   --color-era-ummah-line: var(--era-blue-300);
   --color-era-ummah: var(--era-blue-700);

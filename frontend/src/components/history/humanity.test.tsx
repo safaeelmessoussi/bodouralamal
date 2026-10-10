@@ -7,8 +7,6 @@ import {
   branchKeys,
   descendantCount,
   detailSections,
-  diagramSize,
-  initiallyOpen,
   parsePath,
   resolvePath,
   verseRuns,
@@ -44,8 +42,9 @@ function everything(node: HistoryNode): string {
 }
 
 describe('R203 — «نظرة شاملة», the content from the Owner’s board', () => {
-  it('holds the three eras, in order, and every node has a title', () => {
-    expect((HUMANITY.children ?? []).map((era) => era.id)).toEqual(['prophets', 'seal', 'ummah']);
+  it('holds the four eras, in order, and every node has a title', () => {
+    // R212 — «خلافة على منهاج النبوة» is an era of its own, before «امتداد الأمة».
+    expect((HUMANITY.children ?? []).map((era) => era.id)).toEqual(['prophets', 'seal', 'rashidun', 'ummah']);
     for (const node of all(HUMANITY)) expect(node.title.trim().length).toBeGreaterThan(0);
   });
 
@@ -158,16 +157,9 @@ describe('R203 — the rules of the diagram', () => {
     expect(parsePath(HUMANITY, null)).toEqual([]);
   });
 
-  it('R205 — opens a small diagram whole, a large one at its first branches', () => {
-    const leaf = (label: string): DiagramNode => ({ label });
-    const small: DiagramNode = { label: 'r', children: [{ label: 'a', children: [{ label: 'b', children: [leaf('c')] }] }] };
-    expect([...initiallyOpen(small)]).toEqual(['0', '0/0', '0/0/0']);
+  it('names every box that has branches, for «فتح الكل»', () => {
+    const small: DiagramNode = { label: 'r', children: [{ label: 'a', children: [{ label: 'b', children: [{ label: 'c' }] }] }] };
     expect(branchKeys(small)).toEqual(['0', '0/0', '0/0/0']);
-    expect(diagramSize(small)).toBe(4);
-    const large: DiagramNode = { label: 'r', children: Array.from({ length: 5 }, (_, i) => ({ label: `v${String(i)}`, children: Array.from({ length: 9 }, (_, j) => ({ label: `w${String(j)}`, children: [leaf('x')] })) })) };
-    expect(diagramSize(large)).toBeGreaterThan(40);
-    const open = initiallyOpen(large);
-    expect([...open]).toEqual(['0']);
   });
 
   it('counts what is beneath a node', () => {
@@ -208,7 +200,11 @@ describe('R203 — the page', () => {
     for (const marker of TIMELINE) expect(html).toContain(marker.label);
     expect(html).toContain('1448 هـ');
     expect(html).toContain('2026م');
-    expect(html.match(/class="humanity__era /g)?.length).toBe(3);
+    expect(html.match(/class="humanity__era /g)?.length).toBe(4);
+    // R212 — four bands: «مرحلة النبوة» and «خلافة على منهاج النبوة» among them.
+    expect(html.match(/class="humanity__band /g)?.length).toBe(4);
+    expect(html).toContain(`>${t('content.history.era.seal')}<`);
+    expect(html).toContain(`>${t('content.history.era.rashidun')}<`);
   });
 
   it('R204 — keeps the line and the cards together: no visible title, no trail on the overview', () => {
@@ -245,9 +241,15 @@ describe('R203 — the page', () => {
     at('?view=history&node=seal/makki/al-fatiha');
     const page = renderToStaticMarkup(<HumanityTimeline />);
     expect(page.match(/<figure class="hdiagram/g)?.length).toBe(6);
-    const html = renderToStaticMarkup(
-      <HumanityDiagram diagram={{ title: 'خطاطة', root: { label: 'ج', children: [{ label: 'أ', text: '﴿اقْرَأْ﴾', tone: 'gold' }, { label: 'ب', children: [{ label: 'ت' }] }] } }} />,
-    );
+    const diagram = { title: 'خطاطة', root: { label: 'ج', children: [{ label: 'أ', text: '﴿اقْرَأْ﴾', tone: 'gold' as const }, { label: 'ب', children: [{ label: 'ت' }] }] } };
+    // R212 — a tree opens closed: its trunk, and how many branches it holds.
+    const closed = renderToStaticMarkup(<HumanityDiagram diagram={diagram} />);
+    expect(closed).toContain('aria-expanded="false"');
+    expect(closed).not.toContain('aria-expanded="true"');
+    expect(closed).not.toContain('class="tone-prophets"');
+    expect(closed).toContain('+2');
+    expect(page).not.toContain('aria-expanded="true"');
+    const html = renderToStaticMarkup(<HumanityDiagram diagram={diagram} startOpen />);
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('class="tone-prophets"');
     // R205 — the first branches are numbered, and one without a colour takes the next.
@@ -265,14 +267,17 @@ describe('R203 — the page', () => {
     expect(flat).toContain(t('content.history.diagram.closeAll'));
   });
 
-  it('opens a Surah with its ideas and a link to «حسب السورة» on it', () => {
+  it('R212 — opens a Surah as «حسب السورة» does: its name, its traits, its diagrams closed', () => {
     at('?view=history&node=seal/makki/al-fatiha');
     const html = renderToStaticMarkup(<HumanityTimeline />);
+    expect(html).toContain('class="surah-library__head"');
     expect(html).toContain('سورة الفاتحة');
-    expect(html).toContain('href="/resources?surah=1"');
-    // R210 — the way deeper is said before the button.
-    expect(html.indexOf(t('content.history.openSurahLead'))).toBeLessThan(html.indexOf('href="/resources?surah=1"'));
-    expect(html.indexOf(t('content.history.openSurahLead'))).toBeGreaterThan(-1);
     expect(html).toContain('أم القرآن والسبع المثاني');
+    expect(html).toContain('نوع السورة');
+    expect(html).toContain(t('content.bySurah.section.diagrams'));
+    expect(html).not.toContain('href="/resources?surah=1"');
+    expect(html).not.toContain('humanity__hero');
+    // Its neighbours are a step away, as for any node.
+    expect(html).toContain('humanity__steps');
   });
 });

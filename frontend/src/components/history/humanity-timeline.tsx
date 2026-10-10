@@ -10,14 +10,13 @@ import {
 
 import { t } from "../../i18n/index.js";
 import { counted } from "../../lib/arabic-years.js";
-import { ButtonLink } from "../ui/button.js";
 import { EXPEDITIONS, HUMANITY, PHASES, TIMELINE } from "./humanity-data.js";
-import { HumanityDiagram, Verse } from "./humanity-diagram.js";
+import { Details } from "./humanity-details.js";
+import { HumanityDiagram } from "./humanity-diagram.js";
 import { humanityDictionary, localiseHumanity } from "./humanity-i18n.js";
 import {
   TODAY,
   descendantCount,
-  detailSections,
   parsePath,
   resolvePath,
   type HistoryNode,
@@ -26,6 +25,8 @@ import {
   type TimelineSpan,
 } from "./humanity-model.js";
 import { TodayInTheAssociation } from "./humanity-today.js";
+import type { ContentItem } from "../../adapters/content.js";
+import { SurahPage, type SurahItem } from "../content/surah-page.js";
 
 /** R209 — the content in this page's language (Arabic when none is loaded). */
 const LOCAL = localiseHumanity(
@@ -61,6 +62,9 @@ export function HumanityTimeline({
   phases = LOCAL.phases,
   expeditions = LOCAL.expeditions,
   token = null,
+  surahItems = NO_ITEMS,
+  activeChildId = null,
+  onOpenItem = () => undefined,
 }: {
   root?: HistoryNode;
   markers?: TimelineMarker[];
@@ -68,6 +72,10 @@ export function HumanityTimeline({
   expeditions?: TimelineDetail[];
   /** The reader's token, for «اليوم»'s schedule at their visibility (R205). */
   token?: string | null;
+  /** R212 — the library's items of a Surah, for its page (the same as «حسب السورة»). */
+  surahItems?: (surah: number) => readonly SurahItem[];
+  activeChildId?: string | null;
+  onOpenItem?: (item: ContentItem) => void;
 }): ReactNode {
   const [path, setPath] = useState<string[]>(() =>
     readPath(root, new URLSearchParams(window.location.search).get("node")),
@@ -190,6 +198,20 @@ export function HumanityTimeline({
             headingRef={heading}
             onOpen={(id) => go([id])}
           />
+        ) : node.surah !== undefined ? (
+          // R212 — a Surah is read here exactly as in «حسب السورة».
+          <div className="humanity__surah-page">
+            <SurahPage
+              surah={node.surah}
+              title={node.title}
+              items={surahItems(node.surah)}
+              headingRef={heading}
+              accessToken={token}
+              activeChildId={activeChildId}
+              onOpen={onOpenItem}
+            />
+            <SiblingSteps siblings={siblings} at={at} onGo={(id) => go([...path.slice(0, -1), id])} />
+          </div>
         ) : (
           <>
             <NodeHero node={node} headingRef={heading} />
@@ -219,38 +241,7 @@ export function HumanityTimeline({
                 ))}
               </div>
             ) : null}
-            {siblings.length > 1 ? (
-              <div className="humanity__steps">
-                {at > 0 ? (
-                  <button
-                    type="button"
-                    className="humanity__step"
-                    onClick={() =>
-                      go([...path.slice(0, -1), siblings[at - 1]!.id])
-                    }
-                  >
-                    <span className="humanity__step-arrow" aria-hidden="true">
-                      →
-                    </span> {siblings[at - 1]!.title}
-                  </button>
-                ) : (
-                  <span />
-                )}
-                {at < siblings.length - 1 ? (
-                  <button
-                    type="button"
-                    className="humanity__step is-next"
-                    onClick={() =>
-                      go([...path.slice(0, -1), siblings[at + 1]!.id])
-                    }
-                  >
-                    {siblings[at + 1]!.title} <span className="humanity__step-arrow" aria-hidden="true">
-                      ←
-                    </span>
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
+            <SiblingSteps siblings={siblings} at={at} onGo={(id) => go([...path.slice(0, -1), id])} />
           </>
         )}
       </section>
@@ -259,6 +250,45 @@ export function HumanityTimeline({
 }
 
 /* ── The timeline on top ────────────────────────────────────────────────── */
+
+const NO_ITEMS = (): readonly SurahItem[] => [];
+
+/** The previous and the next node of the same parent. */
+function SiblingSteps({
+  siblings,
+  at,
+  onGo,
+}: {
+  siblings: HistoryNode[];
+  at: number;
+  onGo: (id: string) => void;
+}): ReactNode {
+  if (siblings.length < 2) return null;
+  const before = at > 0 ? siblings[at - 1] : undefined;
+  const after = at < siblings.length - 1 ? siblings[at + 1] : undefined;
+  return (
+    <div className="humanity__steps">
+      {before ? (
+        <button type="button" className="humanity__step" onClick={() => onGo(before.id)}>
+          <span className="humanity__step-arrow" aria-hidden="true">
+            →
+          </span>{" "}
+          {before.title}
+        </button>
+      ) : (
+        <span />
+      )}
+      {after ? (
+        <button type="button" className="humanity__step is-next" onClick={() => onGo(after.id)}>
+          {after.title}{" "}
+          <span className="humanity__step-arrow" aria-hidden="true">
+            ←
+          </span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 function TimelineAxis({
   markers,
@@ -277,7 +307,8 @@ function TimelineAxis({
 }): ReactNode {
   const here = path.join("/");
   // The eras' bands span the stations that belong to them, in order.
-  const spans = (["prophets", "seal", "ummah"] as const).map((tone) => {
+  // R212 — the rightly guided caliphate is an era of its own.
+  const spans = (["prophets", "seal", "rashidun", "ummah"] as const).map((tone) => {
     const owned = markers
       .map((m, i) => (m.tone === tone ? i : -1))
       .filter((i) => i >= 0);
@@ -373,11 +404,12 @@ function TimelineAxis({
             key={phase.node}
             phase={phase}
             active={here === phase.node || here.startsWith(`${phase.node}/`)}
+            zoomed={phase.node === ZOOMED_PHASE && expeditions.length > 0}
             onOpen={onOpen}
           />
         ))}
         <ExpeditionLine
-          phase={phases.find((p) => p.node === "seal/madani")}
+          phase={phases.find((p) => p.node === ZOOMED_PHASE)}
           expeditions={expeditions}
           stations={markers.length}
           here={here}
@@ -393,20 +425,26 @@ function TimelineAxis({
  * stations** — drawn from the middle of one station's column to the middle of
  * the other's, one level under the line.
  */
+/** The phase the expeditions line draws larger (R205). */
+const ZOOMED_PHASE = "seal/madani";
+
 function PhaseLine({
   phase,
   active,
+  zoomed,
   onOpen,
 }: {
   phase: TimelineSpan;
   active: boolean;
+  /** R212 — the phase is selected, and the expeditions flow out of it. */
+  zoomed: boolean;
   onOpen: (node: string) => void;
 }): ReactNode {
   const columns = phase.to - phase.from + 1;
   return (
     <button
       type="button"
-      className={`humanity__phase tone-${phase.tone}${active ? " is-active" : ""}`}
+      className={`humanity__phase tone-${phase.tone}${active ? " is-active" : ""}${zoomed ? " is-zoomed" : ""}`}
       style={{
         gridColumn: `${String(phase.from + 2)} / ${String(phase.to + 3)}`,
         ["--span" as string]: String(columns),
@@ -572,21 +610,6 @@ function NodeHero({
       {node.summary ? (
         <p className="humanity__summary">{node.summary}</p>
       ) : null}
-      {node.surah ? (
-        // R210 — the way deeper, said before the button.
-        <span className="humanity__surah-lead">
-          {t("content.history.openSurahLead")}
-        </span>
-      ) : null}
-      {node.surah ? (
-        <ButtonLink
-          variant="primary"
-          className="humanity__surah"
-          href={`/resources?surah=${String(node.surah)}`}
-        >
-          {t("content.history.openSurah")}
-        </ButtonLink>
-      ) : null}
     </header>
   );
 }
@@ -631,42 +654,5 @@ function NodeCard({
         ) : null}
       </span>
     </button>
-  );
-}
-
-function Details({ lines }: { lines: string[] }): ReactNode {
-  const sections = detailSections(lines);
-  return (
-    <div className="humanity__details">
-      {sections.map((section, index) =>
-        // A heading with nothing of its own titles the sections that follow it.
-        section.lines.length === 0 ? (
-          <h3 key={index} className="humanity__group">
-            {section.heading}
-          </h3>
-        ) : (
-          <section key={index} className="humanity__section">
-            {section.heading ? (
-              <h3 className="humanity__section-title">{section.heading}</h3>
-            ) : null}
-            <ul>
-              {section.lines.map((line, i) => (
-                <li
-                  key={i}
-                  className={line.kind === "pair" ? "is-pair" : undefined}
-                >
-                  {line.kind === "pair" ? (
-                    <strong className="humanity__label">{line.label}</strong>
-                  ) : null}
-                  <span>
-                    <Verse text={line.text} />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ),
-      )}
-    </div>
   );
 }

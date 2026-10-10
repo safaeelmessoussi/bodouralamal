@@ -13,7 +13,8 @@
   display: grid;
   gap: var(--space-3);
   justify-items: start;
-  margin-block-end: var(--space-10);
+  /* R212 — the page's content starts close under its tabs. */
+  margin-block-end: var(--space-5);
 }
 .content-page__title {
   font-size: var(--font-size-xl);
@@ -810,40 +811,6 @@
   font-size: var(--font-size-xl);
   color: inherit;
 }
-.surah-library__lede {
-  margin: 0;
-  max-inline-size: none;
-  text-wrap: pretty;
-  opacity: 0.92;
-}
-.surah-library__summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin: var(--space-2) 0 0;
-  padding: 0;
-  list-style: none;
-}
-.surah-library__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-block-size: var(--tap-min);
-  padding: 0.25rem var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  color: var(--color-primary-strong);
-  font-size: var(--font-size-sm);
-  font-weight: 700;
-  text-decoration: none;
-}
-.surah-library__chipCount {
-  padding: 0 var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-}
-
 .surah-library__section {
   display: grid;
   gap: var(--space-3);
@@ -858,11 +825,6 @@
   border-block-end: 2px solid var(--color-primary-soft);
   font-family: var(--font-family-display);
   color: var(--color-primary-strong);
-}
-.surah-library__sectionHint {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
 }
 
 /* A lesson to listen to, played in place. */
@@ -1016,17 +978,16 @@
   }
 }
 
-/* R210 — a Surah's diagrams (those of «نظرة شاملة») open its panel; then a
-   line says where to go deeper, before the content itself. */
-.surah-library__diagrams {
-  margin-block: var(--space-4);
+/* R212 — one Surah page in «حسب السورة» and «نظرة شاملة»: its name (and
+   the tree's subtitle), what «نظرة شاملة» says of it, «خطاطات السورة», then
+   its shelves. */
+.surah-library__subtitle {
+  margin: 0;
+  opacity: 0.92;
 }
-.surah-library__more {
-  margin: 0 0 var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  border-inline-start: 4px solid var(--color-primary-line);
-  border-radius: var(--radius-md);
-  background: var(--color-primary-soft);
-  color: var(--color-text-secondary);
-  font-weight: 600;
+.surah-library__profile .humanity__details {
+  margin: 0;
+}
+.surah-library__diagrams {
+  margin: 0;
 }

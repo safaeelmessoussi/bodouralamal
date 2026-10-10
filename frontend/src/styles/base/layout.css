@@ -56,6 +56,18 @@
 .section {
   padding-block: clamp(3rem, 8vw, 6rem);
 }
+/* R212 — a page's own title sits close under the header: the room a home-page
+   section takes between sections only pushed a page's content down. */
+main > .section:first-child,
+main.section {
+  padding-block-start: var(--space-6);
+}
+/* R212 — a link to a section («#programs») lands on its title, just under the
+   sticky header: on a phone the section's own top room is shorter than the
+   header, which hid the title and showed the lede first. */
+main .section[id] {
+  scroll-margin-block-start: calc(var(--header-height) + var(--space-3) - clamp(3rem, 8vw, 6rem));
+}
 .section--tint {
   background: var(--color-surface);
   border-block: 1px solid var(--color-border-subtle);

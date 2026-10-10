@@ -10,7 +10,7 @@
  */
 
 /** The colour family a node is drawn in — the board's own palette. */
-export type HistoryTone = 'root' | 'prophets' | 'seal' | 'makki' | 'madani' | 'ummah';
+export type HistoryTone = 'root' | 'prophets' | 'seal' | 'makki' | 'madani' | 'rashidun' | 'ummah';
 
 export interface HistoryWhen {
   gregorian?: string;
@@ -172,24 +172,6 @@ export function verseRuns(text: string): { verse: boolean; text: string }[] {
 /** Every box of a diagram, itself included. */
 export function diagramSize(node: DiagramNode): number {
   return 1 + (node.children ?? []).reduce((sum, child) => sum + diagramSize(child), 0);
-}
-
-/**
- * **Which boxes start open** (R204; R205), by address (`0`, `0/2`…). A
- * diagram of up to `whole` boxes opens whole, so it reads at a glance like the
- * Owner's drawings; a larger one shows its trunk and first branches only — the
- * big picture first, never a wall of boxes — and each branch opens on a click.
- */
-export function initiallyOpen(root: DiagramNode, whole = 16): Set<string> {
-  const open = new Set<string>();
-  const all = diagramSize(root) <= whole;
-  const walk = (node: DiagramNode, key: string, depth: number): void => {
-    if (!node.children?.length) return;
-    if (all || depth < 1) open.add(key);
-    node.children.forEach((child, i) => walk(child, `${key}/${String(i)}`, depth + 1));
-  };
-  walk(root, '0', 0);
-  return open;
 }
 
 /** The addresses of every box that has branches — for «فتح الكل». */
