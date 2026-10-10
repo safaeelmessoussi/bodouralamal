@@ -417,6 +417,17 @@ button.humanity__station.is-active {
   cursor: default;
 }
 
+/* R216 — the nearest ancestor is the way back: said as a button. */
+.humanity__crumb.is-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border-color: var(--color-primary-line);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-weight: 700;
+}
+
 /* ── The stage ────────────────────────────────────────────────────────────── */
 
 .humanity__stage {
@@ -497,11 +508,6 @@ button.humanity__station.is-active {
   flex-basis: 100%;
 }
 
-.humanity__era .humanity__count {
-  margin-block-start: 0;
-  margin-inline-start: auto;
-}
-
 .humanity__era:hover,
 .humanity__card:hover {
   transform: translateY(-3px);
@@ -554,18 +560,6 @@ button.humanity__station.is-active {
   color: var(--tone, var(--color-primary));
   font-size: var(--font-size-xs);
   font-weight: 600;
-}
-
-.humanity__badge.is-surah {
-  background: var(--tone, var(--color-primary));
-  border-color: var(--tone, var(--color-primary));
-  color: var(--color-text-inverse);
-}
-
-.humanity__count {
-  margin-block-start: auto;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
 }
 
 .humanity__when {
@@ -721,34 +715,7 @@ button.humanity__station.is-active {
   color: var(--tone, var(--color-primary));
 }
 
-/* Previous / next among siblings. */
-.humanity__steps {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.humanity__step {
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--tone-line, var(--color-border));
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  color: var(--tone, var(--color-primary));
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.humanity__step:hover {
-  background: var(--tone-soft, var(--color-primary-soft));
-}
-
-.humanity__step.is-next {
-  margin-inline-start: auto;
-}
-
-/* R209 — the arrows point along the reading direction: mirrored left-to-right. */
+/* R209 — the back arrow points along the reading direction: mirrored left-to-right. */
 .humanity__step-arrow {
   display: inline-block;
 }
@@ -869,13 +836,6 @@ button.humanity__station.is-active {
 .hdiagram__actions {
   display: flex;
   gap: var(--space-1);
-}
-
-/* R205 — an invitation to explore, under the title. */
-.hdiagram__hint {
-  flex-basis: 100%;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
 }
 
 /* R205 — the first branches carry their reading order. */

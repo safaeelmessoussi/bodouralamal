@@ -18,6 +18,9 @@
    */
   --measure-lede: 92ch;
   --header-height: 4.25rem;
+  /* R216 — a section's room above and below: a view holds more of the
+     content without crowding it (was 3–6rem, up to 12rem between two). */
+  --section-pad: clamp(1.75rem, 4vw, 3rem);
   /* The smallest thing a finger is asked to hit (design.mmd §6): 44 px is
      the platform floor on every pointer, 48 px on a phone's primary actions. */
   --tap-min: 2.75rem;

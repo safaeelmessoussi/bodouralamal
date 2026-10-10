@@ -64,7 +64,6 @@ export function ProgramsSection(): ReactNode {
           <h2 id="programs-title" className="section__title">
             {t('programs.title')}
           </h2>
-          <p className="lede programs__lede">{t('programs.lede')}</p>
           {/* R187 §3 — «عرض جميع البرامج» stands beside «عرض بملء الشاشة» in
               the road's own controls, not here. */}
         </div>

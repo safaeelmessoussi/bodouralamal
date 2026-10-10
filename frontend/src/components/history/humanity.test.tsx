@@ -270,7 +270,8 @@ describe('R203 — the page', () => {
     // R205 — the first branches are numbered, and one without a colour takes the next.
     expect(html).toContain('<span class="hdiagram__step" aria-hidden="true">2</span>');
     expect(html).toContain('class="tone-makki"');
-    expect(html).toContain(t('content.history.diagram.hint'));
+    // R216 — no hint under the title: the «+N» on a box already says it opens.
+    expect(html).not.toContain('hdiagram__hint');
     expect(html).toContain('<span class="humanity__verse" dir="rtl" lang="ar">﴿اقْرَأْ﴾</span>');
     expect(html).toContain(t('content.history.diagram.openAll'));
     // R211 — a trunk whose branches are all leaves (مدار الأسماء والصفات،
@@ -282,17 +283,37 @@ describe('R203 — the page', () => {
     expect(flat).toContain(t('content.history.diagram.closeAll'));
   });
 
+  it('R216 — says each thing once: no counts, no «سورة» badge, no dates the timeline shows', () => {
+    at('?view=history&node=ummah');
+    const ummah = renderToStaticMarkup(<HumanityTimeline />);
+    expect(ummah).not.toContain('humanity__count');
+    // The Umayyad card opens a station of the timeline: its years are there.
+    expect(ummah).not.toMatch(/humanity__card[^"]*"[^>]*>(?:(?!<\/button>).)*humanity__when/s);
+    at('?view=history&node=seal/makki');
+    const makki = renderToStaticMarkup(<HumanityTimeline />);
+    expect(makki).not.toContain('is-surah');
+    // The Meccan phase is on the timeline: its header repeats no dates.
+    expect(makki).not.toMatch(/humanity__hero[^"]*"[^>]*>(?:(?!<\/header>).)*humanity__when/s);
+    // A caliph is not a station: his card keeps his dates.
+    at('?view=history&node=rashidun');
+    expect(renderToStaticMarkup(<HumanityTimeline />)).toMatch(/humanity__card(?:(?!<\/button>).)*humanity__when/s);
+  });
+
   it('R212 — opens a Surah as «حسب السورة» does: its name, its traits, its diagrams closed', () => {
     at('?view=history&node=seal/makki/al-fatiha');
     const html = renderToStaticMarkup(<HumanityTimeline />);
     expect(html).toContain('class="surah-library__head"');
     expect(html).toContain('سورة الفاتحة');
-    expect(html).toContain('أم القرآن والسبع المثاني');
+    // R216 — al-Fatiha's «أم القرآن والسبع المثاني» is not what is taught here.
+    expect(html).not.toContain('أم القرآن والسبع المثاني');
     expect(html).toContain('نوع السورة');
     expect(html).toContain(t('content.bySurah.section.diagrams'));
     expect(html).not.toContain('href="/resources?surah=1"');
     expect(html).not.toContain('humanity__hero');
-    // Its neighbours are a step away, as for any node.
-    expect(html).toContain('humanity__steps');
+    // R216 — no previous/next buttons; the way back up is the trail's
+    // nearest ancestor, and the current title is not said twice.
+    expect(html).not.toContain('humanity__steps');
+    expect(html).toMatch(/humanity__crumb is-back[^>]*>(?:(?!<\/button>).)*المرحلة المكية/s);
+    expect(html).not.toContain('aria-current="location"');
   });
 });

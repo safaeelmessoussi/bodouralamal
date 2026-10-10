@@ -9,14 +9,12 @@ import {
 } from "react";
 
 import { t } from "../../i18n/index.js";
-import { counted } from "../../lib/arabic-years.js";
 import { EXPEDITIONS, HUMANITY, PHASES, TIMELINE } from "./humanity-data.js";
 import { Details } from "./humanity-details.js";
 import { HumanityDiagram } from "./humanity-diagram.js";
 import { humanityDictionary, localiseHumanity } from "./humanity-i18n.js";
 import {
   TODAY,
-  descendantCount,
   parsePath,
   resolvePath,
   type HistoryNode,
@@ -115,9 +113,18 @@ export function HumanityTimeline({
   const trail = useMemo(() => resolvePath(root, path), [root, path]);
   const node = trail[trail.length - 1] ?? root;
   const eraId = path[0] ?? null;
-  const parent = trail.length > 1 ? trail[trail.length - 2] : null;
-  const siblings = parent?.children ?? [];
-  const at = siblings.findIndex((sibling) => sibling.id === node.id);
+  // R216 — a date the timeline already shows is not repeated on a card or a
+  // header: the eras, and every node a station, a phase or an expedition opens.
+  const onTimeline = useMemo(
+    () =>
+      new Set([
+        ...(root.children ?? []).map((era) => era.id),
+        ...markers.flatMap((m) => (m.node ? [m.node] : [])),
+        ...phases.map((p) => p.node),
+        ...expeditions.map((e) => e.node),
+      ]),
+    [root, markers, phases, expeditions],
+  );
 
   return (
     <div className="humanity">
@@ -130,55 +137,30 @@ export function HumanityTimeline({
         onOpen={(target) => go(target.split("/"))}
       />
 
-      {isToday ? (
+      {/* R216 — the way back up: the ancestors only (the current node is the
+          heading right below — never said twice), the nearest one first in
+          reading order as «→ back», so a reader who went into details returns
+          to the view she came from without the browser's back button. */}
+      {path.length > 0 ? (
         <nav
           className="humanity__trail"
           aria-label={t("content.history.trailLabel")}
         >
           <ol>
-            <li>
-              <button
-                type="button"
-                className="humanity__crumb"
-                onClick={() => go([])}
-              >
-                {t("content.views.history")}
-              </button>
-            </li>
-            <li>
-              <span
-                className="humanity__crumb is-current"
-                aria-current="location"
-              >
-                {t("content.history.today.title")}
-              </span>
-            </li>
-          </ol>
-        </nav>
-      ) : path.length > 0 ? (
-        <nav
-          className="humanity__trail"
-          aria-label={t("content.history.trailLabel")}
-        >
-          <ol>
-            {trail.map((step, index) => (
+            {(isToday ? [root] : trail.slice(0, -1)).map((step, index, ancestors) => (
               <li key={step.id}>
-                {index < trail.length - 1 ? (
-                  <button
-                    type="button"
-                    className="humanity__crumb"
-                    onClick={() => go(path.slice(0, index))}
-                  >
-                    {index === 0 ? t("content.views.history") : step.title}
-                  </button>
-                ) : (
-                  <span
-                    className="humanity__crumb is-current"
-                    aria-current="location"
-                  >
-                    {index === 0 ? t("content.views.history") : step.title}
-                  </span>
-                )}
+                <button
+                  type="button"
+                  className={`humanity__crumb${index === ancestors.length - 1 ? " is-back" : ""}`}
+                  onClick={() => go(isToday ? [] : path.slice(0, index))}
+                >
+                  {index === ancestors.length - 1 ? (
+                    <span className="humanity__step-arrow" aria-hidden="true">
+                      →
+                    </span>
+                  ) : null}
+                  {index === 0 ? t("content.views.history") : step.title}
+                </button>
               </li>
             ))}
           </ol>
@@ -210,11 +192,10 @@ export function HumanityTimeline({
               activeChildId={activeChildId}
               onOpen={onOpenItem}
             />
-            <SiblingSteps siblings={siblings} at={at} onGo={(id) => go([...path.slice(0, -1), id])} />
           </div>
         ) : (
           <>
-            <NodeHero node={node} headingRef={heading} />
+            <NodeHero node={node} headingRef={heading} dated={!onTimeline.has(path.join("/"))} />
             {/* The children first, right under the header, so the timeline
                 and the next step are read in one view (R204); the text and
                 the diagrams follow. */}
@@ -225,6 +206,7 @@ export function HumanityTimeline({
                     <NodeCard
                       node={child}
                       index={index}
+                      dated={!onTimeline.has([...path, child.id].join("/"))}
                       onOpen={() => go([...path, child.id])}
                     />
                   </li>
@@ -241,7 +223,6 @@ export function HumanityTimeline({
                 ))}
               </div>
             ) : null}
-            <SiblingSteps siblings={siblings} at={at} onGo={(id) => go([...path.slice(0, -1), id])} />
           </>
         )}
       </section>
@@ -252,43 +233,6 @@ export function HumanityTimeline({
 /* ── The timeline on top ────────────────────────────────────────────────── */
 
 const NO_ITEMS = (): readonly SurahItem[] => [];
-
-/** The previous and the next node of the same parent. */
-function SiblingSteps({
-  siblings,
-  at,
-  onGo,
-}: {
-  siblings: HistoryNode[];
-  at: number;
-  onGo: (id: string) => void;
-}): ReactNode {
-  if (siblings.length < 2) return null;
-  const before = at > 0 ? siblings[at - 1] : undefined;
-  const after = at < siblings.length - 1 ? siblings[at + 1] : undefined;
-  return (
-    <div className="humanity__steps">
-      {before ? (
-        <button type="button" className="humanity__step" onClick={() => onGo(before.id)}>
-          <span className="humanity__step-arrow" aria-hidden="true">
-            →
-          </span>{" "}
-          {before.title}
-        </button>
-      ) : (
-        <span />
-      )}
-      {after ? (
-        <button type="button" className="humanity__step is-next" onClick={() => onGo(after.id)}>
-          {after.title}{" "}
-          <span className="humanity__step-arrow" aria-hidden="true">
-            ←
-          </span>
-        </button>
-      ) : null}
-    </div>
-  );
-}
 
 function TimelineAxis({
   markers,
@@ -555,10 +499,8 @@ function EraCards({
               {era.subtitle ? (
                 <span className="humanity__era-subtitle">{era.subtitle}</span>
               ) : null}
-              <When when={era.when} />
-              <span className="humanity__count">
-                {counted("content.history.items", descendantCount(era))}
-              </span>
+              {/* R216 — no dates (the timeline above has them) and no count
+                  of what is inside: only what is taught. */}
             </button>
           </li>
         ))}
@@ -586,9 +528,12 @@ function When({ when }: { when?: HistoryNode["when"] }): ReactNode {
 function NodeHero({
   node,
   headingRef,
+  dated,
 }: {
   node: HistoryNode;
   headingRef: RefObject<HTMLHeadingElement | null>;
+  /** R216 — false where the timeline already shows the node's dates. */
+  dated: boolean;
 }): ReactNode {
   return (
     <header className={`humanity__hero tone-${node.tone}`}>
@@ -601,12 +546,14 @@ function NodeHero({
       {node.subtitle ? (
         <p className="humanity__subtitle">{node.subtitle}</p>
       ) : null}
-      <span className="humanity__hero-meta">
-        <When when={node.when} />
-        {node.badge ? (
-          <span className="humanity__badge">{node.badge}</span>
-        ) : null}
-      </span>
+      {(dated && node.when) || node.badge ? (
+        <span className="humanity__hero-meta">
+          {dated ? <When when={node.when} /> : null}
+          {node.badge ? (
+            <span className="humanity__badge">{node.badge}</span>
+          ) : null}
+        </span>
+      ) : null}
       {node.summary ? (
         <p className="humanity__summary">{node.summary}</p>
       ) : null}
@@ -617,13 +564,14 @@ function NodeHero({
 function NodeCard({
   node,
   index,
+  dated,
   onOpen,
 }: {
   node: HistoryNode;
   index: number;
+  dated: boolean;
   onOpen: () => void;
 }): ReactNode {
-  const inside = descendantCount(node);
   return (
     <button
       type="button"
@@ -637,22 +585,14 @@ function NodeCard({
       {node.subtitle ? (
         <span className="humanity__card-subtitle">{node.subtitle}</span>
       ) : null}
-      <When when={node.when} />
-      <span className="humanity__card-foot">
-        {node.badge ? (
+      {/* R216 — a date only where the timeline does not show it; no «سورة»
+          badge (the title says it) and no count of what is inside. */}
+      {dated ? <When when={node.when} /> : null}
+      {node.badge ? (
+        <span className="humanity__card-foot">
           <span className="humanity__badge">{node.badge}</span>
-        ) : null}
-        {node.surah ? (
-          <span className="humanity__badge is-surah">
-            {t("content.history.surahBadge")}
-          </span>
-        ) : null}
-        {inside > 0 ? (
-          <span className="humanity__count">
-            {counted("content.history.items", inside)}
-          </span>
-        ) : null}
-      </span>
+        </span>
+      ) : null}
     </button>
   );
 }

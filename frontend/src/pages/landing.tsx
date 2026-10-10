@@ -6,7 +6,6 @@ import { BranchesSection } from '../components/branches-section.js';
 import { PartnersSection } from '../components/partners-section.js';
 import { ProgramsSection } from '../components/programs-section.js';
 import { SiteFooter } from '../components/site-footer.js';
-import { ButtonLink } from '../components/ui/button.js';
 import { Container } from '../components/ui/container.js';
 import { Icon } from '../components/ui/icon.js';
 import { useNavigation } from '../hooks/use-navigation.js';
@@ -112,9 +111,8 @@ export function Hero(): ReactNode {
             {isAuthenticated ? null : (
               <div className="hero__actions">
                 <SignInButton />
-                <ButtonLink href="#programs" variant="secondary">
-                  {t('landing.ctaPrograms')}
-                </ButtonLink>
+                {/* R216 — «اكتشاف برامجنا» withdrawn: the «البرامج التعليمية»
+                    card beside it opens the same section. */}
               </div>
             )}
           </div>

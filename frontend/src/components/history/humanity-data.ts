@@ -450,9 +450,8 @@ export const HUMANITY: HistoryNode = {
        "id": "al-fatiha",
        "title": "سورة الفاتحة",
        "tone": "makki",
-       "subtitle": "أم القرآن والسبع المثاني",
        "lines": [
-        "نوع السورة: مكية، أم القرآن والسبع المثاني"
+        "نوع السورة: مكية"
        ],
        "surah": 1,
        "diagrams": [

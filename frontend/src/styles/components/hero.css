@@ -7,8 +7,9 @@
   overflow: hidden;
   background: var(--color-primary-strong);
   color: var(--color-on-primary);
-  /* Room below for the three doors that overlap its lower edge. */
-  padding-block: clamp(3rem, 9vw, 6.5rem) clamp(5rem, 12vw, 8.5rem);
+  /* Room below for the three doors that overlap its lower edge (they rise
+     by up to 4rem). R216 — tighter above and below. */
+  padding-block: clamp(2rem, 5vw, 4rem) clamp(4rem, 8vw, 6rem);
 }
 
 /*

@@ -302,3 +302,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `framing-preference.service.ts` writes for registration, role request, `PUT /me/teaching-profile/framing`, `PUT /admin/users/{id}/teaching-profile/framing`; reads add `available_now`. `TeachingSectionFields` asks period/position/levels; `FramingPreferenceEditor` in «الأوقات المتاحة» and the admin dialog.
 - «المؤطِّرات»: «الفرع» + «الإتاحة هذا الفصل» (`teacherMatches`), all pages loaded, «هذا الفصل» column. «مجموعات المستويات»: «المستفيدات» last.
 - Content: `AuthorPicker` (upload and edit, administrators), cards show «الاسم · الصفة»; recordings name their lead teacher; account deletion clears authorship. Chatbot postponed.
+
+## 2026-10-10 — SRS Revision 216: less repeated, tighter, a way back
+- `humanity-timeline.tsx`: trail of ancestors with the nearest as «→ back» (`is-back`), `SiblingSteps` removed; `onTimeline` hides `When` on cards/headers the timeline dates; no surah badge, no counts.
+- `layout.css` `--section-pad` 1.75–3rem, `.section__head` 1–1.5rem; `hero.css` 2–4rem / 4–6rem.
+- Removed: hero «اكتشاف برامجنا», `programs.lede`, diagram hint, al-Fatiha subtitle and «أم القرآن…» in its type line (seven languages).
+- Verified: frontend tests/lint/build; Localhost home and `seal/wafat` at 1366.

@@ -60,11 +60,6 @@ export function HumanityDiagram({
             </button>
           </span>
         ) : null}
-        {all.length > 0 ? (
-          <span className="hdiagram__hint">
-            {t("content.history.diagram.hint")}
-          </span>
-        ) : null}
       </figcaption>
       <div className="hdiagram__scroll">
         <ul className="hdiagram__tree">
