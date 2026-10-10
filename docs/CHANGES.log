@@ -286,3 +286,13 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `humanity-data.ts`: «عدد الآيات» removed from every Surah; «مكانتها» (al-Fatiha) and «زمن النزول»/«من أسمائها» (al-Anfal, at-Tawba) folded into «نوع السورة»; translations re-keyed, the three merged lines in six languages (Amazigh joined from their own fragments — E12).
 - `humanity.test.tsx`: a Surah's lines keep to the Owner's labels. Maryam's diagrams wait for the slides file.
 - Verified: frontend tests/typecheck; key parity in six locales.
+
+## 2026-10-10 — SRS Revision 214: no «no permission» after quick browsing; «مساري» statuses
+- Cause: TD-13's 120 req/min/IP (burst 20) — `/me` answered 429, `contexts/session.tsx` fell back to anonymous, the portal said «ليست لديك صلاحية». Now 600/min burst 100 (`nginx/snippets/rate-limits.conf`, `app-routing.conf`); `fetchMe` waits out 429/5xx three times; `api()` retries a limited read twice.
+- `profile.service.ts` `ownJourney`: one row per Level with `status`/`started_on`/`ended_on` (completion mark, live, or all ended); «مساري» shows a badge and the dates.
+- Text: the library lede loses «ويمكن تصفيتها حسب الحاجة» (seven languages); حسابي loses its lede.
+- Verified: backend/frontend unit tests, typecheck, lint; OpenAPI regenerated.
+
+## 2026-10-10 — R213 §2: «سورة مريم» in «نظرة شاملة»
+- `seal/makki/maryam` from the Owner's 53 lesson slides: four lines and five diagrams (al-Kahf link; opening and Zakariya; Maryam and 'Isa; the Day of Regret and the prophets; the rest of the Surah).
+- Every ﴿…﴾ in `humanity-data.ts` checked against the Mushaf (Tanzil, letters only): one quote joining an-Nisa 157–158 split in two; «مَلِكِ يَوْمِ الدِّينِ» is Warsh's reading and stays.

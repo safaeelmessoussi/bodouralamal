@@ -1,3 +1,4 @@
+import { moroccoDateIso } from '../lib/morocco-clock.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { knownBirthDate } from '../lib/birth-date.js';
@@ -82,6 +83,19 @@ export interface OwnEnrolment {
   branchName: string;
   /** `null` when she is enrolled in the Level itself rather than a group. */
   groupName: string | null;
+  /**
+   * **R214 — where she stands in this Level** (the Owner, 2026-10-10: «the
+   * status of a levels if in progress or finished or dropped … with the start
+   * date and end date»). `completed` — the administration marked the Level
+   * complete («إتمام المستوى», R167 §3), ending on that mark; `in_progress` —
+   * an enrolment in it is live; `dropped` — every enrolment in it has ended
+   * (the Owner's choice: ANY ended enrolment of a Level not completed),
+   * ending on the last one's end. One row per Level, starting on its first
+   * enrolment. Morocco dates, `YYYY-MM-DD` (TD-11).
+   */
+  status: 'in_progress' | 'completed' | 'dropped';
+  startedOn: string;
+  endedOn: string | null;
 }
 
 export interface OwnCircle {
@@ -124,15 +138,23 @@ export async function getOwnProfile(
       // three more endpoints: this is one screen answering one question, and
       // the authorization is the simplest there is — the subject is the JWT
       // `sub`, so no scope rule applies and none is invented.
+      // R214 — live AND ended enrolments: an ended one is her history
+      // («منقطعة»), not a deleted record to hide from her. `deletedAt` is read,
+      // never filtered on.
       levelEnrollments: {
-        where: { deletedAt: null },
+        where: { OR: [{ deletedAt: null }, { deletedAt: { not: null } }] },
+        orderBy: { enrolledAt: 'asc' },
         select: {
           id: true,
+          levelId: true,
+          enrolledAt: true,
+          deletedAt: true,
           level: { select: { name: true, category: { select: { name: true } } } },
           branch: { select: { name: true } },
           administrativeGroup: { select: { name: true } },
         },
       },
+      levelCompletionMarks: { select: { levelId: true, completedAt: true } },
       teachingGroupSeats: {
         where: { deletedAt: null },
         select: {
@@ -181,13 +203,7 @@ export async function getOwnProfile(
     birthDate: knownBirthDate(user)?.toISOString().slice(0, 10) ?? null,
     isBeneficiary: user.isBeneficiary,
     qr: await qrMatrixFor(user.qrRef),
-    enrolments: user.levelEnrollments.map((e) => ({
-      id: e.id,
-      categoryName: e.level.category.name,
-      levelName: e.level.name,
-      branchName: e.branch.name,
-      groupName: e.administrativeGroup?.name ?? null,
-    })),
+    enrolments: ownJourney(user.levelEnrollments, user.levelCompletionMarks),
     circles: user.teachingGroupSeats.map((m) => ({
       id: m.teachingGroup.id,
       name: m.teachingGroup.name,
@@ -312,4 +328,51 @@ export async function updateOwnProfile(
   });
 
   return getOwnProfile(prisma, caller.userId);
+}
+
+/**
+ * **R214 — one row per Level she was ever enrolled in**, oldest first: its
+ * status, its first enrolment's date, and its end (see `OwnEnrolment.status`).
+ * The branch and the group are the latest enrolment's — where she is, or was
+ * last.
+ */
+export function ownJourney(
+  enrolments: readonly {
+    id: string;
+    levelId: string;
+    enrolledAt: Date;
+    deletedAt: Date | null;
+    level: { name: string; category: { name: string } };
+    branch: { name: string };
+    administrativeGroup: { name: string } | null;
+  }[],
+  marks: readonly { levelId: string; completedAt: Date }[],
+): OwnEnrolment[] {
+  const byLevel = new Map<string, (typeof enrolments)[number][]>();
+  for (const e of [...enrolments].sort((a, b) => a.enrolledAt.getTime() - b.enrolledAt.getTime())) {
+    byLevel.set(e.levelId, [...(byLevel.get(e.levelId) ?? []), e]);
+  }
+  const completed = new Map(marks.map((m) => [m.levelId, m.completedAt]));
+  return [...byLevel.entries()].map(([levelId, rows]) => {
+    const first = rows[0]!;
+    const latest = rows[rows.length - 1]!;
+    const mark = completed.get(levelId);
+    const live = rows.some((r) => r.deletedAt === null);
+    const lastEnd = rows.reduce<Date | null>(
+      (end, r) => (r.deletedAt && (!end || r.deletedAt > end) ? r.deletedAt : end),
+      null,
+    );
+    const status: OwnEnrolment['status'] = mark ? 'completed' : live ? 'in_progress' : 'dropped';
+    const end = status === 'completed' ? mark! : status === 'dropped' ? lastEnd : null;
+    return {
+      id: latest.id,
+      categoryName: latest.level.category.name,
+      levelName: latest.level.name,
+      branchName: latest.branch.name,
+      groupName: latest.administrativeGroup?.name ?? null,
+      status,
+      startedOn: moroccoDateIso(first.enrolledAt),
+      endedOn: end ? moroccoDateIso(end) : null,
+    };
+  });
 }

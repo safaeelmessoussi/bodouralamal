@@ -129,9 +129,7 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
         if (!cancelled) setStatus('anonymous');
         return;
       }
-      const response = await fetch('/api/v1/me', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetchMe(token);
       if (cancelled) return;
       if (!response.ok) {
         setStatus('anonymous');
@@ -180,6 +178,28 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
     [status, me, accessToken, signInOffered],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+}
+
+/**
+ * **R214 (Owner-reported, 2026-10-10) — `/me` refused for being too quick is
+ * asked again, never read as «not signed in».** After a tour of several pages
+ * the edge's per-IP limit (TD-13) answered `429`, the session fell back to
+ * anonymous, and the next page said «ليست لديك صلاحية لعرض هذه الصفحة» to its
+ * own administrator until a reload a few seconds later. A `429` (or a passing
+ * `5xx`) is waited out a few times, the edge's own pause first; only a real
+ * answer — success or `401` — decides who is signed in.
+ */
+const ME_RETRY_WAITS_MS = [1500, 3000, 5000];
+export async function fetchMe(token: string): Promise<Response> {
+  let response = await fetch('/api/v1/me', { headers: { Authorization: `Bearer ${token}` } });
+  for (const wait of ME_RETRY_WAITS_MS) {
+    if (response.status !== 429 && response.status < 500) break;
+    const header = Number(response.headers.get('Retry-After'));
+    const pause = Number.isFinite(header) && header > 0 ? Math.min(header * 1000, wait) : wait;
+    await new Promise((resolve) => setTimeout(resolve, pause));
+    response = await fetch('/api/v1/me', { headers: { Authorization: `Bearer ${token}` } });
+  }
+  return response;
 }
 
 export function useSession(): SessionState {

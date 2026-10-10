@@ -436,7 +436,7 @@
  "content.unavailableTitle": "Les droits d'accès à ce contenu ont changé",
  "content.unavailableBody": "Les droits d'accès à ce contenu ont changé — merci de se connecter ou de contacter la direction de l'antenne.",
  "content.title": "Contenu pédagogique",
- "content.lede": "Tous les cours, enregistrements et fichiers, classés par catégorie, puis par niveau, puis par année scolaire, antenne et matière. Ils peuvent être filtrés selon les besoins.",
+ "content.lede": "Tous les cours, enregistrements et fichiers, classés par catégorie, puis par niveau, puis par année scolaire, antenne et matière.",
  "content.backToLibrary": "Tous les niveaux",
  "content.wholeCategory.title": "Tous les niveaux de la catégorie",
  "content.wholeCategory.lede": "Enregistrements et supports destinés à tous les niveaux de {category}.",

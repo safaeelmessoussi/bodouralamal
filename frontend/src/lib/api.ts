@@ -31,21 +31,23 @@ export interface ApiOptions {
   body?: unknown;
   /** Internal — set on the one retry `api()` makes after renewing the token. */
   retried?: boolean;
-  /** Internal — set on the one retry `api()` makes after a rate-limited READ. */
-  retriedAfterLimit?: boolean;
+  /** Internal — how many times `api()` has re-asked a rate-limited READ. */
+  limitRetries?: number;
 }
 
 /**
  * **R178 §3 (Owner-reported, 2026-09-29) — a rate-limited READ is retried
  * once, after the edge's own pause.** One administrative page fires five to
  * eight reads, so a quick tour of a few pages reaches TD-13's general limit
- * (120/min with a burst of 20) and the excess is refused with `429` — a
+ * (120/min with a burst of 20 then; 600/min with a burst of 100 since R214) and the excess is refused with `429` — a
  * screen the reader had just opened then showed an error for nothing she did.
  * The refusal is instantaneous (`nodelay`), so a single short wait is the
  * whole cure; the limit itself is untouched. Reads only: a refused write is
  * answered, never silently repeated.
  */
 const RATE_LIMIT_RETRY_MS = 1500;
+/** R214 — twice, the second after a longer pause: one wait was not always enough. */
+const RATE_LIMIT_RETRIES = 2;
 const RATE_LIMIT_RETRY_MAX_MS = 4000;
 function retryAfterMs(response: Response): number {
   const header = Number(response.headers.get('Retry-After'));
@@ -62,7 +64,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     method = 'GET',
     body,
     retried = false,
-    retriedAfterLimit = false,
+    limitRetries = 0,
   } = options;
 
   const response = await fetch(`/api/v1${path}`, {
@@ -87,9 +89,9 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     const fresh = await refreshAccessToken();
     if (fresh && fresh !== token) return api<T>(path, { ...options, token: fresh, retried: true });
   }
-  if (response.status === 429 && method === 'GET' && !retriedAfterLimit) {
-    await new Promise((resolve) => setTimeout(resolve, retryAfterMs(response)));
-    return api<T>(path, { ...options, retriedAfterLimit: true });
+  if (response.status === 429 && method === 'GET' && limitRetries < RATE_LIMIT_RETRIES) {
+    await new Promise((resolve) => setTimeout(resolve, retryAfterMs(response) * (limitRetries + 1)));
+    return api<T>(path, { ...options, limitRetries: limitRetries + 1 });
   }
   if (!response.ok) {
     // The envelope is READ here but not interpreted (TD-3.8). Every non-2xx

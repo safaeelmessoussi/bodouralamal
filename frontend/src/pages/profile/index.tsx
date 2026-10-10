@@ -24,6 +24,7 @@ import { DateField, TextField } from '../../components/ui/field.js';
 import { levelLabel } from '../../components/scope/level-select.js';
 import { useActiveChild } from '../../contexts/active-child.js';
 import { useSession } from '../../contexts/session.js';
+import { formatDate } from '../../lib/format-date.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { isRealPastDate } from '../../lib/birth-date.js';
@@ -122,7 +123,6 @@ export function ProfilePage(): ReactNode {
       <main id="main" className="section profile">
         <Container narrow>
           <h1>{t('profile.title')}</h1>
-          <p className="lede">{t('profile.lede')}</p>
 
           {loading ? (
             <LoadingState />
@@ -503,7 +503,10 @@ function DeleteAccountSection(): ReactNode {
  * holds none yet. Each list says so in words rather than rendering nothing,
  * because a blank area reads as a page that failed to load.
  */
-function PlacementSection({ profile }: { profile: OwnProfile }): ReactNode {
+/** R214 — a Level in progress, completed, or left. */
+const JOURNEY_TONE = { in_progress: 'neutral', completed: 'ok', dropped: 'warn' } as const;
+
+export function PlacementSection({ profile }: { profile: OwnProfile }): ReactNode {
   return (
     <section className="card" aria-labelledby="placement-heading">
       <h2 id="placement-heading">{t('profile.placementTitle')}</h2>
@@ -514,16 +517,21 @@ function PlacementSection({ profile }: { profile: OwnProfile }): ReactNode {
       ) : (
         <ul className="detail-list">
           {profile.enrolments.map((e) => (
-            <li key={e.id}>
+            <li key={e.id} className="journey-level" data-journey-status={e.status}>
               {/* Rule D — `{Category} — {Level}`, because Level names are not
                   unique across Categories (§4.4b) and a bare one identifies
                   nothing. */}
               <strong>
                 {e.category_name} — {e.level_name}
               </strong>{' '}
+              {/* R214 — where she stands in it, and since / until when. */}
+              <Badge tone={JOURNEY_TONE[e.status]}>{t(`profile.journeyStatus.${e.status}`)}</Badge>{' '}
               <span className="muted">
                 {e.branch_name}
                 {e.group_name === null ? '' : ` · ${e.group_name}`}
+                {' · '}
+                {t('profile.journeyStarted').replace('{date}', formatDate(e.started_on))}
+                {e.ended_on === null ? '' : ` · ${t('profile.journeyEnded').replace('{date}', formatDate(e.ended_on))}`}
               </span>
             </li>
           ))}

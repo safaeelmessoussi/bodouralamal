@@ -436,7 +436,7 @@
  "content.unavailableTitle": "Ha cambiado el permiso de acceso a este contenido",
  "content.unavailableBody": "Ha cambiado el permiso de acceso a este contenido: se ruega iniciar sesión o contactar con la dirección de la sede.",
  "content.title": "Contenido educativo",
- "content.lede": "Todas las clases, grabaciones y archivos, ordenados por categoría, luego por nivel, y después por curso escolar, sede y materia. También pueden filtrarse según se necesite.",
+ "content.lede": "Todas las clases, grabaciones y archivos, ordenados por categoría, luego por nivel, y después por curso escolar, sede y materia.",
  "content.backToLibrary": "Todos los niveles",
  "content.wholeCategory.title": "Todos los niveles de la categoría",
  "content.wholeCategory.lede": "Grabaciones y materiales dirigidos a todos los niveles de {category}.",

@@ -54,6 +54,10 @@ export interface OwnEnrolment {
   branch_name: string;
   /** `null` when she is enrolled in the Level itself rather than a group. */
   group_name: string | null;
+  /** R214 — where she stands in the Level, since and until when (`YYYY-MM-DD`). */
+  status: 'in_progress' | 'completed' | 'dropped';
+  started_on: string;
+  ended_on: string | null;
 }
 
 export interface OwnCircle {

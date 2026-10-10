@@ -436,7 +436,7 @@
  "content.unavailableTitle": "Die Zugriffsberechtigung für diesen Inhalt hat sich geändert",
  "content.unavailableBody": "Die Zugriffsberechtigung für diesen Inhalt hat sich geändert – bitte anmelden oder die Leitung der Zweigstelle kontaktieren.",
  "content.title": "Lerninhalte",
- "content.lede": "Alle Unterrichtseinheiten, Aufnahmen und Dateien, geordnet nach Kategorie, dann Stufe, dann Schuljahr, Zweigstelle und Fach. Sie lassen sich nach Bedarf filtern.",
+ "content.lede": "Alle Unterrichtseinheiten, Aufnahmen und Dateien, geordnet nach Kategorie, dann Stufe, dann Schuljahr, Zweigstelle und Fach.",
  "content.backToLibrary": "Alle Stufen",
  "content.wholeCategory.title": "Alle Stufen der Kategorie",
  "content.wholeCategory.lede": "Aufnahmen und Materialien für alle Stufen von {category}.",

@@ -436,7 +436,7 @@
  "content.unavailableTitle": "Access to this content has changed",
  "content.unavailableBody": "Access to this content has changed — please sign in or contact the branch administration.",
  "content.title": "Learning content",
- "content.lede": "All the lessons, recordings and files, organised by category, then level, then school year, branch and subject. They can be filtered as needed.",
+ "content.lede": "All the lessons, recordings and files, organised by category, then level, then school year, branch and subject.",
  "content.backToLibrary": "All levels",
  "content.wholeCategory.title": "All levels of the category",
  "content.wholeCategory.lede": "Recordings and materials for all levels of {category}.",

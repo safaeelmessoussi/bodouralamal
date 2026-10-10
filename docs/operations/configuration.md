@@ -134,7 +134,7 @@ Branding: `SystemSetting`; per-category visibility: the Category record; consent
 
 | Layer | Limit |
 |---|---|
-| **Nginx, per IP** | Auth endpoints 10 req/min · general API 120 req/min |
+| **Nginx, per IP** | Auth endpoints 10 req/min · general API 600 req/min, burst 100 (R214) |
 | **Nginx, per IP, uploads** | Coarse guard at the nearest floor (`1r/m`) — **not the quota** |
 | **Application, per user** | **Upload initiations 30/hour** — the authoritative quota, counted in PostgreSQL |
 

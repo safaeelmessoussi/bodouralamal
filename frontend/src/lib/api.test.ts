@@ -89,7 +89,7 @@ describe('R172 §5 — an expired access token is renewed and the request made o
   });
 });
 
-describe('R178 §3 — a rate-limited READ is retried once after the edge’s pause', () => {
+describe('R178 §3; R214 — a rate-limited READ is retried twice after the edge’s pause', () => {
   const limited = () =>
     new Response(JSON.stringify({ error: { code: 'RATE_LIMITED', message_key: 'errors.rate_limited', message: '', details: {}, request_id: 'r1' } }), {
       status: 429,
@@ -110,7 +110,7 @@ describe('R178 §3 — a rate-limited READ is retried once after the edge’s pa
     vi.useRealTimers();
   });
 
-  it('never repeats a refused WRITE, and a second refusal on a read is answered', async () => {
+  it('never repeats a refused WRITE, and a third refusal on a read is answered', async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(limited());
     vi.stubGlobal('fetch', fetchMock);
@@ -120,9 +120,10 @@ describe('R178 §3 — a rate-limited READ is retried once after the edge’s pa
     const read = api('/library', { token: 't' });
     // Attached before the clock moves, so the rejection is awaited, never unhandled.
     const refused = expect(read).rejects.toMatchObject({ status: 429 });
-    await vi.advanceTimersByTimeAsync(4000);
+    // R214 — 1 s, then 2 s: the second wait is longer.
+    await vi.advanceTimersByTimeAsync(3000);
     await refused;
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     vi.useRealTimers();
   });
 });

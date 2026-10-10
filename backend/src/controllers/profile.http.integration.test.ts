@@ -37,6 +37,7 @@ interface Body {
   version?: number;
   birth_date?: string | null;
   is_beneficiary?: boolean;
+  enrolments?: { level_name: string; status: string; started_on: string; ended_on: string | null }[];
 }
 
 const call = (method: string, path: string, token?: string, body?: unknown) =>
@@ -73,6 +74,7 @@ async function clear(): Promise<void> {
     where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] },
   });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 }
 
@@ -337,5 +339,40 @@ describe("PATCH /profile — beneficiary phone/birth_date requirement (R137)", (
       expect(res.status).toBe(400);
       expect(res.body.error?.code).toBe("VALIDATION_FAILED");
     }
+  });
+});
+
+/** R214 — «مساري»: every Level she was enrolled in, with its state and dates. */
+describe("GET /profile — her path through the Levels (R214)", () => {
+  it("reports a live enrolment as in progress and an ended one as dropped, with their dates", async () => {
+    const levels = await prisma.level.findMany({
+      where: { deletedAt: null, journeyRole: "step" },
+      select: { id: true, name: true },
+      take: 2,
+      orderBy: { id: "asc" },
+    });
+    const branch = await prisma.branch.findFirstOrThrow({ where: { deletedAt: null }, select: { id: true } });
+    expect(levels.length).toBe(2);
+    const student = await prisma.user.create({
+      data: { nameArabic: `${TAG} مستفيدة المسار`, accountStatus: "active", sex: "female", isBeneficiary: true },
+    });
+    await prisma.enrollment.create({
+      data: { studentId: student.id, levelId: levels[0]!.id, branchId: branch.id, enrolledAt: new Date("2025-09-01T10:00:00Z") },
+    });
+    await prisma.enrollment.create({
+      data: {
+        studentId: student.id,
+        levelId: levels[1]!.id,
+        branchId: branch.id,
+        enrolledAt: new Date("2024-09-01T10:00:00Z"),
+        deletedAt: new Date("2025-01-15T10:00:00Z"),
+      },
+    });
+    const res = await call("GET", "/profile", bearer(student.id, ["student"]));
+    expect(res.status).toBe(200);
+    expect(res.body.enrolments).toEqual([
+      expect.objectContaining({ level_name: levels[1]!.name, status: "dropped", started_on: "2024-09-01", ended_on: "2025-01-15" }),
+      expect.objectContaining({ level_name: levels[0]!.name, status: "in_progress", started_on: "2025-09-01", ended_on: null }),
+    ]);
   });
 });

@@ -72,6 +72,10 @@ function dto(profile: Awaited<ReturnType<typeof getOwnProfile>>) {
       level_name: e.levelName,
       branch_name: e.branchName,
       group_name: e.groupName,
+      // R214 — where she stands in the Level, and since / until when.
+      status: e.status,
+      started_on: e.startedOn,
+      ended_on: e.endedOn,
     })),
     circles: profile.circles.map((c) => ({
       id: c.id,

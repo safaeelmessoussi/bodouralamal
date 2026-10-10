@@ -57,7 +57,8 @@ describe('R203 — «نظرة شاملة», the content from the Owner’s board
 
   it('links every Surah to «حسب السورة» on a real Surah number', () => {
     const surahs = all(HUMANITY).filter((n) => n.surah !== undefined);
-    expect(surahs.map((s) => s.surah).sort((a, b) => a! - b!)).toEqual([1, 2, 3, 4, 5, 6, 8, 9, 10]);
+    // R213 — سورة مريم from the Owner's lesson slides.
+    expect(surahs.map((s) => s.surah).sort((a, b) => a! - b!)).toEqual([1, 2, 3, 4, 5, 6, 8, 9, 10, 19]);
     for (const s of surahs) expect(s.surah! >= 1 && s.surah! <= 114).toBe(true);
   });
 
