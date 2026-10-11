@@ -1,3 +1,4 @@
+import { BranchScopeField } from '../components/content/branch-scope-field.js';
 import { AuthorPicker, type AuthorValue } from '../components/content/author-picker.js';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
@@ -156,11 +157,7 @@ function ContentEditDialog({
     academicYearId: row.academic_year_id,
     branchIds: row.branch_id === null ? [] : [row.branch_id, ...(row.additional_branches ?? []).map((b) => b.id)],
     // R215 — who made it, from the row.
-    author: {
-      id: row.author_id ?? null,
-      name: row.author_name ?? null,
-      role: (row.author_role ?? '') as AuthorValue['role'],
-    },
+    author: { id: row.author_id ?? null, name: row.author_name ?? null } as AuthorValue,
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
@@ -207,13 +204,11 @@ function ContentEditDialog({
         required
       />
 
-      <MultiSelectField
-        label={t('scope.branch')}
-        options={branches}
+      <BranchScopeField
+        branches={branches}
         selected={form.branchIds}
         onChange={(ids) => setForm((f) => ({ ...f, branchIds: ids }))}
-        emptyLabel={t('content.upload.noBranch')}
-        required={!mayAssignGlobal}
+        mayAssignGlobal={mayAssignGlobal}
         error={touched ? branchError : null}
       />
 
@@ -630,12 +625,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
             : {}),
           ...(patch.academicYearId !== editing.academic_year_id ? { academic_year_id: patch.academicYearId } : {}),
           ...branchesPatch(editing, patch.branchIds),
-          // R215 — sent only when the person or the capacity changed.
-          ...(patch.author.id !== (editing.author_id ?? null)
-            ? { author_id: patch.author.id, author_role: patch.author.id === null || patch.author.role === '' ? null : patch.author.role }
-            : patch.author.role !== (editing.author_role ?? '')
-              ? { author_role: patch.author.role === '' ? null : patch.author.role }
-              : {}),
+          // R215 — sent only when the person changed; R217 — the server reads
+          // the capacity off her roles.
+          ...(patch.author.id !== (editing.author_id ?? null) ? { author_id: patch.author.id } : {}),
         },
         accessToken,
       );

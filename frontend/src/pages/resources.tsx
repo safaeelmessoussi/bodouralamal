@@ -422,6 +422,15 @@ function LibraryView({
 
   // Category → shelf (the Category's own shelf first) → year (newest first)
   // → branch (بدون فرع first) → subject → items.
+  // R217 — the Level cards the reader folded.
+  const [folded, setFolded] = useState<Set<string>>(() => new Set());
+  const toggleShelf = (key: string): void =>
+    setFolded((was) => {
+      const next = new Set(was);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const tree = useMemo(() => {
     // R177 §7 — within a Subject, the items about one Surah stand under it,
     // in Mushaf order; those about none come first, unlabelled.
@@ -583,7 +592,18 @@ function LibraryView({
               <h3 id={`shelf-${shelf.key}`} className="content-shelf__title">
                 {shelf.kind === 'whole_category' ? t('content.wholeCategory.title') : shelf.name}
                 <span className="content-year__badge">{counted('content.itemCount', shelf.count)}</span>
+                {/* R217 — a Level's card folds to its title, and opens again. */}
+                <button
+                  type="button"
+                  className="content-shelf__fold"
+                  aria-expanded={!folded.has(shelf.key)}
+                  aria-controls={`shelf-body-${shelf.key}`}
+                  onClick={() => toggleShelf(shelf.key)}
+                >
+                  {t(folded.has(shelf.key) ? 'content.shelf.unfold' : 'content.shelf.fold')}
+                </button>
               </h3>
+              <div id={`shelf-body-${shelf.key}`} hidden={folded.has(shelf.key)}>
               {shelf.years.map((year) => (
                 <section key={year.id} className="content-year" aria-labelledby={`year-${shelf.key}-${year.id}`}>
                   <h4 id={`year-${shelf.key}-${year.id}`} className="content-year__title">
@@ -624,6 +644,7 @@ function LibraryView({
                   ))}
                 </section>
               ))}
+              </div>
             </section>
           ))}
         </section>

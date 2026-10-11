@@ -121,6 +121,10 @@
    put; this is what moves. It carries the full §4.4/§4.9 event record as it
    grows without the page moving underneath it. */
 .dialog__body {
+  /* R217 — no smooth scrolling inside a dialog: focusing a field half out of
+     view scrolled the body smoothly, and Chrome closes a native <select>'s
+     list when its container scrolls — «السورة» opened and closed at once. */
+  scroll-behavior: auto;
   flex: 1;
   min-height: 0;
   padding: var(--space-5) var(--space-6) var(--space-6);

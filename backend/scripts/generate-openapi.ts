@@ -1211,7 +1211,7 @@ document.paths['/admin/approvals'].get.description +=
 document.paths['/library'].get.description +=
   ' **R215 — who made each item:** `author_name` is that person\'s PUBLIC display name (§7; `null` when the item names nobody, or the account is gone), `author_role` the capacity (`teacher` | `assistant` | `admin` | `student`), and `author_id` their id for staff readers only (`null` otherwise).';
 document.paths['/uploads/initiate'].post.description +=
-  ' **R215 —** `content_meta.author_id` (a live account; `null`/absent names nobody) and `author_role` (`teacher` | `assistant` | `admin` | `student`, only beside an author) record who made the item; bound into the ticket like every other scope fact. A class recording names its main teacher automatically.';
+  ' **R215 —** `content_meta.author_id` (a live account; `null`/absent names nobody) and `author_role` (`teacher` | `assistant` | `admin` | `student`, only beside an author) record who made the item; bound into the ticket like every other scope fact. A class recording names its main teacher automatically. **R217 — with no `author_role`, the server reads it off the person\'s roles** (teacher → `teacher`, else admin/super admin → `admin`, else student → `student`, else parent → `guardian`).';
 document.paths['/content/{id}'].patch.description +=
   ' **R215 —** `author_id` (`null` names nobody, clearing the capacity too) and `author_role` change who made the item.';
 document.paths['/admin/users/{id}/teaching-profile'].get.description +=

@@ -421,6 +421,7 @@ enum ContentAuthorRole {
   assistant
   admin
   student
+  guardian
 
   @@map("content_author_role")
 }

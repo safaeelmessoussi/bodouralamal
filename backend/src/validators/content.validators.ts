@@ -85,7 +85,7 @@ export const initiateUploadSchema = z
         replaces_content_id: uuid.optional(),
         /** R215 — who made it, and in which capacity; optional, either may be absent. */
         author_id: uuid.nullable().optional(),
-        author_role: z.enum(['teacher', 'assistant', 'admin', 'student']).nullable().optional(),
+        author_role: z.enum(['teacher', 'assistant', 'admin', 'student', 'guardian']).nullable().optional(),
       })
       .strict()
       .refine((meta) => (meta.level_id === undefined) !== (meta.category_id === undefined), {

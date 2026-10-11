@@ -1079,6 +1079,12 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
       expect(
         (await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { authorRole: true } })).authorRole,
       ).toBe("assistant");
+      // R217 — naming a person without a capacity reads it off her roles: the
+      // author here holds none, so none is recorded.
+      await updateContentMetadata(prisma, clients, admin(), id, { authorId: author.id });
+      expect(
+        (await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { authorRole: true } })).authorRole,
+      ).toBeNull();
       await updateContentMetadata(prisma, clients, admin(), id, { authorId: null });
       expect(
         await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { authorId: true, authorRole: true } }),

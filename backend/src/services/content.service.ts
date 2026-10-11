@@ -254,16 +254,33 @@ export interface InitiateInput {
   };
 }
 
-/** R215 — the capacity in which a person made an item. */
-export type ContentAuthorRoleValue = 'teacher' | 'assistant' | 'admin' | 'student';
+/** R215 — the capacity in which a person made an item (R217: a guardian too). */
+export type ContentAuthorRoleValue = 'teacher' | 'assistant' | 'admin' | 'student' | 'guardian';
 
-/** R215 — an author must be a live person; a capacity needs a person. */
-async function assertAuthor(prisma: Pick<PrismaClient, 'user'>, authorId: string | null | undefined): Promise<void> {
-  if (!authorId) return;
-  const live = await prisma.user.count({ where: { id: authorId, deletedAt: null } });
-  if (live !== 1) {
+/**
+ * **R215 — an author must be a live person. R217 — and her capacity is read
+ * off her own roles** (the Owner, 2026-10-11): مؤطِّرة first, then the
+ * administration, then مستفيدة, then وليّ الأمر; none of them — no capacity.
+ * Returns that capacity; `undefined` when no author is named.
+ */
+async function resolveAuthor(
+  prisma: Pick<PrismaClient, 'user'>,
+  authorId: string | null | undefined,
+): Promise<ContentAuthorRoleValue | null | undefined> {
+  if (!authorId) return undefined;
+  const person = await prisma.user.findFirst({
+    where: { id: authorId, deletedAt: null },
+    select: { branchRoles: { where: { deletedAt: null }, select: { role: { select: { name: true } } } } },
+  });
+  if (!person) {
     throw new AppError('VALIDATION_FAILED', 'the author must be a live account', { reason: 'UNKNOWN_AUTHOR' });
   }
+  const held = new Set(person.branchRoles.map((r) => r.role.name));
+  if (held.has('teacher')) return 'teacher';
+  if (held.has('admin') || held.has('super_admin')) return 'admin';
+  if (held.has('student')) return 'student';
+  if (held.has('parent')) return 'guardian';
+  return null;
 }
 
 export interface InitiateResult {
@@ -346,8 +363,8 @@ export async function initiateUpload(
    * `SUBJECT_NOT_IN_LEVEL`. With no Level teaching it, the first Level stays,
    * and the check below refuses the pair in words, as before.
    */
-  // R215 — the author named is a live person.
-  await assertAuthor(prisma, input.meta.authorId);
+  // R215 — the author named is a live person; R217 — the capacity is hers.
+  const authorRole = input.meta.authorRole ?? (await resolveAuthor(prisma, input.meta.authorId)) ?? undefined;
 
   const wholeCategory = input.meta.levelId === undefined;
   const teaching =
@@ -454,7 +471,7 @@ export async function initiateUpload(
       ...(replacesVersion === undefined ? {} : { replaces_version: replacesVersion }),
       // R215 — decided at initiation, like every other fact here.
       ...(input.meta.authorId ? { author_id: input.meta.authorId } : {}),
-      ...(input.meta.authorId && input.meta.authorRole ? { author_role: input.meta.authorRole } : {}),
+      ...(input.meta.authorId && authorRole ? { author_role: authorRole } : {}),
     },
     signingKey,
   );
@@ -1429,10 +1446,13 @@ export async function updateContentMetadata(
   };
   // R215 — who made it. A new person comes with their capacity (or none);
   // naming nobody clears both; a capacity alone needs the person already named.
-  await assertAuthor(prisma, patch.authorId);
+  const derivedRole = await resolveAuthor(prisma, patch.authorId);
   let authorData: { authorId?: string | null; authorRole?: ContentAuthorRoleValue | null } = {};
   if (patch.authorId !== undefined) {
-    authorData = patch.authorId === null ? { authorId: null, authorRole: null } : { authorId: patch.authorId, authorRole: patch.authorRole ?? null };
+    authorData =
+      patch.authorId === null
+        ? { authorId: null, authorRole: null }
+        : { authorId: patch.authorId, authorRole: patch.authorRole ?? derivedRole ?? null };
   } else if (patch.authorRole !== undefined) {
     const current = await prisma.educationalContent.findUniqueOrThrow({ where: { id: contentId }, select: { authorId: true } });
     if (current.authorId === null && patch.authorRole !== null) {

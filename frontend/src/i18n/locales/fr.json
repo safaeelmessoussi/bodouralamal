@@ -597,8 +597,11 @@
  "content.history.era.rashidun": "Un califat sur la voie de la prophétie",
  "content.bySurah.section.diagrams": "Les schémas de la sourate",
  "content.bySurah.section.slides": "Diapositives des cours",
- "content.author.role.teacher": "Enseignante principale",
+ "content.author.role.teacher": "Enseignement",
  "content.author.role.assistant": "Assistante d'enseignement",
  "content.author.role.admin": "Administration",
- "content.author.role.student": "Bénéficiaire"
+ "content.author.role.student": "Bénéficiaire",
+ "content.shelf.fold": "Replier",
+ "content.shelf.unfold": "Déplier",
+ "content.author.role.guardian": "Parent responsable"
 }

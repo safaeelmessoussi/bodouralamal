@@ -127,7 +127,7 @@ const updateContentSchema = z
       .optional(),
     // R215 — who made it (`null` names nobody) and in which capacity.
     author_id: z.uuid().nullable().optional(),
-    author_role: z.enum(['teacher', 'assistant', 'admin', 'student']).nullable().optional(),
+    author_role: z.enum(['teacher', 'assistant', 'admin', 'student', 'guardian']).nullable().optional(),
   })
   .strict();
 
@@ -146,7 +146,7 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
       academic_year_id?: string;
       branch_ids?: string[];
       author_id?: string | null;
-      author_role?: 'teacher' | 'assistant' | 'admin' | 'student' | null;
+      author_role?: 'teacher' | 'assistant' | 'admin' | 'student' | 'guardian' | null;
     };
     // An empty patch is a request that asks for nothing; answering 204 would
     // report a change that did not happen.

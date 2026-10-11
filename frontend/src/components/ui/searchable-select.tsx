@@ -78,6 +78,7 @@ export function SearchableSelect({
   required = false,
   /** Below this many options the search box is noise rather than help. */
   searchThreshold = 8,
+  onQueryChange,
 }: {
   label: string;
   options: readonly SearchableOption[];
@@ -95,6 +96,12 @@ export function SearchableSelect({
   disabled?: boolean;
   required?: boolean;
   searchThreshold?: number;
+  /**
+   * R217 — what is typed, for a caller whose list is longer than what it
+   * passes (all the platform's people): it may answer with matching options.
+   * The filtering here still applies to whatever it passes.
+   */
+  onQueryChange?: (query: string) => void;
 }): ReactNode {
   const { open, setOpen, toggle, containerRef } = useDisclosure<HTMLDivElement>();
   const [query, setQuery] = useState('');
@@ -168,7 +175,10 @@ export function SearchableSelect({
                     disabled={disabled}
                     placeholder={t('common.searchPlaceholder')}
                     aria-label={searchLabel ?? `${t('common.search')} — ${label}`}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      onQueryChange?.(e.target.value);
+                    }}
                     autoFocus
                   />
                 ) : null}

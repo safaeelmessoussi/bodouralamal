@@ -597,8 +597,11 @@
  "content.history.era.rashidun": "ⵍⵅⵉⵍⴰⴼⴰ ⵅⴼ ⵓⴱⵔⵉⴷ ⵏ ⵜⵏⴱⵓⵜ",
  "content.bySurah.section.diagrams": "ⵉⵙⴽⵉⵍⵏ ⵏ ⵜⵙⵓⵕⵜ",
  "content.bySurah.section.slides": "ⵉⵙⵍⴰⵢⴷⵏ ⵏ ⵜⵖⵓⵔⵉⵡⵉⵏ",
- "content.author.role.teacher": "ⴰⵙⵍⵎⴷ ⴰⴳⵊⴷⴰⵏ",
+ "content.author.role.teacher": "ⴰⵙⵍⵎⴷ",
  "content.author.role.assistant": "ⵜⴰⵡⵉⵙⵉ ⴳ ⵓⵙⵍⵎⴷ",
  "content.author.role.admin": "ⴰⵙⵡⵓⴷⴷⵓ",
- "content.author.role.student": "ⵜⴰⵏⵍⵎⴰⴷⵜ"
+ "content.author.role.student": "ⵜⴰⵏⵍⵎⴰⴷⵜ",
+ "content.shelf.fold": "ⴰⵇⵇⵏ",
+ "content.shelf.unfold": "ⴰⵕⵥⵥⵓⵎ",
+ "content.author.role.guardian": "ⴰⵎⵙⵓⵍ"
 }

@@ -308,3 +308,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `layout.css` `--section-pad` 1.75–3rem, `.section__head` 1–1.5rem; `hero.css` 2–4rem / 4–6rem.
 - Removed: hero «اكتشاف برامجنا», `programs.lede`, diagram hint, al-Fatiha subtitle and «أم القرآن…» in its type line (seven languages).
 - Verified: frontend tests/lint/build; Localhost home and `seal/wafat` at 1366.
+
+## 2026-10-11 — SRS Revision 217: one owner list, folding Levels, «كل الفروع»
+- `author-picker.tsx` is a `SearchableSelect` (مؤطِّرات; every person by search, `onQueryChange`); `content.service.ts` `resolveAuthor` reads the capacity off the roles; migration `r217_content_author_guardian`.
+- `branch-scope-field.tsx`: «كل الفروع» tick (Global), all branches named → Global; upload «الظهور» «عام» by default; `.dialog__body` `scroll-behavior: auto` (a native select closed when its container scrolled smoothly).
+- «حسب المستوى»: `content-shelf__fold` folds a Level card. E11: DNS done; certificate re-issue pending (expires 2026-12-25).

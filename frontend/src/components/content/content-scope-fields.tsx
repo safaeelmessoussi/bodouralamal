@@ -1,3 +1,4 @@
+import { BranchScopeField } from './branch-scope-field.js';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { ScopeSelectors } from '../scope/scope-selectors.js';
@@ -5,7 +6,6 @@ import { useScopeOptions, wholeCategoryOf, type ScopeField, type ScopeValue } fr
 import { Feedback } from '../ui/feedback.js';
 import { SelectField } from '../ui/field.js';
 import { subjectWorksBySurah } from '../scheduling/surahs.js';
-import { MultiSelectField } from '../ui/multi-select.js';
 import { t } from '../../i18n/index.js';
 import { formatDateWithWeekday } from '../../lib/format-date.js';
 import type { UploadMeta } from '../../adapters/uploads.js';
@@ -103,7 +103,6 @@ export function useContentScope({
   const { levelId, subjectId, academicYearId, surahId } = scope.value;
   const [visibility, setVisibility] = useState<string | null>(lockedVisibility ?? null);
   const [initialisedFor, setInitialisedFor] = useState<string | null>(null);
-  const categoryDefault = scope.defaultVisibility;
 
   /**
    * **R198 §2 — the branches the item is for; none chosen is Global.** The
@@ -132,11 +131,12 @@ export function useContentScope({
     }
     // Not knowable yet — wait rather than propose. Clobbering a selection
     // because a list was still arriving would be worse than showing nothing.
-    if (categoryDefault === null) return;
     if (initialisedFor === levelId) return;
     setInitialisedFor(levelId);
-    setVisibility(categoryDefault);
-  }, [locked, levelId, categoryDefault, initialisedFor]);
+    // R217 — «عام» by default (the Owner, 2026-10-11), whatever the Category's
+    // own default; the person may still choose another.
+    setVisibility('public');
+  }, [locked, levelId, initialisedFor]);
 
   // R172 §1 — «كل مستويات الفئة» in the Level slot files the item for the
   // whole Category, with no Level chosen: `category_id` travels instead.
@@ -200,14 +200,12 @@ export function useContentScope({
 
       {/* R198 §2 — several branches, or none (Global). A مؤطِّرة names at
           least one: Global is not hers to assign (§4.9). */}
-      <MultiSelectField
-        label={t('scope.branch')}
-        options={branchOptions}
+      <BranchScopeField
+        branches={branchOptions}
         selected={chosenBranches}
         onChange={setBranchIds}
-        emptyLabel={t('content.upload.noBranch')}
+        mayAssignGlobal={mayAssignGlobal}
         disabled={locked}
-        required={!mayAssignGlobal}
       />
 
       <SelectField
