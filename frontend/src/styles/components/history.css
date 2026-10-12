@@ -766,8 +766,9 @@ button.humanity__station.is-active {
 }
 
 .humanity__today-meta {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
+  /* R220 — more legible: who and where matter as much as what. */
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .humanity__today-state,

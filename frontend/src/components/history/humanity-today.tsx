@@ -105,16 +105,17 @@ export function TodayInTheAssociation({
                   ? `${item.start_time.slice(0, 5)}${item.end_time ? ` – ${item.end_time.slice(0, 5)}` : ""}`
                   : t("content.history.today.allDay")}
               </span>
-              {/* The class's subject or the event's name; the generated
-                  item title repeats the date this list already says. */}
-              <span className="humanity__today-title">{item.title}</span>
+              {/* R220 — what is taught, its Surahs beside it («تفسير القرآن —
+                  سورة المائدة»); then who, where — each said once (the circle
+                  is no longer both in the title and below it). */}
+              <span className="humanity__today-title">{titleOf(item)}</span>
               <span className="humanity__today-meta">
                 {[
                   levelsOf(item),
-                  surahsOf(item),
                   item.audience_name,
                   item.branch_name,
-                  item.room_name,
+                  // The room's name alone («1») read as a stray number.
+                  item.room_name ? `${t("calendar.detailsRoom")} ${item.room_name}` : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -148,4 +149,11 @@ function surahsOf(item: Occurrence): string | null {
   return surahs.length === 1
     ? t("calendar.chipSurah").replace("{surah}", surahs[0]!)
     : t("calendar.chipSurahs").replace("{surahs}", shortSurahList(surahs));
+}
+
+/** R220 — a class: its Subject, and its Surahs when it names any; an event: its name. */
+function titleOf(item: Occurrence): string {
+  const surahs = surahsOf(item);
+  const head = item.subject_name ?? item.title;
+  return surahs ? `${head} — ${surahs}` : head;
 }

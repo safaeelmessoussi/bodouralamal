@@ -822,19 +822,9 @@ tr:last-child .cal-cell {
     overflow-wrap: anywhere;
     white-space: normal;
   }
-  .event-chip__time,
-  .event-chip__delivery,
-  .event-chip__tag {
-    display: none;
-  }
-  /* R179 §10 (Owner, 2026-09-29) — a phone keeps the essentials: the Subject,
-     the Level or Category, the circle/group and the branch; the Surah and the
-     teacher wait in the dialog, exactly as the time and delivery already do
-     at this width. */
-  .event-chip__detail--surah,
-  .event-chip__detail--lead {
-    display: none;
-  }
+  /* R220 (Owner, 2026-10-12) — a phone shows the chip as a laptop does: its
+     time, Surahs and teacher too («show same thing in both views»), which
+     R179 §10 had left to the dialog. */
   /**
    * **R138 item 14 — density from wrapping, not from truncating one line.**
    *
