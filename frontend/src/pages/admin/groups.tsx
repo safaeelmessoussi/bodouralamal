@@ -36,6 +36,7 @@ import { SearchableSelect } from '../../components/ui/searchable-select.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import {
+  LevelSelect,
   levelLabel,
   withCategoryNames,
   type LevelOption,
@@ -474,15 +475,9 @@ function GroupDialog({
       {/* The shared primitive rather than a bare `<select>`: label association,
           the placeholder option, required marking and error announcement are
           `field.tsx`'s job, not this screen's to remember. */}
-      {/* R219 — the platform's own searchable list: the browser's own list of
-          this long <select> opened and closed at once inside the dialog. */}
-      <SearchableSelect
-        label={t('admin.nav.levels')}
-        value={levelId}
-        onChange={setLevelId}
-        options={levels.map((level) => ({ value: level.id, label: levelLabel(level) }))}
-        required
-      />
+      {/* R221 — the one Level selector «إضافة حلقة» uses (R219's searchable list
+          withdrawn: a searchable list is for long lists of people). */}
+      <LevelSelect levels={levels} value={levelId} onChange={setLevelId} />
 
       <SelectField
         label={t('admin.groups.colBranch')}

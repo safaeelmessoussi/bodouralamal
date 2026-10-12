@@ -509,6 +509,11 @@ function fromExam(row: Exam): SchedulingItem {
 export interface SchedulingFilters {
   type?: SchedulingType | '';
   branchId?: string;
+  /** R221 — the audience filters, read by the server as the calendar reads them. */
+  categoryId?: string;
+  levelId?: string;
+  groupId?: string;
+  circleId?: string;
   subjectId?: string;
   academicYearId?: string;
 }
@@ -536,26 +541,45 @@ export async function listSchedulingItems(
 
   const [classes, activities, exams, catalogue] = await Promise.all([
     wantsClasses
-      ? listCourseSchedules(token, 1, {
-          ...(filters.branchId ? { branch_id: filters.branchId } : {}),
-          ...(filters.subjectId ? { subject_id: filters.subjectId } : {}),
-          ...(filters.academicYearId ? { academic_year_id: filters.academicYearId } : {}),
-        })
+      ? listCourseSchedules(
+          token,
+          1,
+          {
+            ...(filters.branchId ? { branch_id: filters.branchId } : {}),
+            ...(filters.categoryId ? { category_id: filters.categoryId } : {}),
+            ...(filters.levelId ? { level_id: filters.levelId } : {}),
+            ...(filters.groupId ? { administrative_group_id: filters.groupId } : {}),
+            ...(filters.circleId ? { teaching_group_id: filters.circleId } : {}),
+            ...(filters.subjectId ? { subject_id: filters.subjectId } : {}),
+            ...(filters.academicYearId ? { academic_year_id: filters.academicYearId } : {}),
+          },
+          // R221 — the same bound as the other two sources: a page of 25 hid
+          // every class after the 25th with no «truncated» notice.
+          MERGED_SOURCE_LIMIT,
+        )
       : Promise.resolve({ data: [], meta: { page: 1, page_size: 0, total: 0 } }),
     wantsActivities
       ? api<{ data: EventDefinitionWire[]; meta: { total: number } }>(
           // Subject and academic year are class-only concepts; an Event has
           // neither, so those filters simply do not narrow this source rather
           // than emptying it (§4.4).
-          `/events?page_size=${MERGED_SOURCE_LIMIT}${
-            filters.branchId ? `&branch_id=${encodeURIComponent(filters.branchId)}` : ''
-          }`,
+          `/events?${new URLSearchParams({
+            page_size: String(MERGED_SOURCE_LIMIT),
+            ...(filters.branchId ? { branch_id: filters.branchId } : {}),
+            ...(filters.categoryId ? { category_id: filters.categoryId } : {}),
+            ...(filters.levelId ? { level_id: filters.levelId } : {}),
+            ...(filters.groupId ? { administrative_group_id: filters.groupId } : {}),
+          }).toString()}`,
           { token },
         )
       : Promise.resolve({ data: [], meta: { total: 0 } }),
     wantsExams
       ? listExams(token, {
           ...(filters.branchId ? { branch_id: filters.branchId } : {}),
+          ...(filters.categoryId ? { category_id: filters.categoryId } : {}),
+          ...(filters.levelId ? { level_id: filters.levelId } : {}),
+          ...(filters.groupId ? { administrative_group_id: filters.groupId } : {}),
+          ...(filters.circleId ? { teaching_group_id: filters.circleId } : {}),
         })
       : Promise.resolve({ data: [] as Exam[], meta: { total: 0 } }),
     // **Which catalogue rows are عطلة** (Owner-reported, 2026-09-14): an Event
@@ -571,8 +595,9 @@ export async function listSchedulingItems(
 
   // A class filtered by subject or year excludes activities entirely — the
   // filter is about something an Event does not have, so an Event cannot match.
+  // A circle is a teaching concept an activity does not carry (as on the calendar).
   const activityRows =
-    filters.subjectId || filters.academicYearId
+    filters.subjectId || filters.academicYearId || filters.circleId
       ? []
       : activities.data.map((row) => fromEvent(row, holidayTypeIds));
 

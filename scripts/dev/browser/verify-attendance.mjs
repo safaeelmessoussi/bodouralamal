@@ -18,7 +18,7 @@
  *    administrator this harness is (SRS Revision 163 §3): she is a reader there;
  * 1. the MANAGEMENT calendar's occurrence dialog offers **الحضور** on a class;
  * 2. opening it renders the sheet, with the expected roster on a `required` one;
- * 3. marking somebody sends the request and the row reads **حاضرة**;
+ * 3. marking somebody sends the request and the row reads **حاضر(ة)**;
  * 4. a **عطلة** offers no attendance control at all — the exclusion, on screen;
  * 5. the mark is in the database afterwards, keyed to that occurrence's date.
  *
@@ -146,8 +146,8 @@ const marked = await evaluate(`(async () => {
 })()`);
 
 check(
-  '3 · marking her sends the request and the row now reads حاضرة',
-  typeof marked.row === 'string' && marked.row.includes('حاضرة'),
+  '3 · marking her sends the request and the row now reads حاضر(ة)',
+  typeof marked.row === 'string' && marked.row.includes('حاضر(ة)'),
   JSON.stringify(marked),
 );
 

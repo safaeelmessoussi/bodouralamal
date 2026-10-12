@@ -5,6 +5,7 @@ import type {
   TeachingMode,
   Visibility,
 } from "../generated/prisma/client.js";
+import { scheduleAudienceFilters } from "./calendar.service.js";
 import { AppError } from "../lib/errors.js";
 import { assertMarkingAllowedForType, assertTypeOfKind } from "./scheduling-type.service.js";
 import {
@@ -2844,6 +2845,11 @@ export async function listCourseSchedules(
     branchId?: string;
     subjectId?: string;
     academicYearId?: string;
+    /** R221 — the audience filters, read as the calendar reads them. */
+    categoryId?: string;
+    levelId?: string;
+    administrativeGroupId?: string;
+    teachingGroupId?: string;
   } & PageParams,
 ): Promise<
   Page<
@@ -2869,6 +2875,9 @@ export async function listCourseSchedules(
     ...(filters.academicYearId
       ? { academicYearId: filters.academicYearId }
       : {}),
+    // R221 — Category/Level/group/circle: the calendar's own reading (R176 §4),
+    // so the list and the calendar of one filter row agree.
+    AND: scheduleAudienceFilters(filters),
     // Applied last so an explicit filter can NARROW the caller's reach but
     // never widen it — a teacher passing `branch_id` still sees only what they
     // staff, because both conditions must hold.

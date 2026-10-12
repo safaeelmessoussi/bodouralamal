@@ -142,6 +142,10 @@ function pathId(req: Request): string {
  *  `page`/`page_size` share the query object. */
 const listEventsQuerySchema = z.object({
   branch_id: z.uuid().optional(),
+  // R221 — the audience filters `GET /calendar` already takes.
+  category_id: z.uuid().optional(),
+  level_id: z.uuid().optional(),
+  administrative_group_id: z.uuid().optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
 });
@@ -291,6 +295,11 @@ export function list(prisma: PrismaClient) {
     const q = parse(listEventsQuerySchema, req.query);
     const result = await listEvents(prisma, actorOf(req), {
       ...(q.branch_id !== undefined ? { branchId: q.branch_id } : {}),
+      ...(q.category_id !== undefined ? { categoryId: q.category_id } : {}),
+      ...(q.level_id !== undefined ? { levelId: q.level_id } : {}),
+      ...(q.administrative_group_id !== undefined
+        ? { administrativeGroupId: q.administrative_group_id }
+        : {}),
       ...(q.from !== undefined ? { from: q.from } : {}),
       ...(q.to !== undefined ? { to: q.to } : {}),
       ...pageParamsFrom(req.query),

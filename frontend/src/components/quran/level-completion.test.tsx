@@ -53,7 +53,7 @@ describe('what she is told about her Level', () => {
         },
       }),
     );
-    expect(unmetButMarked).toContain('أتمّت المستوى');
+    expect(unmetButMarked).toContain('أتمّ(ت) المستوى');
     // …and the conditions stay on screen as progress: they are not the verdict.
     expect(unmetButMarked).toContain('بقي للحفظ: الفاتحة');
     expect(unmetButMarked).not.toContain('لم تُستوفَ شروط الإتمام بعد');
@@ -70,7 +70,7 @@ describe('what she is told about her Level', () => {
         },
       }),
     );
-    expect(markedWithNoSyllabus).toContain('أتمّت المستوى');
+    expect(markedWithNoSyllabus).toContain('أتمّ(ت) المستوى');
   });
 
   it('every condition met but NOT yet recorded says exactly that — never «أتمّت»', () => {
@@ -86,8 +86,8 @@ describe('what she is told about her Level', () => {
         },
       }),
     );
-    expect(out).toContain('استوفت شروط الإتمام — بانتظار تسجيل الإدارة');
-    expect(out).not.toContain('أتمّت المستوى');
+    expect(out).toContain('استُوفيت شروط الإتمام — بانتظار تسجيل الإدارة');
+    expect(out).not.toContain('أتمّ(ت) المستوى');
     expect(out).toContain('الحفظ: 1 من 1 سورة');
     expect(out).toContain('اختبارات التفسير: 1 من 1 سورة');
     expect(out).not.toContain('بقي');
@@ -124,7 +124,7 @@ describe('what she is told about her Level', () => {
         },
       }),
     );
-    expect(out).toContain('استوفت شروط الإتمام');
+    expect(out).toContain('استُوفيت شروط الإتمام');
     expect(out).not.toContain('اختبارات التفسير');
     expect(out).not.toContain('بقي اختبار');
   });

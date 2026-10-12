@@ -336,12 +336,12 @@ check(
 check('«رفض» on تسجيل الأبناء asks for a reason', (await clickIn('dialog[open] [data-role-review-item="guardian"]', 'رفض')) === 'clicked' && (await waitFor(`document.querySelector('dialog[open] .confirm textarea, dialog[open] .confirm input')`)));
 check(
   'the decline says it touches THIS role only',
-  (await evaluate(`document.querySelector('dialog[open] .confirm')?.innerText ?? ''`)).includes('وتبقى طلباتها الأخرى على حالها'),
+  (await evaluate(`document.querySelector('dialog[open] .confirm')?.innerText ?? ''`)).includes('وتبقى الطلبات الأخرى على حالها'),
 );
 check('a reason is typed', (await setInput('dialog[open] .confirm', 'سبب الرفض', 'لا تتوفر مقاعد للأطفال هذا الفصل')) === 'ok');
 await sleep(150);
 check('the decline is confirmed', (await clickIn('dialog[open] .confirm', 'رفض')) === 'clicked');
-check('…and said', await waitFor(`document.querySelector('main').innerText.includes('تم رفض «وليّة أمر (تسجيل الأبناء)».')`), await notice());
+check('…and said', await waitFor(`document.querySelector('main').innerText.includes('تم رفض «وليّ أمر (تسجيل الأبناء)».')`), await notice());
 await waitFor(`document.querySelector('dialog[open] [data-role-review]')`);
 review = await reviewState();
 check(

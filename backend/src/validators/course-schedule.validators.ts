@@ -543,4 +543,9 @@ export const listCourseSchedulesQuerySchema = z.object({
   branch_id: uuid.optional(),
   subject_id: uuid.optional(),
   academic_year_id: uuid.optional(),
+  // R221 — the audience filters `GET /calendar` already takes.
+  category_id: uuid.optional(),
+  level_id: uuid.optional(),
+  administrative_group_id: uuid.optional(),
+  teaching_group_id: uuid.optional(),
 });

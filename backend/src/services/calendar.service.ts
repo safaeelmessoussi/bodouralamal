@@ -1338,7 +1338,9 @@ export async function personalCalendarOptions(
  * ones this replaced, unchanged in meaning, now beside the joins instead of
  * instead of them. Returned as AND-ed clauses; empty when nothing was asked.
  */
-function scheduleAudienceFilters(query: CalendarQuery): Prisma.RecurringCourseScheduleWhereInput[] {
+export function scheduleAudienceFilters(
+  query: Pick<CalendarQuery, "categoryId" | "levelId" | "administrativeGroupId" | "teachingGroupId">,
+): Prisma.RecurringCourseScheduleWhereInput[] {
   type Joins = "categoryScopes" | "levelScopes" | "administrativeGroupScopes" | "teachingGroupScopes";
   const open = (field: Joins): Prisma.RecurringCourseScheduleWhereInput => ({ [field]: { none: {} } });
   const multi = (
@@ -1446,76 +1448,15 @@ function scheduleAudienceFilters(query: CalendarQuery): Prisma.RecurringCourseSc
   return filters;
 }
 
-export async function readCalendar(
-  prisma: PrismaClient,
-  actor: CalendarActor | null,
-  query: CalendarQuery & { mine?: boolean; includeCancelled?: boolean },
-): Promise<Occurrence[]> {
-  if (query.to < query.from) {
-    throw new AppError("VALIDATION_FAILED", "to must not precede from");
-  }
-  if (daysBetween(query.from, query.to) > MAX_RANGE_DAYS) {
-    throw new AppError(
-      "VALIDATION_FAILED",
-      `range must not exceed ${MAX_RANGE_DAYS} days`,
-    );
-  }
-
-  /**
-   * **The personal narrowing, composed into the same queries** (R82.8) — not a
-   * second pipeline, and not a filter applied after expansion: narrowing after
-   * the fact would still have read every occurrence in the platform to throw
-   * most of them away.
-   *
-   * It requires an authenticated actor by construction: `mine` is only reachable
-   * through the guarded route, and there is no user id in the request for a
-   * caller to have chosen (the TD-12 property `GET /students/me` relies on).
-   */
-  const personal =
-    query.mine === true && actor !== null
-      ? await personalFilters(prisma, actor.userId)
-      : null;
-
-  /**
-   * **The catalogue filter resolves to its structural kind FIRST** (R110, Owner
-   * 2026-09-02).
-   *
-   * The kind decides *which of the three sources can hold such a row at all*,
-   * so a class type never queries the Event table. The id then narrows within
-   * that source. That ordering is what lets عطلة and نشاط — both Events — be
-   * asked for separately, which `kind=event` never could.
-   *
-   * A soft-deleted type still resolves: retiring a type must not make the rows
-   * that used it unfindable, which is the same reason the FK is `RESTRICT`.
-   */
-  const typeFilter = query.schedulingTypeId
-    ? await prisma.schedulingType.findUnique({
-        where: { id: query.schedulingTypeId },
-        select: { id: true, structuralKind: true },
-      })
-    : null;
-  /* An id naming no type is a filter nothing can satisfy, not a filter to
-     ignore: silently returning the whole grid answers a question nobody
-     asked. */
-  if (query.schedulingTypeId && !typeFilter) return [];
-  const typeKind = typeFilter?.structuralKind ?? null;
-
-  const floor = await operationalFloor(prisma, query.branchId);
-  const from = floor && floor > query.from ? floor : query.from;
-  if (from > query.to) return [];
-
-  // ── Events, filtered by tier and by the requested scope.
-  /**
-   * **R169 §6 — «show me the calendar of Level X» means every activity that
-   * CONCERNS Level X**, and an activity concerns it when each dimension it names
-   * admits it — an empty dimension is «الكل». Only `branch_id` read that way
-   * before: asking for a Level returned the activities that NAMED the Level and
-   * dropped one addressed to its whole Category, or to its branch. Each filter
-   * now asks the same question of every dimension, through the taxonomy's own
-   * relations (a Level has a Category; a group has a Level and a branch), so an
-   * activity for *Category B* is still correctly absent from *Level X of
-   * Category A*.
-   */
+/**
+ * **R169 §6 — which activities a Branch/Category/Level/group filter admits**:
+ * each dimension the activity names admits the asked one, an empty dimension
+ * is «الكل». Shared by the calendar and by الجدولة's list (R221), so the two
+ * views of one filter row cannot disagree. Returned as AND-ed clauses.
+ */
+export function eventAudienceFilters(
+  query: Pick<CalendarQuery, "branchId" | "categoryId" | "levelId" | "administrativeGroupId">,
+): Prisma.EventWhereInput[] {
   const open = (
     field: "branchScopes" | "categoryScopes" | "levelScopes" | "administrativeGroupScopes",
   ): Prisma.EventWhereInput => ({ [field]: { none: {} } });
@@ -1589,6 +1530,111 @@ export async function readCalendar(
       },
     );
   }
+  return scopeFilters;
+}
+
+/**
+ * **R221 — which sittings a Category/Level/group/circle filter admits.** A
+ * sitting has one Level; a whole-Level sitting concerns each of its groups and
+ * circles, a group's or a circle's sitting concerns that one only, and a
+ * sitting for one Session or one beneficiary concerns no group or circle by
+ * name. Shared by the calendar and الجدولة's list. AND-ed clauses.
+ */
+export function examAudienceFilters(
+  query: Pick<CalendarQuery, "categoryId" | "levelId" | "administrativeGroupId" | "teachingGroupId">,
+): Prisma.ExamWhereInput[] {
+  const filters: Prisma.ExamWhereInput[] = [];
+  if (query.categoryId) filters.push({ level: { categoryId: query.categoryId } });
+  if (query.levelId) filters.push({ levelId: query.levelId });
+  if (query.administrativeGroupId) {
+    const id = query.administrativeGroupId;
+    filters.push({
+      OR: [
+        { administrativeGroupId: id },
+        { targetKind: "level", level: { administrativeGroups: { some: { id } } } },
+      ],
+    });
+  }
+  if (query.teachingGroupId) {
+    const id = query.teachingGroupId;
+    filters.push({
+      OR: [{ teachingGroupId: id }, { targetKind: "level", level: { teachingGroups: { some: { id } } } }],
+    });
+  }
+  return filters;
+}
+
+export async function readCalendar(
+  prisma: PrismaClient,
+  actor: CalendarActor | null,
+  query: CalendarQuery & { mine?: boolean; includeCancelled?: boolean },
+): Promise<Occurrence[]> {
+  if (query.to < query.from) {
+    throw new AppError("VALIDATION_FAILED", "to must not precede from");
+  }
+  if (daysBetween(query.from, query.to) > MAX_RANGE_DAYS) {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      `range must not exceed ${MAX_RANGE_DAYS} days`,
+    );
+  }
+
+  /**
+   * **The personal narrowing, composed into the same queries** (R82.8) — not a
+   * second pipeline, and not a filter applied after expansion: narrowing after
+   * the fact would still have read every occurrence in the platform to throw
+   * most of them away.
+   *
+   * It requires an authenticated actor by construction: `mine` is only reachable
+   * through the guarded route, and there is no user id in the request for a
+   * caller to have chosen (the TD-12 property `GET /students/me` relies on).
+   */
+  const personal =
+    query.mine === true && actor !== null
+      ? await personalFilters(prisma, actor.userId)
+      : null;
+
+  /**
+   * **The catalogue filter resolves to its structural kind FIRST** (R110, Owner
+   * 2026-09-02).
+   *
+   * The kind decides *which of the three sources can hold such a row at all*,
+   * so a class type never queries the Event table. The id then narrows within
+   * that source. That ordering is what lets عطلة and نشاط — both Events — be
+   * asked for separately, which `kind=event` never could.
+   *
+   * A soft-deleted type still resolves: retiring a type must not make the rows
+   * that used it unfindable, which is the same reason the FK is `RESTRICT`.
+   */
+  const typeFilter = query.schedulingTypeId
+    ? await prisma.schedulingType.findUnique({
+        where: { id: query.schedulingTypeId },
+        select: { id: true, structuralKind: true },
+      })
+    : null;
+  /* An id naming no type is a filter nothing can satisfy, not a filter to
+     ignore: silently returning the whole grid answers a question nobody
+     asked. */
+  if (query.schedulingTypeId && !typeFilter) return [];
+  const typeKind = typeFilter?.structuralKind ?? null;
+
+  const floor = await operationalFloor(prisma, query.branchId);
+  const from = floor && floor > query.from ? floor : query.from;
+  if (from > query.to) return [];
+
+  // ── Events, filtered by tier and by the requested scope.
+  /**
+   * **R169 §6 — «show me the calendar of Level X» means every activity that
+   * CONCERNS Level X**, and an activity concerns it when each dimension it names
+   * admits it — an empty dimension is «الكل». Only `branch_id` read that way
+   * before: asking for a Level returned the activities that NAMED the Level and
+   * dropped one addressed to its whole Category, or to its branch. Each filter
+   * now asks the same question of every dimension, through the taxonomy's own
+   * relations (a Level has a Category; a group has a Level and a branch), so an
+   * activity for *Category B* is still correctly absent from *Level X of
+   * Category A*.
+   */
+  const scopeFilters = eventAudienceFilters(query);
 
   /**
    * **A filter no Event can satisfy excludes Events, rather than being ignored.**
@@ -1753,7 +1799,6 @@ export async function readCalendar(
   // exam carries both, so it answers them honestly rather than being dropped.
   const exams =
     query.teacherId !== undefined ||
-    query.teachingGroupId !== undefined ||
     (query.kind !== undefined && query.kind !== "exam") ||
     (typeKind !== null && typeKind !== "exam")
       ? []
@@ -1769,18 +1814,14 @@ export async function readCalendar(
             ...examTierWhere(actor),
             ...(typeFilter ? { schedulingTypeId: typeFilter.id } : {}),
             ...(query.branchId ? { branchId: query.branchId } : {}),
-            ...(query.levelId ? { levelId: query.levelId } : {}),
             ...(query.subjectId ? { subjectId: query.subjectId } : {}),
             // R176 §4 — a sitting is about one Surah (R165 §5), or none.
             ...(query.surahId !== undefined ? { surahId: query.surahId } : {}),
             ...(query.academicYearId
               ? { academicYearId: query.academicYearId }
               : {}),
-            // A Category narrows an exam through its Level — the same question the
-            // grid asks of a session, answered rather than ignored.
-            ...(query.categoryId
-              ? { level: { categoryId: query.categoryId } }
-              : {}),
+            // R221 — Category, Level, group and circle, read as the list reads them.
+            AND: examAudienceFilters(query),
           },
           include: {
             // R165 §2 — the one Surah this sitting examines, by name.

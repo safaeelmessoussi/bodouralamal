@@ -69,7 +69,7 @@ describe('the panel', () => {
         },
       }),
     );
-    expect(html).toContain('أتمّت المستوى');
+    expect(html).toContain('أتمّ(ت) المستوى');
     expect(html).toContain('سُجِّل الإتمام مع العلم بأن الشروط لم تكن مستوفاة');
     expect(html).toContain('تأكيد إظهار الشهادة');
     expect(html).toContain('الشهادة غير ظاهرة للمستفيد(ة) بعد');

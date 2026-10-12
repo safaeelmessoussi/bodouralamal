@@ -1,4 +1,5 @@
 import type { Event, Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { eventAudienceFilters } from './calendar.service.js';
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import { isResponsibleForEvent, teacherEventScope } from '../policies/roster-resolution.js';
@@ -1067,7 +1068,14 @@ export async function backfillAttach(
 export async function listEvents(
   prisma: PrismaClient,
   actor: Actor,
-  filters: { branchId?: string; from?: Date; to?: Date } & PageParams,
+  filters: {
+    branchId?: string;
+    categoryId?: string;
+    levelId?: string;
+    administrativeGroupId?: string;
+    from?: Date;
+    to?: Date;
+  } & PageParams,
 ): Promise<
   Page<
     Event & {
@@ -1104,7 +1112,6 @@ export async function listEvents(
 
   const where: Prisma.EventWhereInput = {
     deletedAt: null,
-    ...(filters.branchId ? { branchScopes: { some: { branchId: filters.branchId } } } : {}),
     // Overlap, both ends optional: `start <= to` AND (`end` is null OR `end >= from`).
     ...(filters.to ? { startDate: { lte: filters.to } } : {}),
     ...(filters.from
@@ -1123,7 +1130,11 @@ export async function listEvents(
     // never widens it** — the same discipline `listCourseSchedules` uses.
     // Global definitions remain in the Admin projection; a teacher's boundary,
     // hidden tier included (R109), is `teacherEventVisibility`'s.
-    AND: [authorization],
+    //
+    // R221 — Branch, Category, Level and group read as the calendar reads them
+    // (R169 §6): an activity for «الكل» or for the whole Category is in the
+    // list of each of its Levels, as it is on the calendar.
+    AND: [authorization, ...eventAudienceFilters(filters)],
   };
 
   const window = pageWindow(filters);

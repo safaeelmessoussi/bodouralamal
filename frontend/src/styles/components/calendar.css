@@ -847,6 +847,12 @@ tr:last-child .cal-cell {
     padding: 0.2rem 0.35rem;
     align-items: flex-start;
   }
+  /* R221 (Owner, 2026-10-12) — a phone cell has no room for a word BESIDE
+     the title: «عطلة» beside it squeezed the title to one letter a line. The
+     tag and the remote badge take a line of their own, after the title. */
+  .event-chip__title {
+    flex-basis: 100%;
+  }
   /**
    * **Wrap, don't ellipsis.** «حصة تجويد القرآن» once read as «حـ…» here;
    * R138 let it wrap across up to 3 lines and clipped the rest. R179 §1

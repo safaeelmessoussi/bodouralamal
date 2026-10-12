@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { examAudienceFilters } from './calendar.service.js';
 import { assertTypeOfKind } from './scheduling-type.service.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
@@ -899,7 +900,15 @@ const EXAM_DEFAULT_ORDER = [{ date: 'asc' }, { startTime: 'asc' }];
 export async function listExams(
   prisma: PrismaClient,
   actor: Actor,
-  filters: { branchId?: string; levelId?: string; from?: Date; to?: Date } & PageParams &
+  filters: {
+    branchId?: string;
+    categoryId?: string;
+    levelId?: string;
+    administrativeGroupId?: string;
+    teachingGroupId?: string;
+    from?: Date;
+    to?: Date;
+  } & PageParams &
     SortParams,
 ): Promise<Page<ExamRow>> {
   assertCanManage(actor);
@@ -957,7 +966,6 @@ export async function listExams(
      */
     status: { in: ['published', 'closed'] },
     ...(filters.branchId ? { branchId: filters.branchId } : {}),
-    ...(filters.levelId ? { levelId: filters.levelId } : {}),
     ...(filters.from || filters.to
       ? {
           date: {
@@ -971,7 +979,8 @@ export async function listExams(
     // **`AND`, not a spread**: the teacher branch contributes an `OR` of its
     // own, and spreading it beside a `branchId` filter would let one key
     // overwrite the other.
-    AND: [scoped],
+    // R221 — Category, Level, group and circle, as the calendar reads them.
+    AND: [scoped, ...examAudienceFilters(filters)],
   };
 
   const window = pageWindow(filters);

@@ -127,6 +127,11 @@ export function list(prisma: PrismaClient) {
     const result = await listExams(prisma, requireActor(req), {
       ...(q.branch_id !== undefined ? { branchId: q.branch_id } : {}),
       ...(q.level_id !== undefined ? { levelId: q.level_id } : {}),
+      ...(q.category_id !== undefined ? { categoryId: q.category_id } : {}),
+      ...(q.administrative_group_id !== undefined
+        ? { administrativeGroupId: q.administrative_group_id }
+        : {}),
+      ...(q.teaching_group_id !== undefined ? { teachingGroupId: q.teaching_group_id } : {}),
       ...(q.from !== undefined ? { from: q.from } : {}),
       ...(q.to !== undefined ? { to: q.to } : {}),
       ...pageParamsFrom(req.query),

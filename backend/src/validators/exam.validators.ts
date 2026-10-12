@@ -129,6 +129,10 @@ export const updateExamSchema = z
 export const listExamsQuerySchema = z.object({
   branch_id: uuid.optional(),
   level_id: uuid.optional(),
+  // R221 — the audience filters `GET /calendar` already takes.
+  category_id: uuid.optional(),
+  administrative_group_id: uuid.optional(),
+  teaching_group_id: uuid.optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   // R76 — the sort is validated against the endpoint's own allow-list in

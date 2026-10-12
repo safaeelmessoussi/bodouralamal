@@ -246,9 +246,9 @@ describe('ProgramsJourney', () => {
     expect(html).not.toContain('في نهاية الرحلة');
     expect(html).not.toContain('>قمة الرحلة<');
     // The first Category's graduation continues the road; the last one's ends it.
-    expect(html).toContain('تُتمّ المتعلّمة برنامج الطفل وتواصل الرحلة.');
-    expect(html).toContain('تُتمّ المتعلّمة برنامج المرأة.');
-    expect(html).not.toContain('برنامج المرأة وتواصل');
+    expect(html).toContain('يكتمل برنامج الطفل وتتواصل الرحلة.');
+    expect(html).toContain('يكتمل برنامج المرأة.');
+    expect(html).not.toContain('برنامج المرأة وتتواصل');
     // R189 — a card like a Level's, in the trophy's cell, on the last stage only:
     // «إتمام الفئة» in the title pill, its words, then the attire.
     const women = html.slice(html.indexOf('data-journey-category="women"'));
@@ -258,7 +258,7 @@ describe('ProgramsJourney', () => {
     expect(summitCell).toContain('class="journey__milestone journey__milestone--summit"');
     expect(summitCell).toContain('journey__milestoneTitle">إتمام الفئة');
     expect(summitCell).not.toContain('journey__attireCaption');
-    expect(summitCell.indexOf('تُتمّ المتعلّمة برنامج المرأة.')).toBeLessThan(
+    expect(summitCell.indexOf('يكتمل برنامج المرأة.')).toBeLessThan(
       summitCell.indexOf('journey__attire'),
     );
     expect(summitCell).not.toContain('journey__trophy"');

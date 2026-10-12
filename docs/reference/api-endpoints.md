@@ -209,7 +209,7 @@ Admin or Super Admin within the branch of her enrolment at that Level; out of re
 | `GET` | `/admin/students/{id}/level-completions` | 🔒 One row per enrolled Level in reach: `requirements` (BR-11 read NOW; `complete` `null` without «مقرر الحفظ») beside `mark` (attestation + certificate) or `null` |
 | `PUT` `DELETE` | `/admin/students/{id}/level-completions/{levelId}` | 🔒 Record / remove; unmet Level → `409 REQUIREMENTS_NOT_MET` until `acknowledge_unmet: true` (mark keeps `requirements_met: false`); `DELETE` → `409 CERTIFICATE_ISSUED` while issued; idempotent, audited |
 | `PUT` `DELETE` | `/admin/students/{id}/level-completions/{levelId}/certificate` | 🔒 Confirm / withdraw (the SECOND confirmation); number drawn once, reused on re-issue; `409 LEVEL_NOT_COMPLETED` without a mark |
-| `GET` | `/students/me/certificates` | 🔒 The ACTING student's CONFIRMED certificates (§4.3, no id): number, recorded name, Level, Category, branch, two Morocco calendar dates; page-rendered and printed, no file |
+| `GET` | `/students/me/certificates` | 🔒 The ACTING student's CONFIRMED certificates (§4.3, no id): number, recorded name and sex (the wording follows it, R221), Level, Category, branch, two Morocco calendar dates; page-rendered and printed, no file |
 
 ### Assessment builder (§4.6, R124)
 
@@ -260,7 +260,7 @@ Carries the Subject, one teaching mode with exactly one target, branch, room, st
 
 | | Path | Audience · semantics |
 |---|---|---|
-| `GET` `POST` | `/admin/course-schedules` | `GET` role-scoped (Super Admin all; branch Admin their branches; Teacher the schedules they staff); `POST` Admin; a write returns `{ schedule, materialization }` |
+| `GET` `POST` | `/admin/course-schedules` | `GET` role-scoped (Super Admin all; branch Admin their branches; Teacher the schedules they staff), filtered by `branch_id`, `subject_id`, `academic_year_id` and — read as `GET /calendar` reads them (R221) — `category_id`, `level_id`, `administrative_group_id`, `teaching_group_id`; `POST` Admin; a write returns `{ schedule, materialization }` |
 | `PATCH` `DELETE` | `/admin/course-schedules/{id}` | 🔒 Admin; only the *when* and the *room* are editable; `DELETE` answers `200 { future_removed, retained }` |
 | `GET` | `/admin/course-schedules/{id}/conflicts` | 🔒 Admin; computed against materialized Sessions, never recurrence rules |
 | `GET` | `/admin/course-schedules/{id}/roster` | 🔒 Resolved audience, recomputed per request; a teacher's staffed schedule (§5.6), otherwise `404`, never `403` |

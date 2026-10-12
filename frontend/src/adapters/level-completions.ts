@@ -86,6 +86,8 @@ export async function withdrawLevelCertificate(
 export interface LevelCertificate {
   certificate_number: number;
   student_name: string;
+  /** R221 — the wording follows it; `null` when not recorded. */
+  student_sex: 'female' | 'male' | null;
   level_name: string;
   category_name: string;
   branch_name: string;

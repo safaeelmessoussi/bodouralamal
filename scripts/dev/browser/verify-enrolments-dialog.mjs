@@ -150,7 +150,7 @@ async function pressAndConfirm(label, confirmLabel) {
 }
 
 const marked = await pressAndConfirm('تسجيل إتمام المستوى', 'تسجيل إتمام المستوى');
-check('the awareness confirmation is really asked — it names that the conditions are not met', marked.confirmed === true && (marked.asked ?? '').includes('لم تستوفِ'), JSON.stringify(marked).slice(0, 400));
+check('the awareness confirmation is really asked — it names that the conditions are not met', marked.confirmed === true && (marked.asked ?? '').includes('غير مستوفاة'), JSON.stringify(marked).slice(0, 400));
 const markWrite = (marked.seen ?? []).find((c) => c.method === 'PUT');
 check(
   'ONE write, and it says she was told: acknowledge_unmet',
@@ -158,8 +158,8 @@ check(
   JSON.stringify(marked.seen),
 );
 check(
-  'the Level now reads «أتمّت المستوى», with the certificate NOT yet showing',
-  (marked.panelText ?? '').includes('أتمّت المستوى') && (marked.panelText ?? '').includes('الشهادة غير ظاهرة'),
+  'the Level now reads «أتمّ(ت) المستوى», with the certificate NOT yet showing',
+  (marked.panelText ?? '').includes('أتمّ(ت) المستوى') && (marked.panelText ?? '').includes('الشهادة غير ظاهرة'),
   String(marked.panelText).slice(0, 300),
 );
 

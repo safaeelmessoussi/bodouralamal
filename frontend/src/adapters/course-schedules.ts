@@ -164,14 +164,20 @@ export interface ScheduleFilters {
   branch_id?: string;
   subject_id?: string;
   academic_year_id?: string;
+  /** R221 — read as `GET /calendar` reads them. */
+  category_id?: string;
+  level_id?: string;
+  administrative_group_id?: string;
+  teaching_group_id?: string;
 }
 
 export async function listCourseSchedules(
   token: string | null,
   page = 1,
   filters: ScheduleFilters = {},
+  pageSize = 25,
 ): Promise<Page<CourseSchedule>> {
-  const params = new URLSearchParams({ page: String(page), page_size: '25' });
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);
   }

@@ -27,6 +27,9 @@ export function LevelCertificate({
   printing?: boolean;
 }): ReactNode {
   const number = String(certificate.certificate_number).padStart(5, '0');
+  // R221 — worded in the holder's own gender; «المستفيد(ة) … أتمّ(ت)» only
+  // when the account's sex is not recorded.
+  const gender = certificate.student_sex ? `_${certificate.student_sex}` : '';
   return (
     <article
       className={printing ? 'certificate certificate--printing' : 'certificate'}
@@ -51,9 +54,9 @@ export function LevelCertificate({
         <h2 className="certificate__title">{t('student.certificates.documentTitle')}</h2>
         <Divider />
 
-        <p className="certificate__line">{t('student.certificates.attests')}</p>
+        <p className="certificate__line">{t(`student.certificates.attests${gender}`)}</p>
         <p className="certificate__name">{certificate.student_name}</p>
-        <p className="certificate__line">{t('student.certificates.completed')}</p>
+        <p className="certificate__line">{t(`student.certificates.completed${gender}`)}</p>
         <p className="certificate__level">
           {certificate.level_name}
           <span className="certificate__category"> — {certificate.category_name}</span>

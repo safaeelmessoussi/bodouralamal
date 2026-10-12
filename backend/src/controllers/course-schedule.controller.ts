@@ -48,6 +48,14 @@ export function list(prisma: PrismaClient) {
         ...(filters.academic_year_id !== undefined
           ? { academicYearId: filters.academic_year_id }
           : {}),
+        ...(filters.category_id !== undefined ? { categoryId: filters.category_id } : {}),
+        ...(filters.level_id !== undefined ? { levelId: filters.level_id } : {}),
+        ...(filters.administrative_group_id !== undefined
+          ? { administrativeGroupId: filters.administrative_group_id }
+          : {}),
+        ...(filters.teaching_group_id !== undefined
+          ? { teachingGroupId: filters.teaching_group_id }
+          : {}),
         ...pageParamsFrom(req.query),
       },
     );

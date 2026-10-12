@@ -114,8 +114,8 @@ describe('ProgramsShow', () => {
     const graduation = render({ kind: 'graduation' });
     expect(graduation).toContain('show__confetti');
     expect(graduation.split('class="show__piece').length - 1).toBe(64);
-    expect(graduation).toContain('تُتمّ المتعلّمة برنامج الطفل.');
-    expect(graduation).not.toContain('وتواصل الرحلة');
+    expect(graduation).toContain('يكتمل برنامج الطفل.');
+    expect(graduation).not.toContain('وتتواصل الرحلة');
     expect(graduation).toContain('src="/journey/graduation-attire.jpg"');
     expect(graduation).not.toContain('show__question');
     const question = render({ kind: 'question' });

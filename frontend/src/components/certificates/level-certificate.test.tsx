@@ -14,6 +14,7 @@ import certificatesPage from '../../pages/dashboard/certificates.tsx?raw';
 const certificate = {
   certificate_number: 12,
   student_name: 'فاطمة الزهراء العلوي',
+  student_sex: 'female' as const,
   level_name: 'المستوى الأول',
   category_name: 'المرأة',
   branch_name: 'تاركة',
@@ -39,6 +40,19 @@ describe('the document', () => {
     expect(html).not.toContain('student.certificates.');
     // Styled by classes only: the platform's CSP allows no inline style.
     expect(html).not.toContain('style=');
+  });
+});
+
+describe('R221 — worded in its holder\'s gender', () => {
+  it('says «المستفيدة … أتمّت» for her, «المستفيد … أتمّ» for him, and the bracket form only when unrecorded', () => {
+    const her = renderToStaticMarkup(<LevelCertificate certificate={certificate} />);
+    expect(her).toContain('أنّ المستفيدة<');
+    expect(her).toContain('قد أتمّت بتوفيق الله');
+    const him = renderToStaticMarkup(<LevelCertificate certificate={{ ...certificate, student_sex: 'male' }} />);
+    expect(him).toContain('أنّ المستفيد<');
+    expect(him).toContain('قد أتمّ بتوفيق الله');
+    const unknown = renderToStaticMarkup(<LevelCertificate certificate={{ ...certificate, student_sex: null }} />);
+    expect(unknown).toContain('قد أتمّ(ت) بتوفيق الله');
   });
 });
 

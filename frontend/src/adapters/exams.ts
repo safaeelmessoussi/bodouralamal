@@ -113,6 +113,10 @@ export interface ExamInput {
 export interface ExamFilters {
   branch_id?: string;
   level_id?: string;
+  /** R221 — read as `GET /calendar` reads them. */
+  category_id?: string;
+  administrative_group_id?: string;
+  teaching_group_id?: string;
   from?: string;
   to?: string;
 }

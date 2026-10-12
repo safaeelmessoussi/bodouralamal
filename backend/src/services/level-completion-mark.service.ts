@@ -421,6 +421,9 @@ export interface CertificateView {
   /** Her name as the association records it — this is HER document, shown to
    *  her (or to her parent in child context), never a public surface. */
   student_name: string;
+  /** R221 — the certificate is worded in its holder's gender («أتمّت» /
+   *  «أتمّ»). */
+  student_sex: 'female' | 'male';
   level_name: string;
   category_name: string;
   branch_name: string;
@@ -449,7 +452,7 @@ export async function certificatesOf(
       certificateNumber: true,
       completedAt: true,
       certificateIssuedAt: true,
-      student: { select: { nameArabic: true } },
+      student: { select: { nameArabic: true, sex: true } },
       level: { select: { name: true, category: { select: { name: true } } } },
       branch: { select: { name: true } },
     },
@@ -457,6 +460,7 @@ export async function certificatesOf(
   return marks.map((mark) => ({
     certificate_number: mark.certificateNumber!,
     student_name: mark.student.nameArabic,
+    student_sex: mark.student.sex,
     level_name: mark.level.name,
     category_name: mark.level.category.name,
     branch_name: mark.branch.name,

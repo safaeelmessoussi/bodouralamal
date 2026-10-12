@@ -463,7 +463,11 @@ export function SchedulingPage(): ReactNode {
         // read from a second filter store any more.
         type: (filters.value.type ?? '') as SchedulingType | '',
         ...(filters.value.branchId ? { branchId: filters.value.branchId } : {}),
+        // R221 — every filter of the row, not three of them.
+        ...(filters.value.categoryId ? { categoryId: filters.value.categoryId } : {}),
         ...(filters.value.levelId ? { levelId: filters.value.levelId } : {}),
+        ...(filters.value.groupId ? { groupId: filters.value.groupId } : {}),
+        ...(filters.value.circleId ? { circleId: filters.value.circleId } : {}),
         ...(filters.value.subjectId ? { subjectId: filters.value.subjectId } : {}),
       });
       setItems(result.items);
@@ -476,7 +480,10 @@ export function SchedulingPage(): ReactNode {
     accessToken,
     filters.value.type,
     filters.value.branchId,
+    filters.value.categoryId,
     filters.value.levelId,
+    filters.value.groupId,
+    filters.value.circleId,
     filters.value.subjectId,
   ]);
 

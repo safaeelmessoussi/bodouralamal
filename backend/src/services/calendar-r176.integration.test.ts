@@ -3,6 +3,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { readCalendar, type CalendarQuery } from "./calendar.service.js";
+import { listCourseSchedules } from "./course-schedule.service.js";
+import { listEvents } from "./event.service.js";
 import {
   clearTeachingContext,
   createTeachingContext,
@@ -238,5 +240,78 @@ describe("R176 §4 — the Surah filter lists what the occurrence shows, and not
     await prisma.courseScheduleSurah.create({ data: { scheduleId, surahId: 112 } });
     expect((await readCalendar(prisma, null, { ...range, surahId: 112 })).map((r) => r.id)).not.toContain(sessionId);
     await prisma.courseScheduleSurah.deleteMany({ where: { scheduleId } });
+  });
+});
+
+/**
+ * **R221 (Owner-reported, 2026-10-12) — الجدولة's LIST reads its filters as
+ * the calendar does.** «المستوى: النساء — وميض الأمل» still listed every
+ * Level's classes: the list sent only branch and subject. It now sends the
+ * Category, Level, group and circle, and the server reads them with the
+ * calendar's own clauses.
+ */
+describe("R221 — the scheduling list narrows by Category, Level, group and circle", () => {
+  const superAdmin = {
+    userId: "00000000-0000-4000-8000-000000000221",
+    roles: ["super_admin"],
+    roleScopes: [{ role: "super_admin", branches: null }],
+  } as never;
+  const listed = async (query: Parameters<typeof listCourseSchedules>[2]): Promise<string[]> =>
+    (await listCourseSchedules(prisma, superAdmin, { ...query, pageSize: 100 })).data.map((r) => r.id);
+  const scheduleOf = async (sessionId: string): Promise<string> =>
+    (await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { scheduleId: true } })).scheduleId;
+
+  it("a Level's list holds its classes and not another Level's", async () => {
+    const otherLevel = await prisma.level.create({
+      data: { name: `${TAG} مستوى آخر`, categoryId: ctx.categoryId, displayOrder: 0 },
+    });
+    const mine = await scheduleOf(await multiDimensionClass(ctx, { levelIds: [ctx.levelId] }));
+    const theirs = await scheduleOf(await multiDimensionClass(ctx, { levelIds: [otherLevel.id] }));
+
+    const byLevel = await listed({ levelId: ctx.levelId });
+    expect(byLevel).toContain(mine);
+    expect(byLevel).not.toContain(theirs);
+    expect(await listed({ categoryId: ctx.categoryId })).toEqual(expect.arrayContaining([mine, theirs]));
+    expect(await listed({ categoryId: otherCategoryId })).not.toContain(mine);
+
+    const circle = await prisma.teachingGroup.create({
+      data: { name: `${TAG} حلقة`, subjectId: ctx.subjectId, levelId: ctx.levelId, branchId: ctx.branchId },
+    });
+    const forCircle = await scheduleOf(await multiDimensionClass(ctx, { circleIds: [circle.id] }));
+    const byCircle = await listed({ teachingGroupId: circle.id });
+    expect(byCircle).toContain(forCircle);
+    expect(byCircle).not.toContain(theirs);
+    expect(await listed({ administrativeGroupId: ctx.administrativeGroupId })).not.toContain(theirs);
+
+    await prisma.courseScheduleLevel.deleteMany({ where: { levelId: otherLevel.id } });
+  });
+
+  it("an activity is listed under a Level it concerns — named, or «الكل» — and not under another Category", async () => {
+    const forLevel = await prisma.event.create({
+      data: {
+        title: `${TAG} نشاط المستوى`,
+        startDate: day("2026-09-12"),
+        visibility: "public",
+        recurrenceType: "none",
+        levelScopes: { create: { levelId: ctx.levelId } },
+      },
+    });
+    const forOtherCategory = await prisma.event.create({
+      data: {
+        title: `${TAG} نشاط فئة أخرى`,
+        startDate: day("2026-09-12"),
+        visibility: "public",
+        recurrenceType: "none",
+        categoryScopes: { create: { categoryId: otherCategoryId } },
+      },
+    });
+    const forEveryone = await prisma.event.create({
+      data: { title: `${TAG} نشاط للجميع`, startDate: day("2026-09-12"), visibility: "public", recurrenceType: "none" },
+    });
+
+    const ids = (await listEvents(prisma, superAdmin, { levelId: ctx.levelId, pageSize: 100 })).data.map((e) => e.id);
+    expect(ids).toContain(forLevel.id);
+    expect(ids).toContain(forEveryone.id);
+    expect(ids).not.toContain(forOtherCategory.id);
   });
 });

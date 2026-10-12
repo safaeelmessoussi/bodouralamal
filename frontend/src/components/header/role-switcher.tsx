@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { switchRole } from '../../adapters/auth.js';
+import { fetchOwnProfile } from '../../adapters/profile.js';
 import { useActiveChild } from '../../contexts/active-child.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { storeActiveRole, useSession } from '../../contexts/session.js';
@@ -61,6 +62,8 @@ export function RoleSwitcher({ inline = false }: { inline?: boolean }): ReactNod
   const { children, setActiveChildId } = useActiveChild();
   const { accessToken } = useSession();
   const [busy, setBusy] = useState(false);
+  const sex = useOwnSex(accessToken, roles.includes('student'));
+  const roleLabel = (role: string): string => labelOfRole(role, sex);
 
   // `ولي الأمر` is a group of children; with none approved there is nothing to
   // switch into, so the role is not offered at all.
@@ -134,8 +137,38 @@ export function RoleSwitcher({ inline = false }: { inline?: boolean }): ReactNod
 }
 
 /** Unknown roles fall back to their identifier rather than an empty label, so a
- *  role added server-side is visible rather than invisible. */
-function roleLabel(role: string): string {
+ *  role added server-side is visible rather than invisible. R221 — the
+ *  account's own beneficiary role is said in its holder's gender («مستفيدة» /
+ *  «مستفيد»); «مستفيد(ة)» only while the sex is unknown or still loading. */
+export function labelOfRole(role: string, sex: string | null): string {
+  if (role === 'student' && (sex === 'female' || sex === 'male')) return t(`roles.student_${sex}`);
   const label = t(`roles.${role}`);
   return label === `roles.${role}` ? role : label;
+}
+
+/**
+ * **R221 — the holder's sex, for the one label that says it.** `/me` carries
+ * no personal detail (R63), so it is read from `/profile`, once per page and
+ * only for an account that holds the beneficiary role.
+ */
+let ownSex: Promise<string | null> | null = null;
+function useOwnSex(token: string | null, wanted: boolean): string | null {
+  const [sex, setSex] = useState<string | null>(null);
+  useEffect(() => {
+    if (!wanted || token === null) return undefined;
+    let cancelled = false;
+    ownSex ??= fetchOwnProfile(token)
+      .then((p) => p.sex)
+      .catch(() => {
+        ownSex = null;
+        return null;
+      });
+    void ownSex.then((value) => {
+      if (!cancelled) setSex(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, wanted]);
+  return sex;
 }
