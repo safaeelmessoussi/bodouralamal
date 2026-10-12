@@ -225,7 +225,7 @@ describe('R203 — the page', () => {
   it('R204 — keeps the line and the cards together: no visible title, no trail on the overview', () => {
     at('?view=history');
     const html = renderToStaticMarkup(<HumanityTimeline />);
-    expect(t('content.views.history')).toBe('نظرة شاملة');
+    expect(t('content.views.history')).toBe('حسب الخط الزمني');
     expect(html).toContain(`class="humanity__title visually-hidden"`);
     expect(html).not.toContain('humanity__trail');
     // The calendars are named once, at the start of the line.
@@ -297,6 +297,18 @@ describe('R203 — the page', () => {
     // A caliph is not a station: his card keeps his dates.
     at('?view=history&node=rashidun');
     expect(renderToStaticMarkup(<HumanityTimeline />)).toMatch(/humanity__card(?:(?!<\/button>).)*humanity__when/s);
+  });
+
+  it('R218 — a Surah card is shown but does not open, for now; the prophets are counted as named', () => {
+    at('?view=history&node=seal/makki');
+    const makki = renderToStaticMarkup(<HumanityTimeline />);
+    expect(makki).toMatch(/<div class="humanity__card tone-makki is-static">(?:(?!<\/div>).)*سورة الفاتحة/s);
+    expect(makki).not.toMatch(/<button[^>]*humanity__card[^>]*>(?:(?!<\/button>).)*سورة الفاتحة/s);
+    // 23 cards, three of them of two prophets: 26 named.
+    const prophets = (HUMANITY.children ?? [])[0]!;
+    const named = (prophets.children ?? []).flatMap((s) => s.children ?? []).flatMap((p) => (p.title.match(/ و[^ ]/) ? [p, p] : [p]));
+    expect(named).toHaveLength(26);
+    expect(prophets.summary).toContain('ستة وعشرون');
   });
 
   it('R212 — opens a Surah as «حسب السورة» does: its name, its traits, its diagrams closed', () => {

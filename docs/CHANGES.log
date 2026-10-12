@@ -313,3 +313,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `author-picker.tsx` is a `SearchableSelect` (مؤطِّرات; every person by search, `onQueryChange`); `content.service.ts` `resolveAuthor` reads the capacity off the roles; migration `r217_content_author_guardian`.
 - `branch-scope-field.tsx`: «كل الفروع» tick (Global), all branches named → Global; upload «الظهور» «عام» by default; `.dialog__body` `scroll-behavior: auto` (a native select closed when its container scrolled smoothly).
 - «حسب المستوى»: `content-shelf__fold` folds a Level card. E11: DNS done; certificate re-issue pending (expires 2026-12-25).
+
+## 2026-10-12 — SRS Revision 218: «حسب الخط الزمني», 26 prophets, static Surah cards, thin footer
+- `ar.ts` hero lede adds «واليافعات»; `content.views.history` and the tree root «حسب الخط الزمني» (six languages; harness `verify-public-reader.mjs` updated).
+- `NodeCard`: a Surah's card renders as a static `div.is-static` while `SURAH_CARDS_OPEN = false`.
+- `prophets|summary` «ستة وعشرون» (23 cards, three of two prophets); `footer.css` padding 0.75rem.
+- Verified: frontend 1674 tests, lint, build; Localhost footer 69/92 px, madani 6 static cards.

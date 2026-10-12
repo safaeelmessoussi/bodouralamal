@@ -1097,3 +1097,12 @@ button.hdiagram__box:focus-visible {
   gap: var(--space-5);
   min-inline-size: 0;
 }
+
+/* R218 — a Surah's card that does not open (for now): no pointer, no lift. */
+.humanity__card.is-static {
+  cursor: default;
+}
+.humanity__card.is-static:hover {
+  transform: none;
+  box-shadow: var(--shadow-sm);
+}

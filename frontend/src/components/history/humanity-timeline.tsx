@@ -572,11 +572,15 @@ function NodeCard({
   dated: boolean;
   onOpen: () => void;
 }): ReactNode {
+  // R218 — a Surah's card is shown but does not open, for now (the Owner,
+  // 2026-10-12: «make the surahs cards unclickable for now, without deleting
+  // anything»). Its page stays: `SURAH_CARDS_OPEN` turns it back on.
+  const opens = node.surah === undefined || SURAH_CARDS_OPEN;
+  const Card = opens ? 'button' : 'div';
   return (
-    <button
-      type="button"
-      className={`humanity__card tone-${node.tone}`}
-      onClick={onOpen}
+    <Card
+      {...(opens ? { type: 'button' as const, onClick: onOpen } : {})}
+      className={`humanity__card tone-${node.tone}${opens ? '' : ' is-static'}`}
     >
       <span className="humanity__card-index" aria-hidden="true">
         {node.when?.order ?? index + 1}
@@ -593,6 +597,9 @@ function NodeCard({
           <span className="humanity__badge">{node.badge}</span>
         </span>
       ) : null}
-    </button>
+    </Card>
   );
 }
+
+/** R218 — whether a Surah's card opens its page (off for now; see `NodeCard`). */
+const SURAH_CARDS_OPEN = false;

@@ -12,7 +12,7 @@ import type { HistoryNode, TimelineDetail, TimelineMarker, TimelineSpan } from '
 
 export const HUMANITY: HistoryNode = {
  "id": "root",
- "title": "نظرة شاملة",
+ "title": "حسب الخط الزمني",
  "tone": "root",
  "children": [
   {
@@ -24,7 +24,7 @@ export const HUMANITY: HistoryNode = {
     "gregorian": "من آدم",
     "hijri": "إلى ما قبل المولد النبوي"
    },
-   "summary": "ثلاثة وعشرون نبيًّا ورسولًا في سلسلة واحدة من التوحيد، ومعهم الكتب السماوية: صحف إبراهيم وموسى، التوراة، الزبور، والإنجيل.",
+   "summary": "ستة وعشرون نبيًّا ورسولًا في سلسلة واحدة من التوحيد، ومعهم الكتب السماوية: صحف إبراهيم وموسى، التوراة، الزبور، والإنجيل.",
    "children": [
     {
      "id": "first-fathers",
