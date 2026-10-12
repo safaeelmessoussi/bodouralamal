@@ -87,10 +87,19 @@ interface BaseProps {
   placeholder?: string;
 }
 
+/**
+ * **R222 — a plain text field keeps no history of past entries** (`autoComplete
+ * "off"`). After typing a name, Chrome's list of earlier entries stayed open
+ * under the field, and clicking the next native <select> — «المستويات» in
+ * «إضافة مجموعة», «السورة» in «رفع ملف» — opened its list and closed it at
+ * once. «إضافة حلقة», whose Level comes first, never showed it. An email,
+ * phone or URL field keeps the browser's own filling unless told otherwise.
+ */
 export function TextField({
   type = 'text',
+  autoComplete = type === 'text' ? 'off' : undefined,
   ...props
-}: BaseProps & { type?: 'text' | 'email' | 'tel' | 'url' }): ReactNode {
+}: BaseProps & { type?: 'text' | 'email' | 'tel' | 'url'; autoComplete?: string }): ReactNode {
   return (
     <FieldShell {...props}>
       {({ id, describedBy }) => (
@@ -99,6 +108,7 @@ export function TextField({
           className="field__control"
           type={type}
           value={props.value}
+          {...(autoComplete === undefined ? {} : { autoComplete })}
           required={props.required ?? false}
           disabled={props.disabled ?? false}
           placeholder={props.placeholder ?? ''}

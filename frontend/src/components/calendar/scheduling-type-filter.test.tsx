@@ -141,10 +141,10 @@ describe('the grid marks a عطلة apart from an activity', () => {
       />,
     );
     expect(html).toContain('event-chip--holiday');
-    // **A word, not only a tint** (rule AV): a reader who cannot distinguish
-    // the outline still sees what the day is.
-    expect(html).toContain('event-chip__tag');
-    expect(html).toContain('عطلة');
+    // R222 — drawn as any activity: no «عطلة» tag on the chip; a screen
+    // reader still hears the type first.
+    expect(html).not.toContain('event-chip__tag');
+    expect(html).toContain('<span class="visually-hidden">عطلة: </span>');
   });
 
   it('leaves an ordinary activity alone, though both are stored as an Event', () => {

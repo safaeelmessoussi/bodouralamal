@@ -89,7 +89,7 @@ Reference data she manages, not a client constant; Owner-canonical order:
 3. Options come from `GET /calendar/bootstrap`; one module, `components/calendar/scheduling-type-filter.ts`, serves public and personal calendars.
 - Legacy rows are not guessed: pre-revision schedules and sittings have no type, none backfilled; they match no type filter, stay visible under «الكل», and the column is editable; a `structural_kind` fallback would be §4.4b name-matching.
 - `type` is still accepted and narrows independently; an id naming no type returns an empty set.
-- A عطلة is marked from the row, never its name: occurrences carry `scheduling_type_id`, `scheduling_type_name`, `structural_kind`; the chip renders an outline plus the type's own word (rule AV).
+- A عطلة is marked from the row, never its name: occurrences carry `scheduling_type_id`, `scheduling_type_name`, `structural_kind`; since SRS R222 the chip is drawn as any activity (no outline, no «عطلة» word; the type is announced to a screen reader).
 
 ## Three visibility tiers — on all three kinds (R109)
 

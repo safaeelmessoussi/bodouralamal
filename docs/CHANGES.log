@@ -338,3 +338,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Client: the list sends every filter and reads 100 classes (was a silent page of 25); `RoleSwitcher` reads the holder's sex from `/profile`; `LevelCertificate` picks `attests_/completed_{sex}`; `GroupDialog` back on `LevelSelect`; phone `.event-chip__title` takes a full line.
 - `ar.ts`: ~60 values about students made neutral (attendance, completion, approvals, deletion, legal); tests and 4 browser harnesses follow.
 - Verified: backend 386, frontend 1676 tests, lint, build, guards; integration (calendar-r176 incl. new R221 cases, event-list, calendar, course-schedule, scheduling-surahs, exams); Localhost `level_id` 14→4 classes; 390 px holiday chip whole-word.
+
+## 2026-10-12 — SRS Revision 222: holiday chips like any activity; no entry history on text fields
+- `event-chip.tsx`: the «عطلة» `__tag` span removed; `calendar.css`: R110's `--holiday` outline and `__tag` rules removed (class kept as a marker).
+- `field.tsx` `TextField`: `autoComplete` defaults to `off` for `type="text"` (Chrome's open history list under «الاسم» closed the next native `<select>` at once — «إضافة مجموعة», «رفع ملف»).
+- Verified: frontend 1676 tests, lint, build, guards; Localhost group dialog name input `autocomplete=off`. Not reproducible headless: the Owner re-checks on her Chrome.

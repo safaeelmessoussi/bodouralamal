@@ -58,10 +58,10 @@ export function EventChip({
    * rather than matched against an Arabic name — the catalogue's names are the
    * administration's to change (§4.4b).
    *
-   * Marked the way this chip marks everything else: **a word first** (rule AV),
-   * the type's own name, so a reader who cannot distinguish the tint still sees
-   * that nothing is delivered that day. The wash follows the word; it never
-   * carries the meaning alone.
+   * **R222 (Owner, 2026-10-12) — drawn as every other activity is**, with no
+   * «عطلة» word on the chip and no outline of its own: the title already says
+   * what the day is («عطلة الفترة البينية الأولى»). A screen reader still hears
+   * the type first (`announced`).
    */
   const holiday = occurrence.structural_kind === 'holiday';
 
@@ -105,9 +105,6 @@ export function EventChip({
           </span>
         ))}
       </span>
-      {holiday && occurrence.scheduling_type_name ? (
-        <span className="event-chip__tag">{occurrence.scheduling_type_name}</span>
-      ) : null}
       {online ? <span className="event-chip__delivery">{online}</span> : null}
     </>
   );
