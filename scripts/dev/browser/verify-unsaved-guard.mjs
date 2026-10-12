@@ -357,13 +357,13 @@ if (enrolPage === 'ready') {
   } else {
     const after = await state();
     check(
-      'PRISTINE: an untouched تسجيل مستفيدة closes with no discard question',
+      'PRISTINE: an untouched تسجيل مستفيد(ة) closes with no discard question',
       after.confirming === false && after.open === 0,
       JSON.stringify(after),
     );
   }
 } else {
-  check('PRISTINE تسجيل: المستفيدات could be reached', false, `state=${enrolPage}`);
+  check('PRISTINE تسجيل: المستفيدون والمستفيدات could be reached', false, `state=${enrolPage}`);
 }
 
 close();

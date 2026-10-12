@@ -59,7 +59,7 @@ check('it asks before restoring', await waitFor(`document.querySelector('dialog[
 await evaluate(`[...document.querySelectorAll('dialog[open] .confirm button')].find((b) => b.textContent.trim() === 'استعادة')?.click()`);
 check(
   'the screen says it came back — and WHAT came back with it',
-  await waitFor(`document.querySelector('main').innerText.includes('تمت استعادة السجل.') && document.querySelector('main').innerText.includes('مستفيدة إلى الحلقة')`),
+  await waitFor(`document.querySelector('main').innerText.includes('تمت استعادة السجل.') && document.querySelector('main').innerText.includes('من المستفيدين والمستفيدات إلى الحلقة')`),
   (await evaluate(`document.querySelector('main').innerText`)).slice(0, 300),
 );
 check('it has left the Trash', await waitFor(`!(${row})`));

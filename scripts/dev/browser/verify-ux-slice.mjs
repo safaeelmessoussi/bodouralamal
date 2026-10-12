@@ -94,7 +94,7 @@ const longForm = await evaluate(`(async () => {
   // undefined once on a slower run and took the whole harness down with it.
   let add = null;
   for (let i = 0; i < 40 && !add; i += 1) {
-    add = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('تسجيل مستفيدة'));
+    add = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('تسجيل مستفيد(ة)'));
     if (!add) await new Promise((r) => setTimeout(r, 250));
   }
   if (!add) return { noAdd: true };
@@ -108,7 +108,7 @@ check('the enrolment dialog opens', longForm === true);
 // Level list and the circles appear.
 const longScroll = await evaluate(`(async () => {
   const box = [...document.querySelectorAll('.searchable-select')]
-    .find((f) => (f.querySelector('legend')?.textContent ?? '').includes('المستفيدة'));
+    .find((f) => (f.querySelector('legend')?.textContent ?? '').includes('المستفيد(ة)'));
   const btn = box?.querySelector('.searchable-select__options li button');
   if (btn) btn.click();
   await new Promise((r) => setTimeout(r, 2200));

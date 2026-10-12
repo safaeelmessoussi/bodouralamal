@@ -24,7 +24,7 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
-**Revision ledger (R1–R218):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 218** (2026-10-12).
+**Revision ledger (R1–R219):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 219** (2026-10-12).
 
 Where §4 (functional) and §12–§20 (rules/constraints) describe the same behavior, they must agree; if an implementer ever finds a conflict, **§12 Business Rules win**, and the conflict must be reported, not silently resolved.
 
@@ -1962,7 +1962,7 @@ BACK OFFICE (Admin / Super Admin) — THE SIDEBAR, IN THIS EXACT ORDER (Revision
 │                                       only; it grants nothing (R88.3, §4.4c).
 │                                       ~~إدارة المؤطِّرات~~ renamed by R105: no sibling names its
 │                                       own verb, and every entry in this menu is a management screen
-├── المستفيدات ........................ /admin/enrollments (staff, R74) — مستفيدة → Level, with an
+├── المستفيدون والمستفيدات ........... /admin/enrollments (staff, R74) — مستفيدة → Level, with an
 │                                       optional Group. The PRIMARY enrolment fact; the group roster
 │                                       remains the per-group view of the same rows.
 │                                       ~~التسجيلات~~ renamed by R105: it named the ROWS, where every
@@ -2100,7 +2100,7 @@ An agent must implement these as single shared components and never duplicate th
 
 ### 14.3a Interface language — neutral address (Revision 197, binding)
 
-**No interface text addresses the reader as a woman** — nor as a man. The public pages are for everyone; an account may be addressed in the feminine only if it belongs to a women/girls-only Category, a variant not built, so **every string is gender-neutral**: verbal nouns and labels («اختيار الفرع»), «يُرجى» + masdar for instructions and validation («يُرجى اختيار الفرع.»), impersonal or passive forms («يمكن…», «يُترك فارغًا…») — never a masculine imperative passed off as neutral. The association's role nouns «مؤطِّرة» / «مستفيدة» (Revision 71) and the honorific «الأستاذة» are unchanged. Counted nouns agree with their number («من 5 سنوات», «من 13 سنة»). Enforced by `scripts/ci/check-neutral-address.sh`.
+**No interface text addresses the reader as a woman** — nor as a man. The public pages are for everyone; an account may be addressed in the feminine only if it belongs to a women/girls-only Category, a variant not built, so **every string is gender-neutral**: verbal nouns and labels («اختيار الفرع»), «يُرجى» + masdar for instructions and validation («يُرجى اختيار الفرع.»), impersonal or passive forms («يمكن…», «يُترك فارغًا…») — never a masculine imperative passed off as neutral. The association's role noun «مؤطِّرة» (Revision 71) and the honorific «الأستاذة» are unchanged; **since Revision 219 the beneficiary is «المستفيد(ة)» / «المستفيدون والمستفيدات»** (students are boys and girls, men and women), never «مستفيدة» alone. Counted nouns agree with their number («من 5 سنوات», «من 13 سنة»). Enforced by `scripts/ci/check-neutral-address.sh`.
 
 ### 14.4 UI State Standard (mandatory on every page)
 

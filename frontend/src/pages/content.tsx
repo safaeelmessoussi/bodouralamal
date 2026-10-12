@@ -1,3 +1,4 @@
+import { SearchableSelect } from '../components/ui/searchable-select.js';
 import { BranchScopeField } from '../components/content/branch-scope-field.js';
 import { AuthorPicker, type AuthorValue } from '../components/content/author-picker.js';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -229,18 +230,18 @@ function ContentEditDialog({
       {/* R177 §7 — one Surah, optional, only for a Subject taught by Surah,
           from the syllabus of the Levels the item is filed under. */}
       {subjectWorksBySurah(facts, form.subjectId) ? (
-        <SelectField
+        // R219 — the platform's own searchable list (a long native <select>
+        // opened and closed at once inside a dialog on the Owner's Chrome).
+        <SearchableSelect
           label={t('content.upload.surah')}
           value={form.surahId === null ? '' : String(form.surahId)}
           onChange={(v) => setForm((f) => ({ ...f, surahId: v === '' ? null : Number(v) }))}
           hint={t('content.upload.surahHint')}
-          options={[
-            { value: '', label: t('content.upload.noSurah') },
-            ...surahChoices(facts, [form.levelId, ...form.additionalLevelIds]).map((s) => ({
-              value: String(s.id),
-              label: s.name,
-            })),
-          ]}
+          placeholder={t('content.upload.noSurah')}
+          options={surahChoices(facts, [form.levelId, ...form.additionalLevelIds]).map((s) => ({
+            value: String(s.id),
+            label: s.name,
+          }))}
         />
       ) : null}
 

@@ -31,7 +31,7 @@ if (!COOKIE || !API_COOKIE) {
 const MENU = [
   ['مساحة التدريس', '/teacher'],
   ['إدخال أوقات التوفّر', '/teacher/availability'],
-  ['إدخال حفظ المستفيدات', '/teacher/quran'],
+  ['إدخال حفظ المستفيدين والمستفيدات', '/teacher/quran'],
   ['إدخال نقاط الامتحانات', '/teacher/exams'],
   ['الجدولة', '/teacher/schedules'],
   ['مكتبة المحتوى', '/teacher/content'],
@@ -92,7 +92,7 @@ await goto('/teacher');
 const menu = await readMenu();
 
 /**
- * **`إدخال حفظ المستفيدات` is conditional (R87 §M)** — a مؤطِّرة who staffs no
+ * **`إدخال حفظ المستفيدين والمستفيدات` is conditional (R87 §M)** — a مؤطِّرة who staffs no
  * Quran-tracking Subject is not shown it, because the entry would open a screen
  * the server empties. So the expectation is the Owner's list, minus that one
  * when this particular teacher does not teach Quran. Reported either way rather
@@ -103,7 +103,7 @@ const teachesQuran = shown.includes('/teacher/quran');
 const expected = MENU.filter(([, href]) => teachesQuran || href !== '/teacher/quran');
 
 check(
-  `the menu is exactly the Owner's order${teachesQuran ? '' : ' (minus إدخال حفظ المستفيدات — R87 §M: this teacher teaches no Quran)'}`,
+  `the menu is exactly the Owner's order${teachesQuran ? '' : ' (minus إدخال حفظ المستفيدين والمستفيدات — R87 §M: this teacher teaches no Quran)'}`,
   same(
     menu?.items,
     expected.map(([text, href]) => ({ text, href })),
@@ -230,7 +230,7 @@ check('…and still carries her personal calendar (R93.1)', sched.calendar);
  *
  * §4.4c derives her entire scope from `CourseScheduleStaff`, so a مؤطِّرة with
  * no assignment has an empty الجدولة, an empty exam list and no
- * `إدخال حفظ المستفيدات` entry — and every one of those is *correct*. A harness
+ * `إدخال حفظ المستفيدين والمستفيدات` entry — and every one of those is *correct*. A harness
  * that asserted "some rows appear" would therefore fail on a legitimate state,
  * and one that skipped quietly would hide the far more interesting fact.
  *

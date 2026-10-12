@@ -307,7 +307,7 @@ Branches delivered the framework, not a branches screen (constitution §0.1).
 - `ولي الأمر` is a group on the Student Dashboard route, not a destination: the switcher's `parent` entry expands into approved children; picking one sets active role and child in one action; no second child dropdown. A parent-only account still gets the switcher. `ولي الأمر` is offered only once a child is approved.
 - «＋ تسجيل طفل» moved out of the switcher (R64) to `/profile/register-child` (R65); it posts a single child, asking what `/register`'s child section asks; the public form is the multi-child one.
 - `/dashboard/student` renders the caller's own record as student or the active child's as parent: `GET /students/me` resolves the acting student server-side (§4.3, R63); the client only sends the child header.
-- The stored child coordinate reconciles to `null` outside Parent context; switching to Student clears it before navigation. A Parent-only account has no standalone `مستفيدة` option (roles come from live roles, not children).
+- The stored child coordinate reconciles to `null` outside Parent context; switching to Student clears it before navigation. A Parent-only account has no standalone `مستفيد(ة)` option (roles come from live roles, not children).
 - A persistent banner names the child (R62.10). Scope: identity block, today's and upcoming sessions; Quran progress, grades and exams are later milestones and are not stubbed (§14.4).
 - Every authenticated calendar consumer passes the access token to `GET /calendar` (public, optionally authenticated); visibility is decided by the backend, never locally.
 

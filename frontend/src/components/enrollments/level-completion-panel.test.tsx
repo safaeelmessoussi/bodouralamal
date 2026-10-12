@@ -72,7 +72,7 @@ describe('the panel', () => {
     expect(html).toContain('أتمّت المستوى');
     expect(html).toContain('سُجِّل الإتمام مع العلم بأن الشروط لم تكن مستوفاة');
     expect(html).toContain('تأكيد إظهار الشهادة');
-    expect(html).toContain('الشهادة غير ظاهرة للمستفيدة بعد');
+    expect(html).toContain('الشهادة غير ظاهرة للمستفيد(ة) بعد');
   });
 
   it('a showing certificate can only be withdrawn — the mark under it cannot be removed first', () => {

@@ -191,6 +191,8 @@ export function useContentScope({
         required={['levelId', 'subjectId', 'academicYearId']}
         {...(locked ? { locked: rendered } : {})}
         blankLabels={{ surahId: t('content.upload.noSurah') }}
+        // R219 — the Surah list is long: the platform's own searchable list.
+        searchable={['surahId']}
       />
 
       {/* R172 §11 — said HERE, under the selectors, the moment «كل مستويات

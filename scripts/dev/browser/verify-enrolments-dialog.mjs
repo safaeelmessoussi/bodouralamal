@@ -65,7 +65,7 @@ const listed = await goto(
   '/admin/enrollments',
   '[...document.querySelectorAll(".admin-table tbody tr")].some((tr) => (tr.textContent.includes("[dev-scenario]") && tr.textContent.includes("مستفيدة مسجّلة")))',
 );
-check('المستفيدات loads with the scenario student', listed === 'ready', 'state=' + listed);
+check('المستفيدون والمستفيدات loads with the scenario student', listed === 'ready', 'state=' + listed);
 if (listed !== 'ready') {
   close();
   process.exit(finish());

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { SelectField } from '../ui/field.js';
+import { SearchableSelect } from '../ui/searchable-select.js';
 import { wholeCategoryOf } from '../../hooks/use-scope-options.js';
 import { t } from '../../i18n/index.js';
 import type { Option, ScopeField, ScopeOptions } from '../../hooks/use-scope-options.js';
@@ -74,6 +75,13 @@ export interface ScopeSelectorsProps {
   required?: readonly ScopeField[];
   /** What `''` reads in a form for a field that may stay empty («بدون سورة محددة»). */
   blankLabels?: Partial<Record<ScopeField, string>>;
+  /**
+   * R219 — fields drawn as the platform's own searchable list rather than a
+   * native `<select>`: inside a dialog the browser's own list of a long
+   * `<select>` opened and closed at once on the Owner's Chrome («السورة»,
+   * «المستويات»), and this one has no native popup to close.
+   */
+  searchable?: readonly ScopeField[];
 }
 
 export function ScopeSelectors({
@@ -85,6 +93,7 @@ export function ScopeSelectors({
   pinned = {},
   required = [],
   blankLabels = {},
+  searchable = [],
 }: ScopeSelectorsProps): ReactNode {
   return (
     <>
@@ -121,6 +130,20 @@ export function ScopeSelectors({
               ? t(`scope.all.${field}`)
               : (blankLabels[field] ?? t('scope.choose'));
 
+        if (searchable.includes(field)) {
+          return (
+            <SearchableSelect
+              key={field}
+              label={t(LABEL_KEY[field])}
+              value={scope.value[field]}
+              onChange={(v) => scope.set(field, v)}
+              placeholder={placeholder}
+              required={required.includes(field)}
+              disabled={locked.includes(field) || isEmpty || scope.loading[field]}
+              options={list}
+            />
+          );
+        }
         return (
           <SelectField
             key={field}

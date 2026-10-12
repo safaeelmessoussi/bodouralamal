@@ -142,10 +142,10 @@ const picker = await evaluate(`(async () => {
   // for a pasted UUID and the one R125's teaching rule governs.
   const selects = [...d.querySelectorAll('select')];
   const targetSelect = selects.find((sel) =>
-    [...sel.options].some((o) => o.textContent.includes('مستفيدة واحدة')),
+    [...sel.options].some((o) => o.textContent.includes('مستفيد(ة) واحد(ة)')),
   );
   if (!targetSelect) return { noTargetSelect: true, labels: selects.map((x) => x.options.length) };
-  const opt = [...targetSelect.options].find((o) => o.textContent.includes('مستفيدة واحدة'));
+  const opt = [...targetSelect.options].find((o) => o.textContent.includes('مستفيد(ة) واحد(ة)'));
   setSelect(targetSelect, opt.value);
   await new Promise((r) => setTimeout(r, 2500));
 

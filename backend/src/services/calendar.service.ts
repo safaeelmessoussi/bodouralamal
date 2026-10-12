@@ -1927,7 +1927,7 @@ export async function readCalendar(
           : exam.targetKind === "session"
             ? "حصة محددة"
             : exam.targetKind === "student"
-              ? "مستفيدة واحدة"
+              ? "مستفيد(ة) واحد(ة)"
               : (exam.administrativeGroup?.name ?? exam.level.name),
       status: null,
       // §4.6 exam staff are supervisors, not instructors. The calendar's

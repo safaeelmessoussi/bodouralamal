@@ -131,7 +131,7 @@ async function assertLevelCurriculum(
     select: { id: true },
   });
   if (!enrolled) {
-    throw new AppError('NOT_FOUND', 'that مستفيدة is not enrolled in that level', {
+    throw new AppError('NOT_FOUND', 'that مستفيد(ة) is not enrolled in that level', {
       reason: 'LEVEL_NOT_ENROLLED',
     });
   }

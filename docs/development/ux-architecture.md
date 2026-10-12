@@ -88,7 +88,7 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 - The recording is the application's, not the screen's (Revision 172 §4): one module-level `RecordingSession` (`lib/recording-session.ts`; browser behind `Platform` in `lib/recording-platform.ts`); the recorder is a view bound by `origin.key`; `RecordingBar` at the root shows the controls on every page with «العودة»; chunks go to on-device IndexedDB every 10 s so `restore()` offers «حفظ»/«حذف» after a reload; Wake Lock; the track's `mute` event raises the capture-gap notice; the name is the server's suggestion (R172 §3: «تسجيل صوتي — المادة — من سجّلت — التاريخ الوقت»). SRS R75 · `lib/recorder.ts` · `lib/recording-session.test.ts`.
 
 ## AI · A selector dependency follows the business question, not the field order
-- The domain decides the arrow; enrolment asks WHO → WHERE → HOW: المستفيدة depends on nothing · المستوى on the beneficiary (R27; BR-21 excludes only the Level she holds) · الفرع on the Level · مجموعة المستوى on Level and Branch (§4.4c, optional) · حلقات المواد on Level and Subject, independent of the group.
+- The domain decides the arrow; enrolment asks WHO → WHERE → HOW: المستفيد(ة) depends on nothing · المستوى on the beneficiary (R27; BR-21 excludes only the Level she holds) · الفرع on the Level · مجموعة المستوى on Level and Branch (§4.4c, optional) · حلقات المواد on Level and Subject, independent of the group.
 - Filtering beneficiaries by a chosen Level was the rule backwards; say the pair as a question before wiring it. Both directions narrow server-side (§4.4, rule O); `sex` never leaves the service.
 
 ## I · Empty states
@@ -111,7 +111,7 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 - «إنهاء التسجيل» is a soft delete into Trash (R59): releases circle seats, retains grades, Quran logs and audit; never a hard delete; the UI states what is kept.
 
 ### The identity of an enrolment is not editable
-- `Student → Level → Branch → الفصل` is the enrolment; «تعديل التسجيل» edits only group and circles; moving a student is **إنهاء التسجيل** then **تسجيل مستفيدة**; the contract refuses identity edits (rule AF below); the confirmation says what ends · what is kept (the beneficiary and her other enrolments) · what may be done next.
+- `Student → Level → Branch → الفصل` is the enrolment; «تعديل التسجيل» edits only group and circles; moving a student is **إنهاء التسجيل** then **تسجيل مستفيد(ة)**; the contract refuses identity edits (rule AF below); the confirmation says what ends · what is kept (the beneficiary and her other enrolments) · what may be done next.
 
 ## BE · الحضور — the register, and the two sheets it is
 - The register lives inside the shared occurrence dialog (rule A). R123 states: `disabled` renders nothing (عطلة, حفل); `required` opens on the expected roster; `optional` opens empty, and the copy says which sheet; nobody is written as absent (attendance gates nothing, BR-11).
@@ -232,7 +232,7 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 
 ## AP · Three portals, one frame — and a registry is what makes a screen exist
 - Back office, teaching and beneficiary portals render the same `PortalShell` (header, sidebar, titled main, §14.4 no-permission, R83 scroll restoration); only the module list differs; a capability with no registry entry does not exist to its user (`/teacher/quran` had a page and no entry — rule P's eighth instance).
-- Landing pages (مساحة التدريس, لوحة المستفيدة) stay a sentence and their menu until designed («حصص اليوم والقادمة» removed: it duplicated تقويمي); notifications live in the top bar as one bell rendering the same `NotificationList`, badge from the server's unread count.
+- Landing pages (مساحة التدريس, لوحة المستفيد(ة)) stay a sentence and their menu until designed («حصص اليوم والقادمة» removed: it duplicated تقويمي); notifications live in the top bar as one bell rendering the same `NotificationList`, badge from the server's unread count.
 
 ## AS · A staffing control must be able to say WHEN
 - R91 gave `CourseScheduleStaff` an effective period and withdrew the `(schedule, user)` unique index; a class composes `StaffingPeriods` (who · main/assistant · from · until): ordinary = Safa open → open; temporary replacement = Safa → 30 Nov · Amina 1–30 Nov · Safa 1 Dec → open; rest of semester = Safa → 15 Jan · Amina 16 Jan → open. `StaffPicker` stays for an exam sitting, a celebration and a single occurrence.
@@ -363,13 +363,13 @@ Owner decision (2026-08-26): a failure a person meets is a designed state.
 Owner decision (2026-08-25), both halves binding: no Add/Edit form may silently discard unsaved changes; no pristine one may show a discard warning.
 - [`useUnsavedGuard`](../../frontend/src/lib/use-unsaved-guard.tsx) owns the behaviour (rule U); `FormDialog` is one caller and a bare `Dialog` adopts it directly: `branches.tsx` (rooms list), `users.tsx` (profile, roles), `approvals.tsx` (staff, placement, child), `session-materials-dialog.tsx`; `＋إضافة مقر`, `taxonomy.tsx`, `levels.tsx` moved to `FormDialog` + `isDirty`; `approvals/role-review.tsx` (R168 §1) holds no input (one dialog at a time — the act it starts replaces it, cancelling returns).
 - `dirty` is `isDirty(current, pristine)` against the loaded record, never a captured-on-open snapshot; hydration, server-loaded values, defaults and validation errors are never dirty; a search box is not unsaved work.
-- Guards in `atomic-components.test.ts`: no bare `Dialog` holding input lacks the guard; every `useUnsavedGuard` renders its `confirmation`; `scripts/dev/browser/verify-unsaved-guard.sh` (24/24) keeps `＋تسجيل مستفيدة` as reference.
+- Guards in `atomic-components.test.ts`: no bare `Dialog` holding input lacks the guard; every `useUnsavedGuard` renders its `confirmation`; `scripts/dev/browser/verify-unsaved-guard.sh` (24/24) keeps `＋تسجيل مستفيد(ة)` as reference.
 
 ### AY.1 · «Dirty» means *changed*, never *has content* (NEW E)
 - الملف التدريسي computed dirty as *has any content*; the fix is `isDirty` against the record captured in the fetch (`lib/form-dirty.ts`); sort multi-select ids before comparing, availability ranges not sorted; place the browser check after one that saves content or it passes against the defect.
 
 ### AY.1b · A baseline may only hold fields the reader can CHANGE (2026-08-28)
-- `studentId`, set by the opening row action, entered `＋تسجيل مستفيدة`'s baseline and the form was born dirty: a baseline enumerates what the reader can modify, not what the component holds; pinned in `verify-unsaved-guard.mjs` beside الجدولة and إضافة شريك.
+- `studentId`, set by the opening row action, entered `＋تسجيل مستفيد(ة)`'s baseline and the form was born dirty: a baseline enumerates what the reader can modify, not what the component holds; pinned in `verify-unsaved-guard.mjs` beside الجدولة and إضافة شريك.
 
 ## AX · A create/edit form contains every field that decides what is saved
 Owner decision (2026-08-25): every field that materially determines the object is visible inside the form; pre-filling from page filters or context is allowed.
@@ -384,7 +384,7 @@ Owner decision (2026-08-25): every field that materially determines the object i
 - Owner (2026-08-30): `DataTable` renders the empty/no-results message in a `<td colSpan>` spanning every column (grip and actions included), keeping headers, sort buttons, `aria-sort` and the nothing-here/nothing-matches distinction; loading (skeleton) and error (no columns) are unchanged.
 
 ## BC · A dialog does not re-fetch what its caller handed it
-- A dialog receives the row, not an id to re-resolve (2026-08-29: `تسجيل مستفيدة`'s حفظ sent no request — a `beneficiaries_only` directory search missed a beneficiary listed through R79.7's union); the branch derives from the group (§4.4c) → the role assignment (R66) → an existing enrolment, and if none answers the form says so rather than disabling حفظ (rule AH).
+- A dialog receives the row, not an id to re-resolve (2026-08-29: `تسجيل مستفيد(ة)`'s حفظ sent no request — a `beneficiaries_only` directory search missed a beneficiary listed through R79.7's union); the branch derives from the group (§4.4c) → the role assignment (R66) → an existing enrolment, and if none answers the form says so rather than disabling حفظ (rule AH).
 
 ## BB · A server invariant is stated at entry, and re-stated when its measure moves
 - Origin (Owner, 2026-08-29): a class beginning 30 غشت 2026 with staffing 29 → 29 غشت refused `STAFF_PERIOD_OUTSIDE_SCHEDULE` (correct, §5, refused rather than clipped) only on Save. Three jobs: constrain (native `min`/`max`) · explain (a field error, rule AH) · enforce (the server, rule O); the first two are bypassable courtesies.
@@ -468,7 +468,7 @@ Behavioural or registry-level, never CSS-class assertions.
 | Decision | State |
 |---|---|
 | An Event has no location — *خارج المقرات* cannot be expressed (2026-08-19) | `Event` has no room, address or venue; `EventBranch` is scope, not location (a Session's place is its schedule's `room_id`). No fake Branch. Options: nullable `Event.venue_name` + `is_offsite`, or a `Venue` entity (depends on reusing named venues). Awaiting the Owner; meanwhile an event scoped to no branch reads «خارج المقرات» in the branch column. |
-| No structural marker identifies a مستفيدة | Minors hold no role (§4.3), `intended_category_id` is unset on live rows, one live account holds `teacher` and `student`; every student picker offers every active account. R64.7's `Category.holds_own_login` decided by the Owner 2026-09-21 (Revision 170 §6): built in its own part. |
+| No structural marker identifies a مستفيد(ة) | Minors hold no role (§4.3), `intended_category_id` is unset on live rows, one live account holds `teacher` and `student`; every student picker offers every active account. R64.7's `Category.holds_own_login` decided by the Owner 2026-09-21 (Revision 170 §6): built in its own part. |
 | `/admin/level-surahs` is not in §14.1 | M4c shipped it with «no SRS change»; its menu position follows §14.1's dependency order. |
 | Two reads unlisted in TD-3 | `GET /admin/teaching-groups`, `GET /students/me/grades` — [audit](../archive/audits/audit-2026-08-17-ux-architecture.md) §Z; precedent `GET /students/me/quran` under TD-3.3, also unlisted. |
 | A مؤطرة's Quran list shows names only | `/quran-students` returns `{ id, name_arabic }`; a coverage column needs that read widened. |

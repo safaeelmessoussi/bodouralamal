@@ -323,3 +323,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-12 — Staging: `staging.bodouralamal.com` fully retired (Owner's go-ahead)
 - Certificate re-issued with `bodouralamal.com` and `www.bodouralamal.com` only (expires 2027-01-10; the first attempt failed transiently with «Certificate not found», the second succeeded); lineage `staging.bodouralamal.com` deleted.
 - Host: `nginx/conf.d/retired-staging-host.conf` and its `.git/info/exclude` line removed (R203) — `git status` clean; nginx restarted; `/healthz` 200, `www` 200, public SAN checked. TASKS E11 closed; E13 (chatbot) marked LATER.
+
+## 2026-10-12 — SRS Revision 219: «المستفيد(ة)», searchable Level and Surah lists in dialogs
+- `ar.ts`: 160 values «مستفيدة/مستفيدات» → «المستفيد(ة) / المستفيدون والمستفيدات» (sentences reworded); backend `calendar.service.ts` audience label and `quran.service.ts` message; terminology guard text; 14 browser harness literals.
+- `ScopeSelectors` gains `searchable`; upload «السورة», edit «السورة» and «إضافة مجموعة» «المستويات» use `SearchableSelect` (a long native select opened and closed at once in a dialog on the Owner's Chrome — not reproducible headless).

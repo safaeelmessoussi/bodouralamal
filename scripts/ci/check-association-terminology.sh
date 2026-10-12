@@ -2,7 +2,9 @@
 # The association's own words, enforced (SRS §2.1; R71 audit, 2026-08-12).
 #
 #   مؤطِّرة  — any non-beneficiary person working with the association
-#   مستفيدة  — the person receiving the educational service
+#   المستفيد(ة) — the person receiving the educational service (plural
+#                 «المستفيدون والمستفيدات»; the Owner, 2026-10-12: students
+#                 may be male or female, so the role word is never feminine-only)
 #
 # The audit found «أستاذة» for a مؤطرة and «طالبة» in nine places, including
 # the PRIVACY NOTICE a family reads before consenting — and two role
@@ -40,12 +42,12 @@ TERMS
 # contain the letters, so the match is bounded by Arabic word edges.
 hits=$(strip "$CATALOGUE" | grep -oP '(^|[^ء-ي])طالب(ة|ات)([^ء-ي]|$)' | wc -l)
 if [ "$hits" -gt 0 ]; then
-  echo "FAIL: «طالبة/طالبات» appears $hits time(s) — the beneficiary is «مستفيدة»"
+  echo "FAIL: «طالبة/طالبات» appears $hits time(s) — the beneficiary is «المستفيد(ة)»"
   strip "$CATALOGUE" | grep -nP '(^|[^ء-ي])طالب(ة|ات)([^ء-ي]|$)' | head -5
   fail=1
 fi
 
 if [ "$fail" -eq 0 ]; then
-  echo "Association terminology OK — مؤطِّرة and مستفيدة throughout."
+  echo "Association terminology OK — مؤطِّرة and المستفيد(ة) throughout."
 fi
 exit "$fail"

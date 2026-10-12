@@ -128,12 +128,12 @@ await send('Page.navigate', { url: `${BASE}/register#onboarding_token=${TOKEN}` 
 check('the registration form renders from an onboarding token', await waitFor(`document.querySelector('form.register-form')`));
 await installProbe();
 
-// R170 §2 — one CLOSED control, «أسجّل نفسي كمستفيدة» chosen for her (the
+// R170 §2 — one CLOSED control, «أسجّل نفسي كمستفيد(ة)» chosen for her (the
 // Owner, 2026-09-21, reversing R168's «nothing preselected»).
 const closedAtFirst = await roleSummary(evaluate);
 check(
-  '«المطلوب» is a CLOSED control that names her default: «أسجّل نفسي كمستفيدة»',
-  closedAtFirst?.expanded === 'false' && closedAtFirst.text.includes('أسجّل نفسي كمستفيدة') && !closedAtFirst.text.includes('أسجّل أبنائي'),
+  '«المطلوب» is a CLOSED control that names her default: «أسجّل نفسي كمستفيد(ة)»',
+  closedAtFirst?.expanded === 'false' && closedAtFirst.text.includes('أسجّل نفسي كمستفيد(ة)') && !closedAtFirst.text.includes('أسجّل أبنائي'),
   JSON.stringify(closedAtFirst),
 );
 check(
@@ -376,7 +376,7 @@ check(
   await waitFor(`[...document.querySelectorAll('dialog[open] select')].some((s) => (s.selectedOptions[0]?.textContent ?? '').includes(${q(S.firstLevel.name)}))`),
 );
 check('the placement is confirmed', await waitFor(`[...document.querySelectorAll('dialog[open] button')].some((b) => b.textContent.trim() === 'موافقة' && !b.disabled)`) && (await clickIn('dialog[open]', 'موافقة')) === 'clicked');
-check('…and said, WITHOUT claiming the account was activated twice', await waitFor(`document.querySelector('main').innerText.includes('تم قبول «مستفيدة».')`) && !(await notice()).includes('الحساب مفعَّل الآن.'), await notice());
+check('…and said, WITHOUT claiming the account was activated twice', await waitFor(`document.querySelector('main').innerText.includes('تم قبول «مستفيد(ة)».')`) && !(await notice()).includes('الحساب مفعَّل الآن.'), await notice());
 
 /* administration — the approver chooses WHICH role */
 await waitFor(`document.querySelector('dialog[open] [data-role-review]')`);
@@ -427,7 +427,7 @@ if (EXISTING) {
   const offeredRoles = await selectOptions('[data-role-choices]', 'ما الصفة التي تطلبينها');
   check(
     'she is offered what she does NOT hold — never هيئة التدريس, which she has, and never «أسجّل أبنائي»',
-    JSON.stringify(offeredRoles?.options) === JSON.stringify(['اختيار…', 'مستفيدة', 'هيئة الإدارة والمساعدة في الإدارة']) ||
+    JSON.stringify(offeredRoles?.options) === JSON.stringify(['اختيار…', 'مستفيد(ة)', 'هيئة الإدارة والمساعدة في الإدارة']) ||
       (offeredRoles?.options.length === 3 && !offeredRoles.options.some((o) => o.includes('التدريس') || o.includes('وليّة'))),
     JSON.stringify(offeredRoles),
   );

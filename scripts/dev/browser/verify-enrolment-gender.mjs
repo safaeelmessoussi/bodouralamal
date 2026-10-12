@@ -186,7 +186,7 @@ const narrowed = await evaluate(`(async () => {
   if (!btn) return { notFound: true };
   btn.click();
   await new Promise((r) => setTimeout(r, 2200));
-  return { before, after: levelCount(), says: scope.textContent.includes('المتاحة لهذه المستفيدة') };
+  return { before, after: levelCount(), says: scope.textContent.includes('المتاحة للمستفيد(ة)') };
 })()`);
 check(
   '7 · choosing HER narrows the Level list in the browser',

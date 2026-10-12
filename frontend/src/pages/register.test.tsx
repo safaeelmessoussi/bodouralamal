@@ -556,7 +556,7 @@ describe('SRS Revision 168 §1 — one form, several roles', () => {
 describe('SRS Revision 170 §2 — the role chooser is a closed dropdown with a default', () => {
   const source = PAGE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
-  it('starts with «أسجّل نفسي كمستفيدة» chosen — a default, never a lock', () => {
+  it('starts with «أسجّل نفسي كمستفيد(ة)» chosen — a default, never a lock', () => {
     expect(source).toContain("useState<RoleChoice[]>(['student'])");
     // Unticking it is still allowed, and still refused only when NOTHING is left.
     expect(validate({ ...base, roles: [] })).toHaveProperty('roles');

@@ -55,7 +55,7 @@ const MAIN = [
   ['طلبات الانضمام', '/admin/approvals'],
   ['المستخدمون', '/admin/users'],
   ['المؤطِّرات', '/admin/teachers'],
-  ['المستفيدات', '/admin/enrollments'],
+  ['المستفيدون والمستفيدات', '/admin/enrollments'],
   ['مجموعات المستويات', '/admin/groups'],
   ['حلقات المواد', '/admin/teaching-groups'],
   ['إدخال الحفظ', '/admin/quran'],

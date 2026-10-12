@@ -152,7 +152,7 @@ await as(process.env.STUDENT_COOKIE);
 await open('/dashboard/student');
 const landing = await shell();
 check(
-  '6 · لوحة المستفيدة carries none of the moved details',
+  '6 · لوحة المستفيد(ة) carries none of the moved details',
   !landing.text.includes('الفئة') && !landing.text.includes('المقر'),
   landing.text.slice(0, 140),
 );

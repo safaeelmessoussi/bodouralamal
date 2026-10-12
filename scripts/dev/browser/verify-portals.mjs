@@ -70,13 +70,13 @@ check(
  * so she had to know which of the two held what she wanted. Her calendar is now
  * the top of الجدولة — check 5 below opens it there.
  */
-// **R106 renamed «إدخال الحفظ» to «إدخال حفظ المستفيدات»** — deliberately, to say
+// **R106 renamed «إدخال الحفظ» to «إدخال حفظ المستفيدين والمستفيدات»** — deliberately, to say
 // WHOSE memorisation is being recorded, since the bare noun left that open. The
 // harness kept the old label and had been failing quietly ever since; restated
 // 2026-08-27 rather than deleted, because the property is that the entry is
 // reachable, not what it happens to be called.
 // «نقاط الاختبارات» since R165 §6 (the Owner's own word for the module).
-for (const label of ['الجدولة', 'نقاط الاختبارات', 'مكتبة المحتوى', 'إدخال حفظ المستفيدات']) {
+for (const label of ['الجدولة', 'نقاط الاختبارات', 'مكتبة المحتوى', 'إدخال حفظ المستفيدين والمستفيدات']) {
   check(
     `2 · her menu reaches «${label}»`,
     teacherHome.menu.some((m) => m.includes(label)),
@@ -105,7 +105,7 @@ check(
 await open('/teacher/quran');
 const teacherQuran = await shell();
 check(
-  '6 · إدخال حفظ المستفيدات opens — the page existed and had no menu entry until now',
+  '6 · إدخال حفظ المستفيدين والمستفيدات opens — the page existed and had no menu entry until now',
   teacherQuran.heading !== null && !teacherQuran.text.includes('قيد الإعداد'),
   JSON.stringify({ heading: teacherQuran.heading }),
 );
@@ -151,7 +151,7 @@ check(
   studentHome.text.slice(0, 140),
 );
 check(
-  '12 · لوحة المستفيدة stays minimal — no calendar on it',
+  '12 · لوحة المستفيد(ة) stays minimal — no calendar on it',
   studentHome.calendars === 0,
   JSON.stringify({ calendars: studentHome.calendars }),
 );

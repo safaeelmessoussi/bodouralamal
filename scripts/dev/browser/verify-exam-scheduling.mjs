@@ -431,7 +431,7 @@ if (onlineDraftId) {
     JSON.stringify(startDate),
   );
 
-  const availability = await fieldSnapshot('إتاحة الاختبار للمستفيدات');
+  const availability = await fieldSnapshot('إتاحة الاختبار للمستفيدين والمستفيدات');
   check(
     'A15 · availability defaults to «يدوياً» (manual) — not silently opened',
     availability.present === true && availability.value === 'manual',

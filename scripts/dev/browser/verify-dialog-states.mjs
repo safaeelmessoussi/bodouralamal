@@ -108,7 +108,7 @@ const openFirst = () =>
       btn =
         document.querySelector('.btn--add') ||
         [...document.querySelectorAll('button')].find(
-          (b) => b.textContent.includes('إضافة') || b.textContent.includes('تسجيل مستفيدة') || b.textContent.includes('جديد'),
+          (b) => b.textContent.includes('إضافة') || b.textContent.includes('تسجيل مستفيد(ة)') || b.textContent.includes('جديد'),
         ) ||
         [...document.querySelectorAll('.admin-table button, .admin-card button')].find((b) => b.textContent.includes('تعديل')) ||
         // The calendar opens its dialogs from a day, not from a header action,

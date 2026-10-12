@@ -124,7 +124,7 @@ check(
 /* ── 3. Fill the exact multi-child shape that failed in controlled UAT ──── */
 /**
  * R168 §1 — the form asks WHAT she wants: four roles, any combination. R170 §2
- * put them in ONE closed control with «أسجّل نفسي كمستفيدة» chosen for her, so a
+ * put them in ONE closed control with «أسجّل نفسي كمستفيد(ة)» chosen for her, so a
  * family registration UNTICKS that default (`role-chooser.mjs`). The several-role
  * journey and its per-role approval have their own harness
  * (`verify-role-requests`); this one stays the family registration.
@@ -137,7 +137,7 @@ const tickConsent = (wanted) => evaluate(`(() => {
 })()`);
 
 check(
-  'the four role choices are offered, «أسجّل نفسي كمستفيدة» chosen by default (R170 §2)',
+  'the four role choices are offered, «أسجّل نفسي كمستفيد(ة)» chosen by default (R170 §2)',
   (await roleStates(evaluate)) ===
     JSON.stringify([['student', true], ['guardian', false], ['teaching', false], ['administration', false]]),
 );
