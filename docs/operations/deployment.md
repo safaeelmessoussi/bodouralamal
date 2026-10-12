@@ -278,7 +278,7 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
 
 ## Staging
 
-[Environments](environments.md); Vercel Preview is retired (Owner, 2026-09-13). Staging — served at `https://bodouralamal.com` since 2026-10-07 (R203: `staging.bodouralamal.com` is retired; the host's untracked `nginx/conf.d/retired-staging-host.conf` answers it with 301 to `https://bodouralamal.com`, same path; to finish: delete its DNS record, then re-issue the certificate without it — `certbot certonly --webroot -w /var/www/certbot --cert-name bodouralamal.com -d bodouralamal.com -d www.bodouralamal.com`, delete `renewal/staging.bodouralamal.com.conf` and the redirect file — before the renewal that would fail on the missing name) runs **this same pipeline** with two differences:
+[Environments](environments.md); Vercel Preview is retired (Owner, 2026-09-13). Staging — served at `https://bodouralamal.com` since 2026-10-07 (R203: `staging.bodouralamal.com` is retired — no DNS record, and since 2026-10-12 the certificate names only `bodouralamal.com` and `www.bodouralamal.com`; its old lineage, the redirect file and the host's `.git/info/exclude` line are gone, so the checkout is clean) runs **this same pipeline** with two differences:
 
 | | Staging | Production |
 |---|---|---|

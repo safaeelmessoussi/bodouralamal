@@ -319,3 +319,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `NodeCard`: a Surah's card renders as a static `div.is-static` while `SURAH_CARDS_OPEN = false`.
 - `prophets|summary` «ستة وعشرون» (23 cards, three of two prophets); `footer.css` padding 0.75rem.
 - Verified: frontend 1674 tests, lint, build; Localhost footer 69/92 px, madani 6 static cards.
+
+## 2026-10-12 — Staging: `staging.bodouralamal.com` fully retired (Owner's go-ahead)
+- Certificate re-issued with `bodouralamal.com` and `www.bodouralamal.com` only (expires 2027-01-10; the first attempt failed transiently with «Certificate not found», the second succeeded); lineage `staging.bodouralamal.com` deleted.
+- Host: `nginx/conf.d/retired-staging-host.conf` and its `.git/info/exclude` line removed (R203) — `git status` clean; nginx restarted; `/healthz` 200, `www` 200, public SAN checked. TASKS E11 closed; E13 (chatbot) marked LATER.
