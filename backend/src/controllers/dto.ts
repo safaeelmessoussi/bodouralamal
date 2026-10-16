@@ -1128,6 +1128,9 @@ export interface LibraryItemDto {
   /** R177 §7 — the one Surah, or none. */
   surah_id: number | null;
   surah_name: string | null;
+  /** R223 — a public audio's stable address (§3.1), played in one click;
+   *  `null` for every other item, which mints through `download-url`. */
+  stream_url: string | null;
 }
 
 /**
@@ -1135,7 +1138,10 @@ export interface LibraryItemDto {
  * `original_filename` — the object's location, which TD-3.5 mints a short-lived
  * presigned URL for through `GET /content/{id}/download-url` after a permission
  * check; publishing the key on a **public** endpoint would hand every anonymous
- * visitor the one input that check exists to protect.
+ * visitor the one input that check exists to protect. **R223 — except a
+ * public audio's own stable address** (`stream_url`): that is exactly what
+ * `download-url` already hands any anonymous visitor for it, and Nginx still
+ * authorises every read against the database.
  *
  * **`media_consent_missing` is present for STAFF and `null` for everyone else**
  * (SRS Revision 170 §3). It says *a student in this recording's audience has no
@@ -1173,6 +1179,7 @@ export function libraryItemDto(row: {
   branchName: string | null;
   surahId: number | null;
   surahName: string | null;
+  streamUrl?: string | null;
 }): LibraryItemDto {
   return {
     id: row.id,
@@ -1214,6 +1221,7 @@ export function libraryItemDto(row: {
     // R177 §7 — the one Surah the item is about, or none.
     surah_id: row.surahId,
     surah_name: row.surahName,
+    stream_url: row.streamUrl ?? null,
   };
 }
 

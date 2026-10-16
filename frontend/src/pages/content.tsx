@@ -358,7 +358,10 @@ interface LibraryRow {
  * what you are looking at is what you are adding to, which removes the whole
  * class of mistake where a form's defaults disagree with the list behind it.
  */
-const SCOPE_FIELDS = ['levelId', 'subjectId', 'academicYearId', 'branchId'] as const;
+const SCOPE_FIELDS = ['levelId', 'subjectId', 'surahId', 'academicYearId', 'branchId'] as const;
+
+/** R223 — «بدون» in the Surah filter: the items about no Surah. */
+const NO_SURAH = 'none';
 
 /** `branch_id = null` — a real scope (§4.9), and the one value a branch list can
  *  never contain. `''` already means *no filter*, so the two cannot share it. */
@@ -388,11 +391,12 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     // R205 — «السنة الدراسية» opens on «الكل»: the library is every year's.
     // The upload form still seeds the live year itself (content-scope-fields).
     defaultCurrentYear: false,
-    // R198 §2 — «بدون فرع» narrows to Global items: a legal value the
-    // branch list cannot contain, so rule 2 must not clear it (it did).
-    sentinels: { branchId: [GLOBAL] },
+    // R223 — «بدون» narrows to the items about no Surah: a legal value the
+    // Surah list cannot contain, so rule 2 must not clear it. («كل الفروع»,
+    // Global only, is withdrawn: «الكل» is every item, in a branch or not.)
+    sentinels: { surahId: [NO_SURAH] },
   });
-  const { levelId, subjectId, academicYearId, branchId } = scope.value;
+  const { levelId, subjectId, surahId, academicYearId, branchId } = scope.value;
 
   const [rows, setRows] = useState<LibraryRow[]>([]);
   /** R76 — server-side: this list is paginated, so the DATABASE orders it. */
@@ -421,6 +425,10 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     if (levelId) params.set('level_id', levelId);
     if (subjectId) params.set('subject_id', subjectId);
     if (academicYearId) params.set('academic_year_id', academicYearId);
+    // R223 — branch and Surah narrow on the server, so the count and the
+    // pages are the filtered set's (a branch filtered one page of 25 here).
+    if (branchId) params.set('branch_id', branchId);
+    if (surahId) params.set('surah_id', surahId);
     try {
       const body = await api<{
         data: LibraryRow[];
@@ -430,27 +438,14 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
          *  not offered. */
         suggested_recording_name: string | null;
       }>(`/library?${params.toString()}`, { token: accessToken });
-      // **Branch is filtered here and the rest server-side, because TD-3.13
-      // publishes no `branch_id` filter.** Adding one to a public endpoint for a
-      // back-office convenience would widen a public contract for an internal
-      // need; narrowing the page a reader already has is honest, and the note is
-      // here so the asymmetry does not read as an oversight.
-      const filtered =
-        branchId === ''
-          ? body.data
-          : body.data.filter((r) =>
-              branchId === GLOBAL
-                ? r.branch_id === null
-                : r.branch_id === branchId || (r.additional_branches ?? []).some((b) => b.id === branchId),
-            );
-      setRows(filtered);
+      setRows(body.data);
       setTotal(body.meta.total);
       setSuggestedName(body.suggested_recording_name ?? '');
       setStatus('ready');
     } catch {
       setStatus('error');
     }
-  }, [accessToken, levelId, subjectId, academicYearId, branchId, page, sort]);
+  }, [accessToken, levelId, subjectId, surahId, academicYearId, branchId, page, sort]);
 
   useEffect(() => {
     void load();
@@ -460,7 +455,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   // shows an empty table that reads as "there is no content".
   useEffect(() => {
     setPage(1);
-  }, [levelId, subjectId, academicYearId, branchId]);
+  }, [levelId, subjectId, surahId, academicYearId, branchId]);
 
   function refilter(apply: () => void): void {
     apply();
@@ -705,10 +700,10 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         status={status}
         actions={actions}
         onRetry={() => void load()}
-        filtered={levelId !== '' || subjectId !== '' || branchId !== ''}
+        filtered={levelId !== '' || subjectId !== '' || surahId !== '' || branchId !== ''}
         onClearFilters={() =>
           refilter(() => {
-            scope.setMany({ levelId: '', subjectId: '', branchId: '' });
+            scope.setMany({ levelId: '', subjectId: '', surahId: '', branchId: '' });
           })
         }
         toolbar={
@@ -720,12 +715,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
               scope={scope}
               fields={SCOPE_FIELDS}
               mode="filter"
-              // **Offered only to those who may assign it** (§4.9): a Teacher
-              // choosing Global would be refused by the server, and an option
-              // that always fails is worse than no option.
-              extraOptions={
-                isAdmin ? { branchId: [{ value: GLOBAL, label: t('content.globalScope') }] } : {}
-              }
+              extraOptions={{ surahId: [{ value: NO_SURAH, label: t('common.noneChosen') }] }}
             />
           </>
         }

@@ -16,8 +16,10 @@ export const listLibraryQuerySchema = z.object({
   level_id: uuid.optional(),
   academic_year_id: uuid.optional(),
   subject_id: uuid.optional(),
-  /** R177 §7 — items about one Surah. */
-  surah_id: z.coerce.number().int().min(1).max(114).optional(),
+  /** R177 §7 — items about one Surah; R223 — `none`, the items about none. */
+  surah_id: z.union([z.literal('none'), z.coerce.number().int().min(1).max(114)]).optional(),
+  /** R223 — a branch's items, Global ones included (every branch's). */
+  branch_id: uuid.optional(),
   // R167 §5 — «كل مستويات الفئة»: only the items addressed to every Level of
   // their Category (`true`), or only those that are not (`false`).
   whole_category: z.enum(['true', 'false']).optional(),

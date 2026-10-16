@@ -470,8 +470,6 @@ function GroupDialog({
         })
       }
     >
-      <TextField label={t('admin.groups.colName')} value={name} onChange={setName} required />
-
       {/* The shared primitive rather than a bare `<select>`: label association,
           the placeholder option, required marking and error announcement are
           `field.tsx`'s job, not this screen's to remember. */}
@@ -488,6 +486,11 @@ function GroupDialog({
         options={branches.map((branch) => ({ value: branch.id, label: branch.name }))}
         required
       />
+
+      {/* R223 — the name AFTER the Level and the branch, as in «إضافة حلقة»:
+          Chrome's own name filling (which ignores autocomplete="off") left its
+          list open under «الاسم» and closed the native Level list at once. */}
+      <TextField label={t('admin.groups.colName')} value={name} onChange={setName} required />
 
       {group ? <p className="muted">{t('admin.groups.fixedAfterCreate')}</p> : null}
 

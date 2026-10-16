@@ -196,9 +196,9 @@ describe('the shared hook and selectors', () => {
     expect(code(SELECTORS)).not.toContain('REQUIRES');
   });
 
-  it('the content library declares itself a filter, and its «بدون فرع» a sentinel', () => {
+  it('the content library declares itself a filter, and its «بدون» Surah a sentinel (R223)', () => {
     expect(code(CONTENT)).toContain("mode: 'filter'");
-    expect(code(CONTENT)).toContain('sentinels: { branchId: [GLOBAL] }');
+    expect(code(CONTENT)).toContain('sentinels: { surahId: [NO_SURAH] }');
   });
 
   it('reads the facts through a ref, so `set` stays referentially stable', () => {

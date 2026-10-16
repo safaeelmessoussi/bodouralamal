@@ -180,6 +180,21 @@ export async function presignGetUrl(
   return toProxyUrl(signed, clients.storagePrefix);
 }
 
+/**
+ * **R223 — a public object's STABLE address** (§3.1: «objects are served via
+ * stable URLs behind the Nginx reverse proxy»). The signed path without its
+ * signature: Nginx still authorises every GET/HEAD against the database
+ * (`/internal/storage/public-authorize`), but nothing expires mid-play. A
+ * 10-minute signature on a public lesson stopped a 1-hour recording at its
+ * tenth minute and saved a stale download as Nginx's HTML redirect page.
+ * Never used for the private bucket (§20 rule 4).
+ */
+export async function stablePublicUrl(clients: StorageClients, key: string): Promise<string> {
+  const url = new URL(await presignGetUrl(clients, BUCKETS.public, key));
+  url.search = '';
+  return url.toString();
+}
+
 /* ── Server-side object operations (TD-9 / R99 C2) ──────────────────────── */
 
 /**

@@ -292,7 +292,7 @@ Not under `/admin/`: TD-2 gives a Teacher write access to sessions they staff; s
 
 | | Path | Audience · semantics |
 |---|---|---|
-| `GET` | `/library` | 🌐 `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?whole_category=` `?page=`; paginated (TD-10); `suggested_recording_name` beside `data`/`meta` (R75.6, server-owned since R99, `null` without a Subject); items carry `additional_levels[]` (R169 §10) ; `?surah_id=`, `surah_id`/`surah_name` per item (R177 §7) |
+| `GET` | `/library` | 🌐 `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?whole_category=` `?branch_id=` (Global included) `?surah_id=` (`none` = no Surah) `?page=`; paginated (TD-10); a public audio carries `stream_url` (stable address, R223); `suggested_recording_name` beside `data`/`meta` (R75.6, server-owned since R99, `null` without a Subject); items carry `additional_levels[]` (R169 §10) ; `?surah_id=`, `surah_id`/`surah_name` per item (R177 §7) |
 
 - `whole_category` (R167 §5, «كل مستويات الفئة»): addressed to EVERY Level of its Category, `level_id` only where filed; a private one is readable by a member of ANY Level of that Category and nobody else; `?level_id=` returns that Level's items AND its Category's whole-category ones; `?whole_category=true|false` isolates either; the ingest sets it for a class addressing every live Level of exactly one Category; staff set it via `PATCH /content/{id}`.
 - R169 §10: `PATCH /content/{id}` `additional_level_ids` REPLACES the other Levels, each a live Level teaching its Subject, never the home (`LEVEL_IS_HOME`); a recording is filed under the first Level addressed and names the rest unless whole-category.
@@ -318,7 +318,7 @@ Not under `/admin/`: TD-2 gives a Teacher write access to sessions they staff; s
 | `POST` | `/uploads/{upload_id}/complete` | 🔒 Phase two; body `{ title, description? }` only |
 | `POST` | `/uploads/{upload_id}/abort` | 🔒 Best-effort; deletes the object |
 | `DELETE` | `/content/{id}` | 🔒 R53: soft delete + Trash snapshot + quarantine |
-| `GET` | `/content/{id}/download-url` | 🌐/🔒 Optional-auth short-lived GET; anonymous only for an exact live public coordinate; private keeps §4.9/TD-12 checks; `Cache-Control: no-store`; out of scope `404` |
+| `GET` | `/content/{id}/download-url` | 🌐/🔒 Optional-auth GET — a public item read in place gets its stable address (`expires_in: null`, R223), otherwise short-lived; anonymous only for an exact live public coordinate; private keeps §4.9/TD-12 checks; `Cache-Control: no-store`; out of scope `404` |
 
 - The file never passes through the API: the browser PUTs to MinIO via the presigned URL (§2.3).
 - Decided at `/initiate`: §4.9 branch scope, TD-9 whitelist and size cap, per-user quota. `/complete` decides only what the object answers: ranged GET `bytes=0-511` for magic bytes, HEAD for size (§4.9, R8), never streamed; a mismatch deletes the object, creates no row, answers `409 VALIDATION_FAILED` (TD-3.8's only status-varying code).

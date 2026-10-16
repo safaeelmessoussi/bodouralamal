@@ -64,8 +64,11 @@ export interface LibraryFilters extends PageParams {
   levelId?: string;
   academicYearId?: string;
   subjectId?: string;
-  /** R177 §7 — items about ONE Surah (1–114). */
-  surahId?: number;
+  /** R177 §7 — items about ONE Surah (1–114); R223 — `null` is «بدون»:
+   *  the items about no Surah. */
+  surahId?: number | null;
+  /** R223 — the items of a branch: filed there, or Global (every branch). */
+  branchId?: string;
   /** R167 §5 — only (or never) the items addressed to a whole Category. */
   wholeCategory?: boolean;
   sortBy?: string | undefined;
@@ -205,6 +208,9 @@ export interface LibraryItem {
   /** R177 §7 — the one Surah the item is about, or none. */
   surahId: number | null;
   surahName: string | null;
+  /** R223 — a PUBLIC audio's storage key, so the list can carry its stable
+   *  address (§3.1) and the page plays it in one click; `null` otherwise. */
+  publicAudioKey: string | null;
 }
 
 /** Staff — Admin, Super Admin or Teacher — are the only ones §4.9 shows `hidden` to. */
@@ -409,7 +415,18 @@ export async function listLibrary(
   }
   if (filters.subjectId) conditions.push(Prisma.sql`c."subject_id" = ${filters.subjectId}::uuid`);
   // R177 §7 — items about that Surah; an item about none never matches.
-  if (filters.surahId !== undefined) conditions.push(Prisma.sql`c."surah_id" = ${filters.surahId}`);
+  if (filters.surahId === null) conditions.push(Prisma.sql`c."surah_id" IS NULL`);
+  else if (filters.surahId !== undefined) conditions.push(Prisma.sql`c."surah_id" = ${filters.surahId}`);
+  // R223 — a branch's items: its own (home or additional) and the Global ones,
+  // which are every branch's («الكل» on that dimension).
+  if (filters.branchId) {
+    conditions.push(Prisma.sql`(
+      c."branch_id" IS NULL OR c."branch_id" = ${filters.branchId}::uuid OR EXISTS (
+        SELECT 1 FROM "educational_content_branch" fb
+        WHERE fb."content_id" = c."id" AND fb."branch_id" = ${filters.branchId}::uuid
+      )
+    )`);
+  }
   if (filters.wholeCategory !== undefined) {
     conditions.push(Prisma.sql`c."whole_category" = ${filters.wholeCategory}`);
   }
@@ -504,7 +521,10 @@ export async function listLibrary(
              y."label"                   AS "academicYearLabel",
              b."name"                    AS "branchName",
              c."surah_id"                AS "surahId",
-             q."name_arabic"             AS "surahName"
+             q."name_arabic"             AS "surahName",
+             CASE WHEN c."storage_bucket" = 'public' AND c."visibility" = 'public'
+                       AND c."mime_type" LIKE 'audio/%'
+                  THEN c."storage_key" END AS "publicAudioKey"
       FROM "educational_content" c
       LEFT JOIN "quran_surah" q ON q."surah_id" = c."surah_id"
       JOIN "level" l          ON l."id"  = c."level_id"

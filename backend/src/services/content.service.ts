@@ -23,6 +23,7 @@ import {
   BUCKETS,
   copyObject,
   presignGetUrl,
+  stablePublicUrl,
   presignPutUrl,
   statObjectStrict,
   PRESIGN_TTL_SECONDS,
@@ -1771,7 +1772,8 @@ export async function deleteContent(
 
 export interface MintResult {
   url: string;
-  expiresIn: number;
+  /** `null` — R223: a public item read in place has a stable address. */
+  expiresIn: number | null;
 }
 
 /**
@@ -1877,6 +1879,11 @@ export async function mintDownloadUrl(
   // The storage key's own last segment is already a slugified original
   // filename plus extension (`buildStorageKey`), so it needs no further
   // lookup — just forwarding as the saved-as name.
+  // R223 — a public item read in place gets its stable address; a download
+  // still needs the signed `attachment` disposition, minted on the click.
+  if (row.storageBucket === 'public' && disposition === 'inline') {
+    return { url: await stablePublicUrl(clients, row.storageKey), expiresIn: null };
+  }
   const filename = disposition === 'attachment' ? row.storageKey.split('/').pop() : undefined;
   const url = await presignGetUrl(
     clients,

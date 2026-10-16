@@ -137,3 +137,39 @@ describe('the page', () => {
     expect(ar.content.views.byLevel).toBe('حسب المستوى');
   });
 });
+
+describe('R223 — a public lesson plays in one click', async () => {
+  const { SurahPage } = await import('./surah-page.js');
+  const lesson = (over: Record<string, unknown>) => ({
+    id: 'a1',
+    title: 'الحصة 1',
+    description: null,
+    kind: 'audio' as const,
+    mime_type: 'audio/mpeg',
+    size_bytes: 1,
+    published_on: '2026-10-16',
+    teacher_display_name: null,
+    subject_name: null,
+    whole_category: false,
+    subjectName: null,
+    ...over,
+  });
+  const render = (item: ReturnType<typeof lesson>) =>
+    renderToStaticMarkup(
+      <SurahPage surah={2} title="البقرة" items={[item]} accessToken={null} activeChildId={null} onOpen={() => undefined} />,
+    );
+
+  it('shows its player at once, fetching nothing until play, with no «استماع» step', () => {
+    const html = render(lesson({ stream_url: '/storage/public/content/a1/x/lesson.mp3' }));
+    expect(html).toContain('<audio');
+    expect(html).toContain('preload="none"');
+    expect(html).toContain('src="/storage/public/content/a1/x/lesson.mp3"');
+    expect(html).not.toMatch(/surah-track__play[" ]/);
+  });
+
+  it('keeps «استماع» for a lesson with no stable address (a private one)', () => {
+    const html = render(lesson({ stream_url: null }));
+    expect(html).not.toContain('<audio');
+    expect(html).toMatch(/surah-track__play[" ]/);
+  });
+});

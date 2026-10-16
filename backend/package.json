@@ -24,6 +24,7 @@
     "ops:reconcile-recordings": "node dist/src/ops/reconcile-recordings.js",
     "ops:recording-segments": "node dist/src/ops/recording-segments.js",
     "ops:empty-trash": "node dist/src/ops/empty-trash.js",
+    "ops:apply-holidays": "node dist/src/ops/apply-holidays.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts"
   },
   "dependencies": {

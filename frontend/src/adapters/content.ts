@@ -83,6 +83,9 @@ export interface ContentItem {
   subject_name: string | null;
   /** R167 §5 — addressed to EVERY Level of its Category («كل مستويات الفئة»). */
   whole_category: boolean;
+  /** R223 — a public audio's stable address: its player shows at once and
+   *  plays in one click; absent/`null` mints through `download-url`. */
+  stream_url?: string | null;
 }
 
 export interface BranchGroup {
@@ -182,6 +185,7 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
       author_id: row.author_id ?? null,
       subject_name: row.subject_name,
       whole_category: row.whole_category,
+      stream_url: row.stream_url ?? null,
     };
     const shelves = row.whole_category
       ? [{ key: `category:${row.category_id}`, kind: 'whole_category' as const, id: row.category_id, name: '' }]
@@ -372,6 +376,8 @@ interface LibraryItemWire {
   /** R177 §7 — the one Surah, or none; optional while a server older than it could answer. */
   surah_id?: number | null;
   surah_name?: string | null;
+  /** R223 — a public audio's stable address. */
+  stream_url?: string | null;
 }
 
 /**

@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { pageParamsFrom } from '../lib/pagination.js';
+import { stablePublicUrl, type StorageClients } from '../lib/storage.js';
 import * as library from '../services/library.service.js';
 import { libraryItemDto, pageOf } from './dto.js';
 import { parse } from './parse.js';
@@ -30,7 +31,7 @@ function libraryActor(req: Request): library.LibraryActor | null {
   };
 }
 
-export function list(prisma: PrismaClient) {
+export function list(prisma: PrismaClient, storage: StorageClients) {
   return async (req: Request, res: Response): Promise<void> => {
     const filters = parse(listLibraryQuerySchema, req.query);
     const result = await library.listLibrary(prisma, libraryActor(req), {
@@ -40,15 +41,25 @@ export function list(prisma: PrismaClient) {
         ? { academicYearId: filters.academic_year_id }
         : {}),
       ...(filters.subject_id !== undefined ? { subjectId: filters.subject_id } : {}),
-      ...(filters.surah_id !== undefined ? { surahId: filters.surah_id } : {}),
+      ...(filters.surah_id !== undefined ? { surahId: filters.surah_id === 'none' ? null : filters.surah_id } : {}),
+      ...(filters.branch_id !== undefined ? { branchId: filters.branch_id } : {}),
       ...(filters.whole_category !== undefined
         ? { wholeCategory: filters.whole_category === 'true' }
         : {}),
       ...pageParamsFrom(req.query),
       ...sortParamsFrom(req.query),
     });
+    // R223 — a public audio carries its stable address: computed here, with
+    // no storage call and no extra query (the key came with the row).
+    const streamUrls = new Map(
+      await Promise.all(
+        result.data
+          .filter((row) => row.publicAudioKey !== null)
+          .map(async (row) => [row.id, await stablePublicUrl(storage, row.publicAudioKey!)] as const),
+      ),
+    );
     res.json({
-      ...pageOf(result, libraryItemDto),
+      ...pageOf(result, (row) => libraryItemDto({ ...row, streamUrl: streamUrls.get(row.id) ?? null })),
       /**
        * **R75.6, server-owned since R99.** The browser recorder shows this,
        * editable, instead of composing a name itself — the numbering rule now

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode, type RefObject, type SyntheticEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject, type SyntheticEvent } from 'react';
 
 import { fetchContentUrl, type ContentItem } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
@@ -164,9 +164,18 @@ function pauseOthers(event: SyntheticEvent<HTMLAudioElement>): void {
 }
 
 /**
- * **A lesson played in the page.** The presigned URL is minted when the
- * reader presses «استماع» (TD-12), then the native player takes over —
- * keyboard, scrubbing and the phone's lock-screen controls for free.
+ * **A lesson played in the page.**
+ *
+ * **R223 (the Owner, 2026-10-16).** A public lesson carries its stable address
+ * (`stream_url`, §3.1), so its player shows at once and plays in ONE click;
+ * `preload="none"` keeps the page from fetching any audio until then. A
+ * private one still mints its URL on «استماع» (TD-12).
+ *
+ * - **Where it stopped is kept on this device** (`localStorage`, per item):
+ *   it opens there next time, and finishing it forgets the place.
+ * - **A URL that expires mid-play is renewed.** A 10-minute signature cut a
+ *   1-hour lesson at its tenth minute, reading as «ended»; an error, or an end
+ *   before the real end, mints again and carries on from the same second.
  */
 function AudioTrack({
   item,
@@ -179,22 +188,49 @@ function AudioTrack({
   accessToken: string | null;
   activeChildId: string | null;
 }): ReactNode {
-  const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'missing'>('idle');
-  const [url, setUrl] = useState<string | null>(null);
+  const direct = item.stream_url ?? null;
+  const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'missing'>(direct ? 'ready' : 'idle');
+  const [url, setUrl] = useState<string | null>(direct);
+  /** Set when a renewed URL must resume where the old one stopped. */
+  const resumeAt = useRef<number | null>(null);
+  const renewals = useRef(0);
+
+  async function mint(): Promise<string | null> {
+    try {
+      return await fetchContentUrl(item.id, accessToken, activeChildId);
+    } catch {
+      return null;
+    }
+  }
 
   async function load(): Promise<void> {
     setState('loading');
-    try {
-      const minted = await fetchContentUrl(item.id, accessToken, activeChildId);
-      if (minted === null) {
-        setState('missing');
-        return;
-      }
-      setUrl(minted);
-      setState('ready');
-    } catch {
+    const minted = await mint();
+    if (minted === null) {
       setState('missing');
+      return;
     }
+    setUrl(minted);
+    setState('ready');
+  }
+
+  /** A failed or cut-short read: a fresh URL, from the same second (3 tries). */
+  async function renew(audio: HTMLAudioElement): Promise<void> {
+    if (renewals.current >= 3) {
+      setState('missing');
+      return;
+    }
+    renewals.current += 1;
+    resumeAt.current = audio.currentTime;
+    const minted = await mint();
+    if (minted === null) {
+      setState('missing');
+      return;
+    }
+    // A stable address is the same string: re-assigning it reloads it all the same.
+    audio.src = minted;
+    audio.load();
+    setUrl(minted);
   }
 
   return (
@@ -214,12 +250,33 @@ function AudioTrack({
           <audio
             className="surah-track__player"
             controls
-            autoPlay
-            preload="metadata"
+            // Played on «استماع» — the reader already asked; a direct player waits.
+            autoPlay={!direct}
+            preload={direct ? 'none' : 'metadata'}
+            src={url}
             onPlay={pauseOthers}
-            onError={() => setState('missing')}
+            onLoadedMetadata={(event) => {
+              const audio = event.currentTarget;
+              const at = resumeAt.current ?? savedPlace(item.id);
+              resumeAt.current = null;
+              if (at !== null && at > 0 && (!Number.isFinite(audio.duration) || at < audio.duration - 5)) {
+                audio.currentTime = at;
+              }
+              if (renewals.current > 0) void audio.play().catch(() => undefined);
+            }}
+            onTimeUpdate={(event) => keepPlace(item.id, event.currentTarget.currentTime)}
+            onPause={(event) => keepPlace(item.id, event.currentTarget.currentTime, true)}
+            onError={(event) => void renew(event.currentTarget)}
+            onEnded={(event) => {
+              const audio = event.currentTarget;
+              // An end well before the duration is a read that failed, not the end.
+              if (Number.isFinite(audio.duration) && audio.currentTime < audio.duration - 2) {
+                void renew(audio);
+                return;
+              }
+              forgetPlace(item.id);
+            }}
           >
-            <source src={url} type={item.mime_type} />
             {t('content.previewUnsupported')}
           </audio>
         ) : state === 'missing' ? (
@@ -242,6 +299,41 @@ function AudioTrack({
       )}
     </li>
   );
+}
+
+/* ── R223 — where a lesson was stopped, on this device ──────────────────── */
+
+const placeKey = (id: string): string => `bodour.audio.${id}`;
+const lastWrite = new Map<string, number>();
+
+function savedPlace(id: string): number | null {
+  try {
+    const raw = window.localStorage.getItem(placeKey(id));
+    const at = raw === null ? NaN : Number(raw);
+    return Number.isFinite(at) ? at : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Written at most every 5 s while playing, and at once on pause. */
+function keepPlace(id: string, at: number, now = false): void {
+  const last = lastWrite.get(id) ?? 0;
+  if (!now && Date.now() - last < 5000) return;
+  lastWrite.set(id, Date.now());
+  try {
+    window.localStorage.setItem(placeKey(id), String(Math.floor(at)));
+  } catch {
+    // Storage refused (private window, full): the place is simply not kept.
+  }
+}
+
+function forgetPlace(id: string): void {
+  try {
+    window.localStorage.removeItem(placeKey(id));
+  } catch {
+    // Nothing to forget.
+  }
 }
 
 /** A drawing or map of the Surah's ideas, shown as itself; opens full size. */

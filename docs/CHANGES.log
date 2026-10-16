@@ -343,3 +343,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `event-chip.tsx`: the «عطلة» `__tag` span removed; `calendar.css`: R110's `--holiday` outline and `__tag` rules removed (class kept as a marker).
 - `field.tsx` `TextField`: `autoComplete` defaults to `off` for `type="text"` (Chrome's open history list under «الاسم» closed the next native `<select>` at once — «إضافة مجموعة», «رفع ملف»).
 - Verified: frontend 1676 tests, lint, build, guards; Localhost group dialog name input `autocomplete=off`. Not reproducible headless: the Owner re-checks on her Chrome.
+
+## 2026-10-16 — SRS Revision 223: audio that plays to the end, library filters, upload defaults, diagram PNG, holiday backfill
+- Storage: `stablePublicUrl` — a public item read in place gets its unsigned address (`download-url` `expires_in: null`); `GET /library` adds `stream_url` (public audio), `branch_id` (Global included) and `surah_id=none`.
+- `surah-page.tsx` AudioTrack: direct player for `stream_url` (`preload="none"`), place kept in `localStorage`, renew-and-resume on error or early end (≤3). `diagram-image.ts`: canvas PNG of the whole tree.
+- `content.tsx`: Global-only branch option removed, branch/Surah filtered server-side, Surah filter «الكل»/«بدون»; upload «الظهور» «عام» from the start; `BranchScopeField` one dropdown «الكل»; `GroupDialog` Level → branch → name.
+- `ops:apply-holidays` (DRY_RUN) — R199 §5 over every live holiday, one audit row each; TASKS E14–E17.

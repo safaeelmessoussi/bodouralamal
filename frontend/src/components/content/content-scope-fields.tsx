@@ -101,8 +101,8 @@ export function useContentScope({
   });
 
   const { levelId, subjectId, academicYearId, surahId } = scope.value;
-  const [visibility, setVisibility] = useState<string | null>(lockedVisibility ?? null);
-  const [initialisedFor, setInitialisedFor] = useState<string | null>(null);
+  // R223 — «عام» chosen from the start (R217 waited for a Level to propose it).
+  const [visibility, setVisibility] = useState<string | null>(lockedVisibility ?? 'public');
 
   /**
    * **R198 §2 — the branches the item is for; none chosen is Global.** The
@@ -122,21 +122,6 @@ export function useContentScope({
   const offeredBranches = useMemo(() => new Set(branchOptions.map((o) => o.value)), [branchOptions]);
   const chosenBranches = scope.ready ? branchIds.filter((id) => offeredBranches.has(id)) : branchIds;
 
-  useEffect(() => {
-    if (locked) return;
-    if (levelId === '') {
-      setInitialisedFor(null);
-      setVisibility(null);
-      return;
-    }
-    // Not knowable yet — wait rather than propose. Clobbering a selection
-    // because a list was still arriving would be worse than showing nothing.
-    if (initialisedFor === levelId) return;
-    setInitialisedFor(levelId);
-    // R217 — «عام» by default (the Owner, 2026-10-11), whatever the Category's
-    // own default; the person may still choose another.
-    setVisibility('public');
-  }, [locked, levelId, initialisedFor]);
 
   // R172 §1 — «كل مستويات الفئة» in the Level slot files the item for the
   // whole Category, with no Level chosen: `category_id` travels instead.

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 
 import { t } from "../../i18n/index.js";
+import { downloadDiagram } from "./diagram-image.js";
 import {
   branchKeys,
   verseRuns,
@@ -57,6 +58,14 @@ export function HumanityDiagram({
               onClick={() => setOpen(new Set())}
             >
               {t("content.history.diagram.closeAll")}
+            </button>
+            {/* R223 — the whole tree, every branch open, as a PNG. */}
+            <button
+              type="button"
+              className="hdiagram__action hdiagram__action--download"
+              onClick={() => void downloadDiagram(diagram).catch(() => undefined)}
+            >
+              {t("content.history.diagram.downloadImage")}
             </button>
           </span>
         ) : null}

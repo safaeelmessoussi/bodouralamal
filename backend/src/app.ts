@@ -353,7 +353,7 @@ export function createApp(
   // credential reorders the result (own branch → Global → other branches, §5.2)
   // and never unlocks anything. An invalid token is ignored rather than refused,
   // so this endpoint never answers 401.
-  api.get('/library', optionalAuthenticate(config), libraryCtl.list(prisma));
+  api.get('/library', optionalAuthenticate(config), libraryCtl.list(prisma, storage));
   // Public files have the same anonymous reader as their library metadata.
   // The service retains TD-12 freshness and child-context checks for private
   // capabilities; Nginx independently gates every canonical public read.

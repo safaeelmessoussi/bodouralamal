@@ -10,17 +10,18 @@ const branches = [
   { value: 'b', label: 'أمرشيش' },
 ];
 
-describe('R217 — «كل الفروع» said in words', () => {
-  it('an administrator with nothing chosen reads «كل الفروع», ticked, and no branch list', () => {
+describe('R223 — «الفرع» is one dropdown, «الكل» by default', () => {
+  it('an administrator with nothing chosen reads «الكل», with no tick box', () => {
     const html = renderToStaticMarkup(<BranchScopeField branches={branches} selected={[]} onChange={() => undefined} mayAssignGlobal />);
-    expect(html).toContain(ar.content.upload.allBranches);
-    expect(html).toContain('checked=""');
-    expect(html).not.toContain('multi-select');
+    expect(ar.content.allBranches).toBe('الكل');
+    expect(html).toContain('>الكل<');
+    expect(html).not.toContain('type="checkbox"');
+    expect(html).toContain('multi-select');
   });
 
-  it('a مؤطِّرة is never offered «كل الفروع»', () => {
+  it('a مؤطِّرة is never offered «الكل» and must name a branch', () => {
     const html = renderToStaticMarkup(<BranchScopeField branches={branches} selected={['a']} onChange={() => undefined} mayAssignGlobal={false} />);
-    expect(html).not.toContain(ar.content.upload.allBranches);
+    expect(html).not.toContain('>الكل<');
   });
 });
 

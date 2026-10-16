@@ -79,6 +79,8 @@ const ITEM_KEYS = [
      anything. It states what the file IS, never consent state. */
   "origin",
   "size_bytes",
+  // R223 — a public audio's stable address; `null` for everything else.
+  "stream_url",
   "subject_id",
   "subject_name",
   // R177 §7 — the one Surah the item is about, or none.
@@ -647,5 +649,62 @@ describe("the filter set is identical for everyone (§5.2)", () => {
     // here as a total that disagrees with what the caller may actually read.
     const all = await titlesFor();
     expect((res.body.meta as { total: number }).total).toBe(all.length);
+  });
+});
+
+/**
+ * **R223 (Owner, 2026-10-16).** A public audio carries its stable address, so
+ * the Surah page plays it in one click and it never expires mid-lesson; the
+ * library filters by branch (Global items are every branch's) and by «بدون»
+ * Surah, on the server.
+ */
+describe("R223 — stream_url, branch_id and surah_id=none", () => {
+  it("a public audio in the public bucket carries an UNSIGNED address; nothing else does", async () => {
+    const audio = await prisma.educationalContent.create({
+      data: {
+        title: `${TAG} درس صوتي`,
+        levelId,
+        subjectId,
+        academicYearId,
+        branchId: branchA,
+        visibility: "public",
+        storageBucket: "public",
+        storageKey: `content/${TAG}-audio-${Date.now()}/lesson.mp3`,
+        originalFilename: "lesson.mp3",
+        mimeType: "audio/mpeg",
+        sizeBytes: BigInt(4096),
+      },
+      select: { id: true },
+    });
+    const rows = (await call(`${scoped}${academicYearId}&page_size=100`)).body.data!;
+    const mine = rows.find((r) => r.id === audio.id)!;
+    expect(typeof mine["stream_url"]).toBe("string");
+    expect(String(mine["stream_url"])).toContain("/public/content/");
+    expect(String(mine["stream_url"])).not.toContain("X-Amz-");
+    expect(rows.find((r) => r.id === ids.publicA)!["stream_url"]).toBeNull();
+    // The in-place read mints the same stable address; a download is still signed.
+    const inline = await call(`/content/${audio.id}/download-url`);
+    expect(String(inline.body["url"])).not.toContain("X-Amz-");
+    expect(inline.body["expires_in"]).toBeNull();
+    const attachment = await call(`/content/${audio.id}/download-url?disposition=attachment`);
+    expect(String(attachment.body["url"])).toContain("X-Amz-Signature=");
+    await prisma.educationalContent.delete({ where: { id: audio.id } });
+  });
+
+  it("branch_id lists that branch's items and the Global ones, not another branch's", async () => {
+    const res = await call(`${scoped}${academicYearId}&page_size=100&branch_id=${branchA}`);
+    const seen = res.body.data!.map((r) => String(r.id));
+    expect(seen).toContain(ids.publicA);
+    expect(seen).toContain(ids.global);
+    expect(seen).not.toContain(ids.publicB);
+    expect((res.body.meta as { total: number }).total).toBe(seen.length);
+  });
+
+  it("surah_id=none lists the items about no Surah", async () => {
+    const about = await content("عن-سورة", { surahId: 113 });
+    const none = (await call(`${scoped}${academicYearId}&page_size=100&surah_id=none`)).body.data!.map((r) => String(r.id));
+    expect(none).toContain(ids.publicA);
+    expect(none).not.toContain(about);
+    expect((await call(`${scoped}${academicYearId}&surah_id=nothing`)).status).toBe(400);
   });
 });
