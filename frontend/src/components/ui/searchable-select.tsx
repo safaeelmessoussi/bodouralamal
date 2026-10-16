@@ -1,12 +1,14 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
-import { Button } from './button.js';
+import { Dropdown, filterOptions as filterDropdownOptions, SEARCH_THRESHOLD, type DropdownOption } from './dropdown.js';
 import { FieldShell } from './field.js';
-import { Icon } from './icon.js';
-import { useDisclosure } from '../../lib/use-disclosure.js';
 import { t } from '../../i18n/index.js';
 
 /**
+ * **R224 §3 — now drawn by the platform's one `Dropdown`**: the same trigger and
+ * panel as every list, its search box past 30 options (`searchThreshold`).
+ * The text below records why a searchable choice exists at all.
+ *
  * **Choosing ONE thing from a list that may be long.**
  *
  * ## The defect it exists for
@@ -57,13 +59,7 @@ import { t } from '../../i18n/index.js';
  * screen reader get the same affordance the pointer does, with none of a
  * combobox's roving-focus machinery.
  */
-export interface SearchableOption {
-  value: string;
-  label: string;
-  /** Secondary context shown beside the label — a branch, a Subject, a Level.
-   *  Searched too, so a reader may narrow by the thing they remember. */
-  hint?: string;
-}
+export type SearchableOption = DropdownOption;
 
 export function SearchableSelect({
   label,
@@ -72,169 +68,54 @@ export function SearchableSelect({
   onChange,
   placeholder,
   hint,
-  searchLabel,
   emptyLabel,
   disabled = false,
   required = false,
-  /** Below this many options the search box is noise rather than help. */
-  searchThreshold = 8,
+  searchThreshold = SEARCH_THRESHOLD,
   onQueryChange,
 }: {
   label: string;
   options: readonly SearchableOption[];
-  /** `''` is *nothing chosen* — the same representation every selector on the
-   *  platform uses, so a caller never has to translate between `null` and `''`. */
+  /** `''` is *nothing chosen*. */
   value: string;
   onChange: (value: string) => void;
-  /** What the empty selection reads as. */
+  /** The empty choice's words; absent, «اختيار…». */
   placeholder?: string;
   hint?: string;
+  /** Kept for callers; the search box is labelled by the field. */
   searchLabel?: string;
-  /** Shown when the caller passed no options at all — a true statement about the
-   *  data, which an empty list on its own would leave the reader to guess at. */
   emptyLabel?: string;
   disabled?: boolean;
   required?: boolean;
+  /** Past this many options the panel opens on a search box. */
   searchThreshold?: number;
-  /**
-   * R217 — what is typed, for a caller whose list is longer than what it
-   * passes (all the platform's people): it may answer with matching options.
-   * The filtering here still applies to whatever it passes.
-   */
+  /** R217 — what is typed, for a caller whose list is longer than what it passes. */
   onQueryChange?: (query: string) => void;
 }): ReactNode {
-  const { open, setOpen, toggle, containerRef } = useDisclosure<HTMLDivElement>();
-  const [query, setQuery] = useState('');
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  const chosen = options.find((o) => o.value === value) ?? null;
-  const matches = useMemo(() => filterOptions(options, query), [options, query]);
-  const searchable = options.length >= searchThreshold;
-
-  function choose(v: string): void {
-    onChange(v);
-    setQuery('');
-    setOpen(false);
-    // Closing on an actual choice returns focus to the control that now holds
-    // the answer — the same thing a native `<select>` does on its own.
-    triggerRef.current?.focus();
-  }
-
   return (
-    <FieldShell label={label} hint={hint} required={required}>
+    <FieldShell label={label} {...(hint ? { hint } : {})} required={required}>
       {({ id, describedBy }) => (
-        <div className="dropdown-select searchable-select" ref={containerRef}>
-          <div className="dropdown-select__control">
-            <button
-              id={id}
-              ref={triggerRef}
-              type="button"
-              className="field__control dropdown-trigger"
-              aria-haspopup="listbox"
-              aria-expanded={open}
-              disabled={disabled}
-              aria-describedby={describedBy}
-              onClick={toggle}
-            >
-              <span className="dropdown-trigger__label">
-                {chosen ? (
-                  <>
-                    <strong>{chosen.label}</strong>
-                    {chosen.hint ? <span className="muted"> — {chosen.hint}</span> : null}
-                  </>
-                ) : (
-                  (placeholder ?? t('common.choose'))
-                )}
-              </span>
-              <Icon name="chevron" size={16} />
-            </button>
-            {chosen ? (
-              <Button
-                variant="ghost"
-                disabled={disabled}
-                onClick={() => onChange('')}
-                aria-label={`${t('common.remove')} — ${chosen.label}`}
-              >
-                ✕
-              </Button>
-            ) : null}
-          </div>
-
-          {open ? (
-            options.length === 0 ? (
-              <p className="field__hint">{emptyLabel ?? t('states.empty')}</p>
-            ) : (
-              <div className="dropdown-select__panel" role="listbox" aria-label={label}>
-                {searchable ? (
-                  // Opening the panel IS the request to type — the trigger just
-                  // had focus, so moving it into the search box costs nothing.
-                  <input
-                    className="field__control"
-                    type="search"
-                    value={query}
-                    disabled={disabled}
-                    placeholder={t('common.searchPlaceholder')}
-                    aria-label={searchLabel ?? `${t('common.search')} — ${label}`}
-                    onChange={(e) => {
-                      setQuery(e.target.value);
-                      onQueryChange?.(e.target.value);
-                    }}
-                    autoFocus
-                  />
-                ) : null}
-
-                <ul className="searchable-select__options">
-                  {matches.length === 0 ? (
-                    <li className="field__hint">{t('common.noMatches')}</li>
-                  ) : (
-                    matches.map((o) => (
-                      <li key={o.value} role="option" aria-selected={o.value === value}>
-                        <Button
-                          variant={o.value === value ? 'secondary' : 'ghost'}
-                          disabled={disabled}
-                          onClick={() => choose(o.value)}
-                        >
-                          {o.label}
-                          {o.hint ? <span className="muted"> — {o.hint}</span> : null}
-                        </Button>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-            )
-          ) : null}
-        </div>
+        <Dropdown
+          id={id}
+          label={label}
+          className="searchable-select"
+          options={options}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder ?? t(required ? 'common.choose' : 'common.noneChosen')}
+          disabled={disabled}
+          required={required}
+          searchThreshold={searchThreshold}
+          {...(describedBy ? { describedBy } : {})}
+          {...(emptyLabel ? { emptyLabel } : {})}
+          {...(onQueryChange ? { onQueryChange } : {})}
+        />
       )}
     </FieldShell>
   );
 }
 
-/**
- * **Prefix matches first, then anything containing the needle.**
- *
- * Exported for its own test: the ranking is the behaviour the Owner asked for
- * (*"easy to find options by typing the beginning of the label"*), and a
- * behaviour worth asking for is worth asserting directly rather than through a
- * rendered list.
- *
- * An empty query returns the options **in the order the caller gave them** —
- * the caller has already sorted them meaningfully, and re-sorting would discard
- * that.
- */
-export function filterOptions(
-  options: readonly SearchableOption[],
-  query: string,
-): SearchableOption[] {
-  const needle = query.trim().toLowerCase();
-  if (needle === '') return [...options];
-
-  const prefix: SearchableOption[] = [];
-  const contains: SearchableOption[] = [];
-  for (const option of options) {
-    const haystack = `${option.label} ${option.hint ?? ''}`.toLowerCase();
-    if (option.label.toLowerCase().startsWith(needle)) prefix.push(option);
-    else if (haystack.includes(needle)) contains.push(option);
-  }
-  return [...prefix, ...contains];
+/** Prefix matches first, then anything containing the needle (see `dropdown.tsx`). */
+export function filterOptions(options: readonly SearchableOption[], query: string): SearchableOption[] {
+  return filterDropdownOptions(options, query);
 }

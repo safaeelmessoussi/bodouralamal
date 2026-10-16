@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from 'react';
 
 import { DatePicker } from './date-picker.js';
+import { Dropdown } from './dropdown.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -297,7 +298,7 @@ export function SelectField({
   busy = false,
   ...props
 }: BaseProps & {
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; hint?: string }[];
   /**
    * The options are still loading — as when the calendar's Level list is being
    * re-fetched for a newly chosen Category. Marked `aria-busy` and disabled
@@ -306,27 +307,25 @@ export function SelectField({
    */
   busy?: boolean;
 }): ReactNode {
+  // R224 §3 — the platform's one dropdown (searchable past 30 options); the
+  // native <select> it keeps in step carries this field's id.
   return (
     <FieldShell {...props}>
       {({ id, describedBy }) => (
-        <select
-          id={id}
-          className="field__control"
-          value={props.value}
-          required={props.required ?? false}
-          disabled={busy || (props.disabled ?? false)}
-          aria-busy={busy || undefined}
-          aria-invalid={props.error ? true : undefined}
-          aria-describedby={describedBy}
-          onChange={(e) => props.onChange(e.target.value)}
-        >
-          {props.placeholder !== undefined ? <option value="">{props.placeholder}</option> : null}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <div aria-busy={busy || undefined}>
+          <Dropdown
+            id={id}
+            label={props.label}
+            options={options}
+            value={props.value}
+            onChange={props.onChange}
+            {...(props.placeholder !== undefined ? { placeholder: props.placeholder } : {})}
+            required={props.required ?? false}
+            disabled={busy || (props.disabled ?? false)}
+            invalid={Boolean(props.error)}
+            {...(describedBy ? { describedBy } : {})}
+          />
+        </div>
       )}
     </FieldShell>
   );

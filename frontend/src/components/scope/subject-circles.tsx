@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { SubjectSplit, TeachingGroup } from '../../adapters/teaching-groups.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
+import { Dropdown } from '../ui/dropdown.js';
 import { t } from '../../i18n/index.js';
 import { counted } from '../../lib/arabic-years.js';
 
@@ -62,21 +63,16 @@ export function SubjectCircles({
                   <li key={u.student_id}>
                     <span>{u.name ?? u.student_id}</span>
                     {canPlace ? (
-                      <select
-                        className="field__input"
-                        defaultValue=""
-                        aria-label={t('admin.subjectOrg.placeIn')}
-                        onChange={(e) => {
-                          if (e.target.value) onPlace(e.target.value, u.student_id);
+                      <Dropdown
+                        id={`place-${u.student_id}`}
+                        label={t('admin.subjectOrg.placeIn')}
+                        value=""
+                        placeholder={t('admin.subjectOrg.placeIn')}
+                        options={split.groups.map((g) => ({ value: g.id, label: g.name }))}
+                        onChange={(next) => {
+                          if (next) onPlace(next, u.student_id);
                         }}
-                      >
-                        <option value="">{t('admin.subjectOrg.placeIn')}</option>
-                        {split.groups.map((g) => (
-                          <option key={g.id} value={g.id}>
-                            {g.name}
-                          </option>
-                        ))}
-                      </select>
+                      />
                     ) : null}
                   </li>
                 ))}

@@ -28,6 +28,7 @@ import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
 import { EmptyState, ErrorState, NoResultsState } from '../components/states.js';
 import { Container } from '../components/ui/container.js';
+import { Dropdown } from '../components/ui/dropdown.js';
 import { Icon } from '../components/ui/icon.js';
 import { levelLabel } from '../components/scope/level-select.js';
 import { t } from '../i18n/index.js';
@@ -514,12 +515,14 @@ function LibraryView({
       <label className="cal-filter__label" htmlFor={`lib-${id}`}>
         {label}
       </label>
-      <select
+      <Dropdown
         id={`lib-${id}`}
-        className="cal-filter__control"
+        label={label}
+        triggerClassName="cal-filter__control"
         value={filter[id]}
-        onChange={(e) => {
-          const next = e.target.value;
+        placeholder={allLabel}
+        options={opts.map(([value, name]) => ({ value, label: name }))}
+        onChange={(next) => {
           setFilter((f) => {
             const updated: LibraryFilter = { ...f, [id]: next };
             // R198 §3 — a Level sets its Category; clearing or changing the
@@ -535,14 +538,7 @@ function LibraryView({
             return updated;
           });
         }}
-      >
-        <option value="">{allLabel}</option>
-        {opts.map(([value, name]) => (
-          <option key={value} value={value}>
-            {name}
-          </option>
-        ))}
-      </select>
+      />
     </div>
   );
 

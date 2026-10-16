@@ -475,7 +475,7 @@ function GroupDialog({
           `field.tsx`'s job, not this screen's to remember. */}
       {/* R221 — the one Level selector «إضافة حلقة» uses (R219's searchable list
           withdrawn: a searchable list is for long lists of people). */}
-      <LevelSelect levels={levels} value={levelId} onChange={setLevelId} />
+      <LevelSelect levels={levels} value={levelId} onChange={setLevelId} required />
 
       <SelectField
         label={t('admin.groups.colBranch')}

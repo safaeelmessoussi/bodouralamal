@@ -50,9 +50,9 @@ describe('the control keeps the selection bounded and, collapsed, out of the way
     expect(code(CONTROL)).toContain('title={summary}');
   });
 
-  it('searches only above a threshold, so a short list is not cluttered', () => {
-    expect(code(CONTROL)).toContain('searchThreshold');
-    expect(code(CONTROL)).toContain('options.length >= searchThreshold');
+  it('searches only above a threshold, so a short list is not cluttered (R224 §3: past 30)', () => {
+    expect(code(CONTROL)).toContain('searchThreshold = SEARCH_THRESHOLD');
+    expect(code(CONTROL)).toContain('options.length > searchThreshold');
   });
 
   it('filters presentationally and fetches nothing', () => {

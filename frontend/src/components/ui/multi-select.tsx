@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ChoiceField, FieldShell } from './field.js';
+import { SEARCH_THRESHOLD } from './dropdown.js';
 import { Icon } from './icon.js';
 import { useDisclosure } from '../../lib/use-disclosure.js';
 import { t } from '../../i18n/index.js';
@@ -60,8 +61,8 @@ export function MultiSelectField({
   disabled = false,
   required = false,
   error = null,
-  /** Below this many options the search box is noise rather than help. */
-  searchThreshold = 8,
+  /** R224 §3 — past this many options the panel opens on a search box. */
+  searchThreshold = SEARCH_THRESHOLD,
 }: {
   label: string;
   options: readonly MultiSelectOption[];
@@ -98,7 +99,7 @@ export function MultiSelectField({
     return needle === '' ? options : options.filter((o) => o.label.toLowerCase().includes(needle));
   }, [options, query]);
 
-  const searchable = options.length >= searchThreshold;
+  const searchable = options.length > searchThreshold;
 
   function toggleOption(value: string): void {
     onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
@@ -148,6 +149,27 @@ export function MultiSelectField({
                     />
                   ) : null}
 
+                  {/* R224 §3 — the whole list in one click, either way. */}
+                  {options.length > 1 ? (
+                    <div className="multi-select__all">
+                      <button
+                        type="button"
+                        className="dropdown-option multi-select__all-on"
+                        disabled={disabled || options.every((o) => selected.includes(o.value))}
+                        onClick={() => onChange(options.map((o) => o.value))}
+                      >
+                        {t('common.selectAll')}
+                      </button>
+                      <button
+                        type="button"
+                        className="dropdown-option multi-select__all-off"
+                        disabled={disabled || selected.length === 0}
+                        onClick={() => onChange([])}
+                      >
+                        {t('common.deselectAll')}
+                      </button>
+                    </div>
+                  ) : null}
                   <ul className="multi-select__options">
                     {visible.length === 0 ? (
                       <li className="field__hint">{t('common.noMatches')}</li>

@@ -142,7 +142,7 @@ try {
     const row = document.querySelector('.cal-header__filters'); if (!row) return false;
     const fields = [...row.children]; if (fields.length < 2) return false;
     const [a, b] = fields.map(f => f.getBoundingClientRect());
-    return Math.abs(a.top - b.top) < 2 && fields.every(f => f.querySelector('select, button')?.getBoundingClientRect().height >= 44);
+    return Math.abs(a.top - b.top) < 2 && fields.every(f => f.querySelector('.dropdown-trigger, select:not(.dropdown-native), button')?.getBoundingClientRect().height >= 44);
   })()`) && await overflow());
   // E4 — the toggle clicks that used to sit here gave the close a moment to
   // settle; without them the next click raced the dialog's close once on the

@@ -903,7 +903,7 @@ function EnrolDialog({
 
       {/* Narrowed by HER: restricted Levels she cannot enter, and the one she is
           already enrolled in, are not offered (R27, BR-21). */}
-      <LevelSelect levels={offeredLevels} value={levelId} onChange={setLevelId} />
+      <LevelSelect levels={offeredLevels} value={levelId} onChange={setLevelId} required />
       {studentId !== '' && eligibleLevels !== null ? (
         <p className="field__hint">
           {eligibleLevels.length === 0

@@ -387,6 +387,10 @@ export const ar = {
     // panel just to know how many are chosen.
     selectedCount: '{n} محددة',
     noMatches: 'لا توجد نتائج.',
+    // القرار 224 §3 — قائمة لا عنصر فيها تقول ذلك.
+    noOptions: 'لا توجد عناصر.',
+    selectAll: 'تحديد الكل',
+    deselectAll: 'إلغاء التحديد',
     searchPlaceholder: 'بحث…',
     notSet: 'غير محدَّد',
     required: 'هذا الحقل مطلوب.',
@@ -950,7 +954,7 @@ export const ar = {
     errSelfManagedBound: 'حساب Google هذا مرتبط أصلاً بحساب في المنصة. يُرجى تسجيل الدخول مباشرة.',
     errSelfManagedPending: 'يوجد طلب قيد المراجعة بالفعل.',
     categoryLabel: 'الفئة',
-    categoryEmpty: 'اختيار الفئة…',
+    categoryEmpty: 'اختيار…',
     categoryHint: 'المرحلة التعليمية المطلوبة. تُقترح منها المستويات عند الموافقة، والقرار النهائي للإدارة.',
     errCategory: 'يُرجى اختيار الفئة.',
     // يُقال صراحةً: الطلب لا يمنح شيئًا، والصفة تُسنَد بعد الموافقة.
@@ -981,7 +985,7 @@ export const ar = {
     // says so, because a parent who believes this chooses the Category will
     // answer strategically rather than truthfully.
     schoolingStage: 'المستوى الدراسي الحالي (اختياري)',
-    schoolingStageChoose: 'اختيار المستوى…',
+    schoolingStageChoose: 'اختيار…',
     schoolingStageHint: 'يساعد الإدارة على اقتراح الفئة المناسبة، ولا يحدّدها تلقائياً.',
     schoolingStage_pre_primary: 'التعليم الأوّلي',
     schoolingStage_primary: 'الابتدائي',
@@ -1013,7 +1017,7 @@ export const ar = {
     // Revision 39 — the one organisational choice the applicant makes.
     branchLegend: 'المقر',
     branchLabel: 'المقر المطلوب',
-    branchEmpty: 'اختيار المقر…',
+    branchEmpty: 'اختيار…',
     branchHint: 'المقر المرغوب في الالتحاق به. يحدّد المشرف الحلقة بعد الموافقة.',
     consentLegend: 'الموافقات',
     // Split so the statute can be a real button inside the sentence, opening
@@ -1067,7 +1071,7 @@ export const ar = {
     lawContact:
       'لممارسة أيٍّ من هذه الحقوق، يكفي التواصل مع إدارة الجمعية في أحد مقراتها.',
     consentMedia: 'الموافقة على نشر الصوت/التسجيلات',
-    consentMediaChoose: 'اختيار القرار…',
+    consentMediaChoose: 'اختيار…',
     consentMediaHint: 'قرارك مسجَّل في الحالتين — «لا» جواب صحيح ويُحفظ كما هو.',
     submit: 'إرسال الطلب',
     submittedTitle: 'تم استلام طلبك',
@@ -1811,7 +1815,7 @@ export const ar = {
     // Owner-reported, 2026-09-15 — بلا هذا، كان المحدَّد (`value=''`) لا يطابق
     // أي خيار فيعرض المتصفح أول صف في الكتالوج كأنه مُختار، فتظهر «حصة دراسية»
     // محدَّدة بصرياً بينما لا شيء مُختار فعلياً حتى تُعاد الكتابة عليه.
-    itemTypePlaceholder: 'اختيار نوع العنصر',
+    itemTypePlaceholder: 'اختيار…',
     // R110 (OD-03) — «حضور إجباري» صفة مخزَّنة في الكتالوج، لا تُستنتج من الاسم.
     // تُذكر عند اختيار النوع، وهي الموضع الذي تتعلّق به عناصر الحضور حين تُبنى.
     // R123 — three states, three sentences. «لا يُسجَّل» and «يمكن تسجيله» are
@@ -2724,7 +2728,7 @@ export const ar = {
        */
       periodLabel: 'الفصل الدراسي',
       semester: 'الفصل {n}',
-      periodPlaceholder: 'اختيار الفصل الدراسي',
+      periodPlaceholder: 'اختيار…',
       periodHint: 'التسجيل يخصّ هذا الفصل، وينتهي بانتهائه تلقائياً.',
       periodNone:
         'لم تُسجَّل بعد أي فصول دراسية. على المشرفة العامة إدخال فصول السنة الدراسية أولاً.',
@@ -3937,7 +3941,7 @@ export const ar = {
     author: {
       // القرار 217 — قائمة واحدة قابلة للبحث: المؤطِّرات أولًا، والبحث في كل الأشخاص.
       label: 'صاحب المحتوى',
-      none: 'غير محدد',
+      none: 'بدون',
       searchHint: 'تظهر المؤطِّرات؛ ولغيرهن يُكتب حرفان من الاسم على الأقل.',
       role: {
         teacher: 'تأطير',

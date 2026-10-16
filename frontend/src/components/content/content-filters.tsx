@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { ContentKind, LevelContent } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
 import { GLOBAL } from './content-scope-fields.js';
+import { Dropdown } from '../ui/dropdown.js';
 
 /**
  * Filters for one level's library: academic year, branch, type, and title search.
@@ -96,19 +97,15 @@ export function ContentFilters({
           <label className="cal-filter__label" htmlFor="content-year">
             {t('content.yearLabel')}
           </label>
-          <select
+          <Dropdown
             id="content-year"
-            className="cal-filter__control"
+            label={t('content.yearLabel')}
+            triggerClassName="cal-filter__control"
             value={value.yearId ?? ''}
-            onChange={(e) => onChange({ ...value, yearId: e.target.value || null })}
-          >
-            <option value="">{t('content.allYears')}</option>
-            {years.map((y) => (
-              <option key={y.id} value={y.id}>
-                {y.label}
-              </option>
-            ))}
-          </select>
+            placeholder={t('content.allYears')}
+            options={years.map((y) => ({ value: y.id, label: y.label }))}
+            onChange={(next) => onChange({ ...value, yearId: next || null })}
+          />
         </div>
       ) : null}
 
@@ -117,19 +114,15 @@ export function ContentFilters({
           <label className="cal-filter__label" htmlFor="content-branch">
             {t('content.branchLabel')}
           </label>
-          <select
+          <Dropdown
             id="content-branch"
-            className="cal-filter__control"
+            label={t('content.branchLabel')}
+            triggerClassName="cal-filter__control"
             value={value.branchId ?? ''}
-            onChange={(e) => onChange({ ...value, branchId: e.target.value || null })}
-          >
-            <option value="">{t('content.allBranches')}</option>
-            {[...branches].map(([id, name]) => (
-              <option key={id} value={id}>
-                {name}
-              </option>
-            ))}
-          </select>
+            placeholder={t('content.allBranches')}
+            options={[...branches].map(([id, name]) => ({ value: id, label: name }))}
+            onChange={(next) => onChange({ ...value, branchId: next || null })}
+          />
         </div>
       ) : null}
 
@@ -138,19 +131,15 @@ export function ContentFilters({
           <label className="cal-filter__label" htmlFor="content-kind">
             {t('content.typeLabel')}
           </label>
-          <select
+          <Dropdown
             id="content-kind"
-            className="cal-filter__control"
+            label={t('content.typeLabel')}
+            triggerClassName="cal-filter__control"
             value={value.kind ?? ''}
-            onChange={(e) => onChange({ ...value, kind: (e.target.value || null) as ContentKind | null })}
-          >
-            <option value="">{t('content.allTypes')}</option>
-            {KINDS.filter((k) => presentKinds.has(k)).map((k) => (
-              <option key={k} value={k}>
-                {t(`content.kind.${k}`)}
-              </option>
-            ))}
-          </select>
+            placeholder={t('content.allTypes')}
+            options={KINDS.filter((k) => presentKinds.has(k)).map((k) => ({ value: k, label: t(`content.kind.${k}`) }))}
+            onChange={(next) => onChange({ ...value, kind: (next || null) as ContentKind | null })}
+          />
         </div>
       ) : null}
     </div>

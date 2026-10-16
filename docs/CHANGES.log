@@ -359,3 +359,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `holiday-cancellation.service`: `applyHoliday` also writes/removes activity-date rows (`applyHolidayToActivities`); `applyHolidaysToActivity` on activity create/edit/Trash restore; «الكل» covered only by an all-covering holiday.
 - `readCalendar` skips unrestored cancelled dates; attendance refuses them; `GET /events/{id}/cancelled-dates`, `POST …/{date}/restore` (audited `event.date_restored`); `CancelledDatesDialog` («التواريخ الملغاة») in الجدولة; `ops:apply-holidays` reports activity dates.
 - Fix (CI): a holiday with hours covers only activities whose hours overlap; an activity with no hours only by a whole-day holiday (`scheduling-type-filter` caught an evening holiday cancelling all-day activities).
+
+## 2026-10-16 — SRS Revision 224 §3: the platform's one dropdown
+- `ui/dropdown.tsx` `Dropdown` (trigger + in-flow panel, search past `SEARCH_THRESHOLD` 30, arrows/Home/End/Escape, hidden native `<select>` in step carrying the field id); `SelectField`, `SearchableSelect` (✕ withdrawn: the empty choice is the list's first line) and the library/content/circle filters draw through it.
+- `MultiSelectField`: search past 30, «تحديد الكل / إلغاء التحديد»; empty-choice words: «اختيار…» required, «بدون» optional; `LevelSelect required` in the group, circle and enrolment forms; six placeholders → «اختيار…», «صاحب المحتوى» «بدون».

@@ -75,6 +75,7 @@ export function LevelSelect({
   hint,
   busy = false,
   disabled = false,
+  required = false,
 }: {
   levels: readonly LevelOption[];
   value: string | null;
@@ -85,16 +86,19 @@ export function LevelSelect({
   hint?: string;
   busy?: boolean;
   disabled?: boolean;
+  /** R224 §3 — a form's Level marked `*` and opening on «اختيار…». */
+  required?: boolean;
 }): ReactNode {
   return (
     <SelectField
       label={label ?? t('admin.nav.levels')}
       value={value ?? ''}
       onChange={onChange}
-      placeholder={placeholder ?? t('common.choose')}
+      placeholder={placeholder ?? t(required ? 'common.choose' : 'common.noneChosen')}
       options={levels.map((level) => ({ value: level.id, label: levelLabel(level) }))}
       busy={busy}
       disabled={disabled}
+      required={required}
       {...(hint === undefined ? {} : { hint })}
     />
   );

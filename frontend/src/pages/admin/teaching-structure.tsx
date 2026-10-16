@@ -786,6 +786,7 @@ function CircleDialog({
       {needsPair ? (
         <>
           <LevelSelect
+            required
             levels={levels}
             value={levelId}
             // Changing the Level clears the Subject: a stale id left in state is

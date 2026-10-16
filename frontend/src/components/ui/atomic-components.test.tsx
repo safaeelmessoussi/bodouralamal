@@ -733,11 +733,17 @@ describe('one collapsed dropdown shell (R137 item 8)', () => {
    * `mousedown`/`keydown` pair each.
    */
   it('both searchable and multi-select collapse behind the shared trigger shape', () => {
-    for (const path of ['components/ui/searchable-select.tsx', 'components/ui/multi-select.tsx']) {
-      const source = stripComments(RAW[`/src/${path}`] ?? '');
-      expect(source, path).toContain('field__control dropdown-trigger');
-      expect(source, path).toContain('aria-haspopup="listbox"');
-      expect(source, path).toContain('aria-expanded={open}');
+    // R224 §3 — single choices (plain and searchable) are the one `Dropdown`.
+    const dropdown = stripComments(RAW['/src/components/ui/dropdown.tsx'] ?? '');
+    expect(dropdown).toContain("triggerClassName = 'field__control'");
+    expect(dropdown).toContain('dropdown-trigger');
+    expect(stripComments(RAW['/src/components/ui/searchable-select.tsx'] ?? '')).toContain('<Dropdown');
+    expect(stripComments(RAW['/src/components/ui/field.tsx'] ?? '')).toContain('<Dropdown');
+    const multi = stripComments(RAW['/src/components/ui/multi-select.tsx'] ?? '');
+    expect(multi).toContain('field__control dropdown-trigger');
+    for (const source of [dropdown, multi]) {
+      expect(source).toContain('aria-haspopup="listbox"');
+      expect(source).toContain('aria-expanded={open}');
     }
   });
 
@@ -754,7 +760,7 @@ describe('one collapsed dropdown shell (R137 item 8)', () => {
     }).map((f) => f.path);
     expect(offenders).toEqual([]);
 
-    for (const path of ['components/ui/searchable-select.tsx', 'components/ui/multi-select.tsx']) {
+    for (const path of ['components/ui/dropdown.tsx', 'components/ui/multi-select.tsx']) {
       expect(stripComments(RAW[`/src/${path}`] ?? ''), path).toContain('useDisclosure');
     }
   });
