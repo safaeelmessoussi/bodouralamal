@@ -161,6 +161,8 @@ GET /students/me/certificates                 # R167 §3; the ACTING student's c
 # ── Reads added with their screens ──────────────────────────────────────────
 GET /library/{id}/sessions                    # §4.9 R43; SessionContent read backwards; public at the caller's tier
 PUT /events/{id}/staff                        # TD-3.4, §4.4 R71; replaces the whole assignment
+GET /events/{id}/cancelled-dates              # R224 §2; the activity dates a holiday cancelled, restored or not
+POST /events/{id}/cancelled-dates/{date}/restore # R224 §2; «إعادة البرمجة» for one cancelled activity date
 
 GET /notifications                            # R77.7; the caller's OWN, paginated (TD-10)
 POST /notifications/{id}/read                 # R77.6; idempotent; another user's answers 404 (§20 r17)

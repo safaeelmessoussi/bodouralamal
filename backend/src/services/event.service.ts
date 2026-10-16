@@ -17,7 +17,7 @@ import type { Actor } from '../policies/actor.js';
 import { assertActivityType, assertMarkingAllowedForType } from './scheduling-type.service.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 import { GROUP_ADMIN_ORDER } from '../lib/sorting.js';
-import { applyHoliday } from './holiday-cancellation.service.js';
+import { applyHoliday, applyHolidaysToActivity } from './holiday-cancellation.service.js';
 
 /**
  * Events — the exception/special-activity layer (SRS §4.4, §7, TD-2, TD-5, TD-11).
@@ -339,6 +339,8 @@ export async function createEvent(
     await writeEventScope(tx, event.id, { branchIds, categoryIds, levelIds, groupIds });
     // R199 §5 — a عطلة cancels the classes it covers (a no-op for any other kind).
     const holiday = await applyHoliday(tx, event.id);
+    // R224 §2 — and an activity's dates on a holiday are born cancelled.
+    await applyHolidaysToActivity(tx, event.id);
 
     // **R71.3 — creating an event is what makes a مؤطرة answerable for it.**
     // Structural, not a grant: assigning staff is otherwise Admin-and-above, and
@@ -590,6 +592,8 @@ export async function updateEvent(
     );
     // R199 §5 — a عطلة re-applied: new days, scope or type cancel or restore.
     const holiday = await applyHoliday(tx, id);
+    // R224 §2 — an activity re-read against the holidays (new days, new scope).
+    await applyHolidaysToActivity(tx, id);
 
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -1254,4 +1258,67 @@ export async function listEventStaffOptions(
     orderBy: { nameArabic: 'asc' },
   });
   return rows.map((r) => ({ id: r.id, name: r.nameArabic }));
+}
+
+/* ── R224 §2 — the activity dates a holiday cancelled, and «إعادة البرمجة» ── */
+
+export interface CancelledActivityDate {
+  date: Date;
+  reason: string;
+  restoredAt: Date | null;
+}
+
+/** `GET /events/{id}/cancelled-dates` — for whoever may edit the activity. */
+export async function listCancelledDates(
+  prisma: PrismaClient,
+  actor: Actor,
+  eventId: string,
+): Promise<CancelledActivityDate[]> {
+  return prisma.$transaction(async (tx) => {
+    const event = await tx.event.findFirst({ where: { id: eventId, deletedAt: null }, select: { id: true } });
+    if (!event) throw new AppError('NOT_FOUND', 'no such event');
+    await assertMayEdit(tx, actor, eventId);
+    return tx.eventDateCancellation.findMany({
+      where: { eventId },
+      select: { date: true, reason: true, restoredAt: true },
+      orderBy: { date: 'asc' },
+    });
+  });
+}
+
+/**
+ * `POST /events/{id}/cancelled-dates/{date}/restore` — **«إعادة البرمجة»**
+ * (the Owner, 2026-10-16: «reschedules … and appears again in the calendar,
+ * as it does for classes»). The date shows again and a re-applied holiday
+ * leaves it alone; deleting the holiday removes the row with the others.
+ */
+export async function restoreCancelledDate(
+  prisma: PrismaClient,
+  actor: Actor,
+  eventId: string,
+  date: Date,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const event = await tx.event.findFirst({ where: { id: eventId, deletedAt: null }, select: { id: true } });
+    if (!event) throw new AppError('NOT_FOUND', 'no such event');
+    await assertMayEdit(tx, actor, eventId);
+    const row = await tx.eventDateCancellation.findUnique({
+      where: { eventId_date: { eventId, date } },
+      select: { id: true, restoredAt: true, cancelledByEventId: true },
+    });
+    if (!row) throw new AppError('NOT_FOUND', 'no such cancelled date');
+    if (row.restoredAt !== null) return;
+    await tx.eventDateCancellation.update({
+      where: { id: row.id },
+      data: { restoredAt: new Date(), restoredById: actor.userId },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'event.date_restored',
+      targetEntity: 'Event',
+      targetId: eventId,
+      detail: { date: date.toISOString().slice(0, 10), holiday_id: row.cancelledByEventId },
+    });
+  });
 }

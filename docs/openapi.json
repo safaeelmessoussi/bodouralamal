@@ -12845,6 +12845,118 @@
         }
       }
     },
+    "/events/{id}/cancelled-dates": {
+      "get": {
+        "summary": "The activity dates a holiday cancelled",
+        "description": "SRS Revision 224 §2. A holiday cancels the dates of the activities of its Categories and branches that fall in it (an activity naming no Category or branch is covered only by a holiday covering them all); the calendar leaves those dates out. Returns `{ data: [{ date, reason, restored }] }`, oldest first. For whoever may edit the activity (`assertMayEdit`).",
+        "responses": {
+          "200": {
+            "description": "The cancelled dates."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — not the activity's editor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — no such activity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{id}/cancelled-dates/{date}/restore": {
+      "post": {
+        "summary": "«إعادة البرمجة» for one cancelled activity date",
+        "description": "SRS Revision 224 §2. The date (`YYYY-MM-DD`) shows on the calendar again, and a re-applied holiday leaves it alone; deleting the holiday removes the row. Idempotent; audited as `event.date_restored`.",
+        "responses": {
+          "204": {
+            "description": "Restored."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — not the activity's editor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — no such activity or cancelled date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/notifications": {
       "get": {
         "summary": "The caller’s own notifications",

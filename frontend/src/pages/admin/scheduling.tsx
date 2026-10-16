@@ -82,6 +82,7 @@ import {
   type CalendarFilters as CalendarFilterState,
 } from '../../hooks/use-calendar-filters.js';
 import { Button } from '../../components/ui/button.js';
+import { CancelledDatesDialog } from '../../components/scheduling/cancelled-dates-dialog.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import {
   type Column,
@@ -371,6 +372,8 @@ export function SchedulingPage(): ReactNode {
    *  the same dialog asks a second time with them in view. */
   const [evidence, setEvidence] = useState<{ submissions: number; grades: number } | null>(null);
   /** The saved Event change awaiting the send-or-not decision (R82.5). */
+  /** R224 §2 — the activity whose cancelled dates are open. */
+  const [cancelledOf, setCancelledOf] = useState<{ id: string; title: string } | null>(null);
   const [notifying, setNotifying] = useState<{
     id: string;
     change: 'created' | 'rescheduled' | 'cancelled';
@@ -630,6 +633,12 @@ export function SchedulingPage(): ReactNode {
       available: (r) => specOfKind(r.type).hasOccurrences,
     },
     {
+      // R224 §2 — the dates a holiday cancelled, and «إعادة البرمجة».
+      label: t('scheduling.cancelledDates.action'),
+      onSelect: (r) => setCancelledOf({ id: r.id, title: r.title }),
+      available: (r) => r.type === 'activity',
+    },
+    {
       label: t('common.edit'),
       onSelect: (r) => setEditing(r),
       /**
@@ -830,6 +839,8 @@ export function SchedulingPage(): ReactNode {
           }}
         />
       ) : null}
+
+      <CancelledDatesDialog activity={cancelledOf} token={accessToken} onClose={() => setCancelledOf(null)} />
 
       {/* **R82.5 — the optional notice.** The change is saved and stays saved
           whichever button is pressed; only delivery is decided here. The shared

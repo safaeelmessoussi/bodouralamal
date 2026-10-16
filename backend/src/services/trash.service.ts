@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import { resolveSort, type SortParams, type SortableFields } from '../lib/sorting.js';
-import { applyHoliday } from './holiday-cancellation.service.js';
+import { applyHoliday, applyHolidaysToActivity } from './holiday-cancellation.service.js';
 import * as scope from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -1712,6 +1712,8 @@ export async function restoreEntry(prisma: PrismaClient, actor: Actor, id: strin
           consequence = await restoreEventScope(tx, entry.targetId, entry.snapshot);
           // R199 §5 — a restored عطلة cancels its classes again.
           consequence = { ...consequence, holiday_cancelled_sessions: (await applyHoliday(tx, entry.targetId)).cancelled };
+          // R224 §2 — a restored activity is read against the holidays again.
+          await applyHolidaysToActivity(tx, entry.targetId);
           break;
         case 'AdministrativeGroup':
           consequence = await restoreGroupEventLinks(tx, entry.targetId, entry.snapshot);

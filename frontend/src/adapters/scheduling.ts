@@ -1178,3 +1178,27 @@ export async function deleteSchedulingItem(
   if (item.type === 'exam') return deleteExam(item.id, token, options);
   return deleteEvent(item.id, token);
 }
+
+/* ── R224 §2 — an activity's dates a holiday cancelled ────────────────────── */
+
+export interface CancelledActivityDate {
+  /** `YYYY-MM-DD` (TD-11). */
+  date: string;
+  reason: string;
+  /** «إعادة البرمجة» already done: the date shows on the calendar. */
+  restored: boolean;
+}
+
+export async function listCancelledActivityDates(
+  eventId: string,
+  token: string | null,
+): Promise<CancelledActivityDate[]> {
+  return (
+    await api<{ data: CancelledActivityDate[] }>(`/events/${encodeURIComponent(eventId)}/cancelled-dates`, { token })
+  ).data;
+}
+
+/** «إعادة البرمجة» — the date shows again, and a re-applied holiday leaves it. */
+export async function restoreCancelledActivityDate(eventId: string, date: string, token: string | null): Promise<void> {
+  await api<void>(`/events/${encodeURIComponent(eventId)}/cancelled-dates/${date}/restore`, { method: 'POST', token });
+}

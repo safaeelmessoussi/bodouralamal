@@ -151,7 +151,7 @@ function reasonFor(holiday: HolidayCoverage): string {
 export async function applyHoliday(
   tx: Prisma.TransactionClient,
   eventId: string,
-): Promise<{ cancelled: number; restored: number }> {
+): Promise<{ cancelled: number; restored: number; activityDates: { cancelled: number; released: number } }> {
   const holiday = await liveHoliday(tx, eventId);
 
   // What it cancelled before, and no longer covers (all of it, once deleted).
@@ -166,7 +166,9 @@ export async function applyHoliday(
       data: { status: 'scheduled', cancellationReason: null, cancelledByEventId: null, version: { increment: 1 } },
     });
   }
-  if (holiday === null) return { cancelled: 0, restored: release.length };
+  // R224 §2 — the activity dates it cancelled go with it, or are re-read.
+  const activities = await applyHolidayToActivities(tx, eventId, holiday);
+  if (holiday === null) return { cancelled: 0, restored: release.length, activityDates: activities };
 
   const candidates = await tx.session.findMany({
     where: {
@@ -199,7 +201,7 @@ export async function applyHoliday(
       },
     });
   }
-  return { cancelled: cancel.length, restored: release.length };
+  return { cancelled: cancel.length, restored: release.length, activityDates: activities };
 }
 
 /**
@@ -237,6 +239,178 @@ export async function applyHolidaysToSessions(
     await tx.session.update({
       where: { id: session.id },
       data: { status: 'cancelled', cancellationReason: reasonFor(holiday), cancelledByEventId: holiday.id },
+    });
+    cancelled += 1;
+  }
+  return cancelled;
+}
+
+/* ── R224 §2 — a holiday cancels the activity dates it covers ──────────── */
+
+/**
+ * **SRS Revision 224 §2 (the Owner, 2026-10-16: «everything regarding that
+ * category during that holiday should be canceled, even the activities, then
+ * it's up to teachers and admin to إعادة البرمجة»).** The same coverage as a
+ * class: the date is one of the holiday's days, the hours overlap when both
+ * have hours, the branch and the Category meet. An activity's dimensions are
+ * read as the calendar reads them (R169 §6): a Category named directly or
+ * through a Level or a group, a branch named directly or through a group; a
+ * dimension it leaves empty is «الكل» — every Category, every branch — so it is
+ * covered only by a holiday that covers them all. A holiday never cancels a
+ * holiday. Each covered date is a row (`EventDateCancellation`); a restored
+ * row («إعادة البرمجة») is left alone; what the holiday no longer covers, or
+ * all of it once the holiday is deleted, is removed.
+ */
+const ACTIVITY_SELECT = {
+  id: true,
+  startDate: true,
+  endDate: true,
+  startTime: true,
+  endTime: true,
+  recurrenceType: true,
+  recurrenceEndDate: true,
+  branchScopes: { select: { branchId: true } },
+  categoryScopes: { select: { categoryId: true } },
+  levelScopes: { select: { level: { select: { categoryId: true } } } },
+  administrativeGroupScopes: {
+    select: { administrativeGroup: { select: { branchId: true, level: { select: { categoryId: true } } } } },
+  },
+} as const;
+type Activity = Prisma.EventGetPayload<{ select: typeof ACTIVITY_SELECT }>;
+
+interface Universe {
+  branches: number;
+  categories: number;
+}
+
+function meets(holidayIds: readonly string[], mine: ReadonlySet<string>, all: number): boolean {
+  if (holidayIds.length === 0) return true;
+  // «الكل» on the activity: only a holiday naming every one of them covers it.
+  if (mine.size === 0) return new Set(holidayIds).size >= all;
+  return [...mine].some((id) => holidayIds.includes(id));
+}
+
+function coveredDates(holiday: HolidayCoverage, activity: Activity, universe: Universe): Date[] {
+  const categories = new Set([
+    ...activity.categoryScopes.map((r) => r.categoryId),
+    ...activity.levelScopes.map((r) => r.level.categoryId),
+    ...activity.administrativeGroupScopes.map((r) => r.administrativeGroup.level.categoryId),
+  ]);
+  const branches = new Set([
+    ...activity.branchScopes.map((r) => r.branchId),
+    ...activity.administrativeGroupScopes.map((r) => r.administrativeGroup.branchId),
+  ]);
+  if (!meets(holiday.categoryIds, categories, universe.categories)) return [];
+  if (!meets(holiday.branchIds, branches, universe.branches)) return [];
+  if (
+    holiday.startTime !== null &&
+    holiday.endTime !== null &&
+    activity.startTime !== null &&
+    activity.endTime !== null &&
+    !timesOverlap(holiday.startTime, holiday.endTime, activity.startTime, activity.endTime)
+  ) {
+    return [];
+  }
+  const first = holiday.startDate;
+  const last =
+    holiday.recurrenceType === 'none'
+      ? (holiday.endDate ?? holiday.startDate)
+      : (holiday.recurrenceEndDate ?? new Date(Date.UTC(first.getUTCFullYear() + 1, first.getUTCMonth(), first.getUTCDate())));
+  return expandEvent(activity, first, last).filter((day) => expandEvent(holiday, day, day).length > 0);
+}
+
+async function universeOf(tx: Prisma.TransactionClient): Promise<Universe> {
+  const [branches, categories] = await Promise.all([
+    tx.branch.count({ where: { deletedAt: null } }),
+    tx.category.count({ where: { deletedAt: null } }),
+  ]);
+  return { branches, categories };
+}
+
+async function applyHolidayToActivities(
+  tx: Prisma.TransactionClient,
+  holidayId: string,
+  holiday: HolidayCoverage | null,
+): Promise<{ cancelled: number; released: number }> {
+  const existing = await tx.eventDateCancellation.findMany({
+    where: { cancelledByEventId: holidayId },
+    select: { id: true, eventId: true, date: true },
+  });
+  const keep = new Set<string>();
+  let cancelled = 0;
+  if (holiday !== null) {
+    const universe = await universeOf(tx);
+    const last =
+      holiday.recurrenceType === 'none' ? (holiday.endDate ?? holiday.startDate) : holiday.recurrenceEndDate;
+    const activities = await tx.event.findMany({
+      where: {
+        deletedAt: null,
+        id: { not: holidayId },
+        // A holiday never cancels a holiday.
+        NOT: { schedulingType: { structuralKind: 'holiday' } },
+        ...(last ? { startDate: { lte: last } } : {}),
+      },
+      select: ACTIVITY_SELECT,
+    });
+    for (const activity of activities) {
+      for (const day of coveredDates(holiday, activity, universe)) {
+        keep.add(`${activity.id}|${day.toISOString()}`);
+        const row = await tx.eventDateCancellation.findUnique({
+          where: { eventId_date: { eventId: activity.id, date: day } },
+          select: { id: true },
+        });
+        // A date already cancelled — by this holiday, by another, or restored
+        // («إعادة البرمجة») — stays as it is.
+        if (row !== null) continue;
+        await tx.eventDateCancellation.create({
+          data: { eventId: activity.id, date: day, cancelledByEventId: holidayId, reason: reasonFor(holiday) },
+        });
+        cancelled += 1;
+      }
+    }
+  }
+  const release = existing.filter((r) => !keep.has(`${r.eventId}|${r.date.toISOString()}`)).map((r) => r.id);
+  if (release.length > 0) await tx.eventDateCancellation.deleteMany({ where: { id: { in: release } } });
+  return { cancelled, released: release.length };
+}
+
+/**
+ * R224 §2 — an activity created or edited is read against every live holiday:
+ * its covered dates are cancelled, and the dates no longer in it, or no longer
+ * covered, come back.
+ */
+export async function applyHolidaysToActivity(tx: Prisma.TransactionClient, activityId: string): Promise<number> {
+  const activity = await tx.event.findFirst({
+    where: { id: activityId, deletedAt: null, NOT: { schedulingType: { structuralKind: 'holiday' } } },
+    select: ACTIVITY_SELECT,
+  });
+  const existing = await tx.eventDateCancellation.findMany({
+    where: { eventId: activityId },
+    select: { id: true, date: true, cancelledByEventId: true, restoredAt: true },
+  });
+  if (activity === null) return 0;
+  const universe = await universeOf(tx);
+  const holidays = (
+    await tx.event.findMany({
+      where: { deletedAt: null, schedulingType: { structuralKind: 'holiday' } },
+      select: HOLIDAY_SELECT,
+    })
+  ).map(toCoverage);
+  const wanted = new Map<string, HolidayCoverage>();
+  for (const holiday of holidays) {
+    for (const day of coveredDates(holiday, activity, universe)) {
+      if (!wanted.has(day.toISOString())) wanted.set(day.toISOString(), holiday);
+    }
+  }
+  // Unrestored rows whose date is no longer covered come back.
+  const stale = existing.filter((r) => r.restoredAt === null && !wanted.has(r.date.toISOString())).map((r) => r.id);
+  if (stale.length > 0) await tx.eventDateCancellation.deleteMany({ where: { id: { in: stale } } });
+  const have = new Set(existing.map((r) => r.date.toISOString()));
+  let cancelled = 0;
+  for (const [iso, holiday] of wanted) {
+    if (have.has(iso)) continue;
+    await tx.eventDateCancellation.create({
+      data: { eventId: activityId, date: new Date(iso), cancelledByEventId: holiday.id, reason: reasonFor(holiday) },
     });
     cancelled += 1;
   }

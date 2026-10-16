@@ -1701,6 +1701,12 @@ export async function readCalendar(
             administrativeGroupScopes: {
               select: { administrativeGroup: { select: { id: true, name: true } } },
             },
+            // R224 §2 — the dates a holiday cancelled and nobody rescheduled:
+            // a cancelled activity is not shown, as a cancelled class is not.
+            cancelledDates: {
+              where: { restoredAt: null, date: { gte: from, lte: query.to } },
+              select: { date: true },
+            },
           },
         });
 
@@ -1709,7 +1715,9 @@ export async function readCalendar(
 
   const out: Occurrence[] = [];
   for (const event of events) {
+    const cancelled = new Set(event.cancelledDates.map((c) => c.date.getTime()));
     for (const date of expandEvent(event, from, query.to)) {
+      if (cancelled.has(date.getTime())) continue;
       out.push({
         kind: "event",
         schedulingTypeId: event.schedulingType?.id ?? null,

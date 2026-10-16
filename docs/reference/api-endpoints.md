@@ -335,6 +335,8 @@ Not under `/admin/`: TD-2 gives a Teacher write access to sessions they staff; s
 | `POST` | `/events` | 🔒 Writes the four-way scope joins explicitly at creation |
 | `PATCH` `DELETE` | `/events/{id}` | 🔒 `PATCH` re-addresses with the five scope keys as a whole (R176 §2) |
 | `POST` | `/events/{id}/notify` | 🔒 Optional post-change announcement, see [Notifications](#notifications) |
+| `GET` | `/events/{id}/cancelled-dates` | 🔒 The activity's dates a holiday cancelled, restored or not (R224 §2); the activity's editor |
+| `POST` | `/events/{id}/cancelled-dates/{date}/restore` | 🔒 «إعادة البرمجة» for one date: shown again, a re-applied holiday leaves it; audited |
 | `GET` `POST` | `/admin/branches/{id}/event-backfill` | 🔒 Manual backfill on branch activation; an Admin capability (operational work) |
 
 ## Hijri calendar

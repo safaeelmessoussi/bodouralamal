@@ -526,6 +526,9 @@ export function createApp(
    */
   guarded.get('/me/course-schedule-options', scopeOptions.readForCourseSchedule(prisma));
   guarded.put('/events/:id/staff', events.setStaff(prisma));
+  // R224 §2 — the activity dates a holiday cancelled, and «إعادة البرمجة».
+  guarded.get('/events/:id/cancelled-dates', events.cancelledDates(prisma));
+  guarded.post('/events/:id/cancelled-dates/:date/restore', events.restoreDate(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));
   guarded.post('/admin/branches/:id/event-backfill', events.applyBackfill(prisma));

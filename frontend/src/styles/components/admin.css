@@ -1309,3 +1309,27 @@
   vertical-align: middle;
   white-space: normal;
 }
+
+/* R224 §2 — an activity's dates a holiday cancelled, each with «إعادة البرمجة». */
+.cancelled-dates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.cancelled-dates__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding-block: var(--space-2);
+  border-block-end: 1px solid var(--color-border-subtle);
+}
+.cancelled-dates__date {
+  font-weight: 600;
+}
+.cancelled-dates__reason {
+  flex: 1 1 12rem;
+  font-size: var(--font-size-sm);
+}

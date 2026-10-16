@@ -6,6 +6,8 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
 import {
+  listCancelledDates,
+  restoreCancelledDate,
   backfillAttach,
   backfillCandidates,
   createEvent,
@@ -350,5 +352,30 @@ export function staffOptions(prisma: PrismaClient) {
 export function scopeOptions(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await listEventScopeOptions(prisma, requireActor(req)) });
+  };
+}
+
+/** R224 §2 — the dates a holiday cancelled, restored or not. */
+export function cancelledDates(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const rows = await listCancelledDates(prisma, actorOf(req), pathId(req));
+    res.json({
+      data: rows.map((r) => ({
+        date: r.date.toISOString().slice(0, 10),
+        reason: r.reason,
+        restored: r.restoredAt !== null,
+      })),
+    });
+  };
+}
+
+const cancelledDateParam = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+/** R224 §2 — «إعادة البرمجة» for one cancelled activity date. */
+export function restoreDate(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const date = parse(cancelledDateParam, req.params['date']);
+    await restoreCancelledDate(prisma, actorOf(req), pathId(req), new Date(`${date}T00:00:00.000Z`));
+    res.status(204).end();
   };
 }

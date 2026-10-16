@@ -353,3 +353,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-16 — SRS Revision 224 §1: «خطاطة السورة» first, image titled by the Surah
 - `humanity-data.ts`: al-Fatiha's «الآيات وما تحتها» → «خطاطة السورة»; Maryam gains d0 «خطاطة السورة» (its five parts as branches); six content locales re-keyed (Maryam d{n} → d{n+1}, new d0 from the parts).
 - `diagram-image.ts`: `heading` (the Surah) as title, the diagram as subtitle; file «{Surah} — {diagram}.png».
+
+## 2026-10-16 — SRS Revision 224 §2: a holiday cancels its Categories' activity dates
+- Migration `r224_event_date_cancellation` (`EventDateCancellation`: event, date, holiday, reason, `restored_at/by`; CHECKs not-self, restored-by-somebody).
+- `holiday-cancellation.service`: `applyHoliday` also writes/removes activity-date rows (`applyHolidayToActivities`); `applyHolidaysToActivity` on activity create/edit/Trash restore; «الكل» covered only by an all-covering holiday.
+- `readCalendar` skips unrestored cancelled dates; attendance refuses them; `GET /events/{id}/cancelled-dates`, `POST …/{date}/restore` (audited `event.date_restored`); `CancelledDatesDialog` («التواريخ الملغاة») in الجدولة; `ops:apply-holidays` reports activity dates.

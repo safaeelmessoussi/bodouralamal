@@ -4,7 +4,8 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { Actor } from '../policies/actor.js';
 import { clearTeachingContext, createTeachingContext, materializeRange, type TeachingFixture } from '../test-support/educational-fixture.js';
-import { createEvent, deleteEvent, updateEvent } from './event.service.js';
+import { readCalendar } from './calendar.service.js';
+import { createEvent, deleteEvent, listCancelledDates, restoreCancelledDate, updateEvent } from './event.service.js';
 import { applyHolidaysToSessions } from './holiday-cancellation.service.js';
 import { restoreSession } from './session.service.js';
 import { restoreEntry } from './trash.service.js';
@@ -164,6 +165,107 @@ describe('R199 §5 — a عطلة cancels its Category’s classes, reversibly',
     await deleteEvent(prisma, superAdmin(), holidayId);
     expect(after.version).toBeGreaterThan(0);
     expect(await statusOf(women, '2026-11-07')).toMatchObject({ status: 'cancelled', reason: 'مرض المؤطرة' });
+  });
+});
+
+/**
+ * **R224 §2 (the Owner, 2026-10-16) — a holiday cancels its Categories'
+ * activities too, and the calendar shows none of them; «إعادة البرمجة» puts a
+ * date back, and a re-applied holiday leaves it there.**
+ */
+describe('R224 §2 — a عطلة cancels its Category’s activity dates', () => {
+  let activityTypeId = '';
+  let holidayId = '';
+  const ids = { childWeekly: '', women: '', everyone: '' };
+  const shown = async (id: string, iso: string): Promise<boolean> =>
+    (await readCalendar(prisma, null, { from: day(iso), to: day(iso) })).some((o) => o.kind === 'event' && o.id === id);
+
+  beforeAll(async () => {
+    activityTypeId = (
+      await prisma.schedulingType.create({
+        data: { name: `${TAG} نشاط`, structuralKind: 'activity', attendanceMode: 'disabled', displayOrder: 98 },
+      })
+    ).id;
+    const activity = async (title: string, scope: { categoryIds?: string[]; global?: boolean }) =>
+      (
+        await createEvent(prisma, superAdmin(), {
+          title: `${TAG} ${title}`,
+          schedulingTypeId: activityTypeId,
+          visibility: 'public',
+          startDate: day('2026-12-05'),
+          endDate: null,
+          recurrenceType: 'weekly',
+          recurrenceEndDate: day('2026-12-26'),
+          ...(scope.global ? { global: true } : { branchIds: [branchId], categoryIds: scope.categoryIds ?? [] }),
+        })
+      ).event.id;
+    ids.childWeekly = await activity('ورشة الأطفال', { categoryIds: [children.categoryId] });
+    ids.women = await activity('ورشة النساء', { categoryIds: [women.categoryId] });
+    ids.everyone = await activity('حفل للجميع', { global: true });
+  });
+
+  it('cancels the covered dates of its Category, which the calendar no longer shows', async () => {
+    holidayId = (
+      await createEvent(prisma, superAdmin(), {
+        title: `${TAG} عطلة الأطفال`,
+        schedulingTypeId: holidayTypeId,
+        visibility: 'public',
+        startDate: day('2026-12-10'),
+        endDate: day('2026-12-20'),
+        recurrenceType: 'none',
+        branchIds: [branchId],
+        categoryIds: [children.categoryId],
+      })
+    ).event.id;
+    expect(await shown(ids.childWeekly, '2026-12-05')).toBe(true);
+    expect(await shown(ids.childWeekly, '2026-12-12')).toBe(false);
+    expect(await shown(ids.childWeekly, '2026-12-19')).toBe(false);
+    expect(await shown(ids.childWeekly, '2026-12-26')).toBe(true);
+    // Another Category, and an activity for «الكل», are not this holiday's.
+    expect(await shown(ids.women, '2026-12-12')).toBe(true);
+    expect(await shown(ids.everyone, '2026-12-12')).toBe(true);
+    const dates = await listCancelledDates(prisma, superAdmin(), ids.childWeekly);
+    expect(dates.map((d) => d.date.toISOString().slice(0, 10))).toEqual(['2026-12-12', '2026-12-19']);
+    expect(dates[0]!.reason).toContain('عطلة');
+  });
+
+  it('«إعادة البرمجة» shows the date again, and re-applying the holiday leaves it there', async () => {
+    await restoreCancelledDate(prisma, superAdmin(), ids.childWeekly, day('2026-12-12'));
+    expect(await shown(ids.childWeekly, '2026-12-12')).toBe(true);
+    const current = await prisma.event.findUniqueOrThrow({ where: { id: holidayId }, select: { version: true } });
+    await updateEvent(prisma, superAdmin(), holidayId, current.version, { endDate: day('2026-12-21') });
+    expect(await shown(ids.childWeekly, '2026-12-12')).toBe(true);
+    expect(await shown(ids.childWeekly, '2026-12-19')).toBe(false);
+  });
+
+  it('an activity edited onto the holiday is cancelled there; deleting the holiday gives every date back', async () => {
+    const before = await prisma.event.findUniqueOrThrow({ where: { id: ids.women }, select: { version: true } });
+    await updateEvent(prisma, superAdmin(), ids.women, before.version, { scope: { branchIds: [branchId], categoryIds: [children.categoryId] } });
+    expect(await shown(ids.women, '2026-12-19')).toBe(false);
+    await deleteEvent(prisma, superAdmin(), holidayId);
+    expect(await shown(ids.childWeekly, '2026-12-19')).toBe(true);
+    expect(await shown(ids.women, '2026-12-19')).toBe(true);
+    expect(await prisma.eventDateCancellation.count({ where: { cancelledByEventId: holidayId } })).toBe(0);
+  });
+
+  it('a holiday for every Category covers an activity for «الكل»', async () => {
+    const all = await prisma.category.findMany({ where: { deletedAt: null }, select: { id: true } });
+    const branches = await prisma.branch.findMany({ where: { deletedAt: null }, select: { id: true } });
+    const everywhere = (
+      await createEvent(prisma, superAdmin(), {
+        title: `${TAG} عطلة للجميع`,
+        schedulingTypeId: holidayTypeId,
+        visibility: 'public',
+        startDate: day('2026-12-26'),
+        endDate: null,
+        recurrenceType: 'none',
+        branchIds: branches.map((b) => b.id),
+        categoryIds: all.map((c) => c.id),
+      })
+    ).event.id;
+    expect(await shown(ids.everyone, '2026-12-26')).toBe(false);
+    await deleteEvent(prisma, superAdmin(), everywhere);
+    expect(await shown(ids.everyone, '2026-12-26')).toBe(true);
   });
 });
 

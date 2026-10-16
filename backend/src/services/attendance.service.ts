@@ -229,6 +229,12 @@ async function resolveOccurrence(
   if (!event) throw notFound;
   const mode = requireAttendanceMode(event.schedulingType?.attendanceMode);
   const date = requireEventOccurrenceDate(event, ref.date);
+  // R224 §2 — a date a holiday cancelled (and nobody rescheduled) does not occur.
+  const cancelled = await prisma.eventDateCancellation.findFirst({
+    where: { eventId: event.id, date, restoredAt: null },
+    select: { id: true },
+  });
+  if (cancelled) throw notFound;
   return {
     kind: 'event',
     id: event.id,
