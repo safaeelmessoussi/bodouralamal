@@ -899,7 +899,8 @@ describe('B-01 consent safeguarding', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(mint.status).toBe(200);
-    expect(await mint.json()).toMatchObject({ expires_in: 600 });
+    // R223 — a public item read in place has its stable address: nothing expires.
+    expect(await mint.json()).toMatchObject({ expires_in: null });
   });
 
   it('withdrawal raises the warning, leaves the public object readable and audits the change', async () => {
