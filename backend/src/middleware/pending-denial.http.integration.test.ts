@@ -198,6 +198,8 @@ const EXEMPT = new Set([
   "/programs",
   // Revision 36 (TD-3.10): the calendar screen's reference data, anonymous.
   "/calendar/bootstrap",
+  // R224 §4: the stored texts in the reader's language, read by the public pages.
+  "/translations",
   // R167 §2: which offset Morocco observes. It is a fact about the country, it
   // names nobody, and the sign-in and registration screens need it BEFORE there
   // is an account at all — so it is public, stated here on purpose.
