@@ -358,3 +358,4 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Migration `r224_event_date_cancellation` (`EventDateCancellation`: event, date, holiday, reason, `restored_at/by`; CHECKs not-self, restored-by-somebody).
 - `holiday-cancellation.service`: `applyHoliday` also writes/removes activity-date rows (`applyHolidayToActivities`); `applyHolidaysToActivity` on activity create/edit/Trash restore; «الكل» covered only by an all-covering holiday.
 - `readCalendar` skips unrestored cancelled dates; attendance refuses them; `GET /events/{id}/cancelled-dates`, `POST …/{date}/restore` (audited `event.date_restored`); `CancelledDatesDialog` («التواريخ الملغاة») in الجدولة; `ops:apply-holidays` reports activity dates.
+- Fix (CI): a holiday with hours covers only activities whose hours overlap; an activity with no hours only by a whole-day holiday (`scheduling-type-filter` caught an evening holiday cancelling all-day activities).

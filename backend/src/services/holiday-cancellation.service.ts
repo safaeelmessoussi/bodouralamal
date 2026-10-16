@@ -255,6 +255,7 @@ export async function applyHolidaysToSessions(
  * have hours, the branch and the Category meet. An activity's dimensions are
  * read as the calendar reads them (R169 §6): a Category named directly or
  * through a Level or a group, a branch named directly or through a group; a
+ * holiday with hours covers only an activity whose hours meet them; a
  * dimension it leaves empty is «الكل» — every Category, every branch — so it is
  * covered only by a holiday that covers them all. A holiday never cancels a
  * holiday. Each covered date is a row (`EventDateCancellation`); a restored
@@ -302,14 +303,11 @@ function coveredDates(holiday: HolidayCoverage, activity: Activity, universe: Un
   ]);
   if (!meets(holiday.categoryIds, categories, universe.categories)) return [];
   if (!meets(holiday.branchIds, branches, universe.branches)) return [];
-  if (
-    holiday.startTime !== null &&
-    holiday.endTime !== null &&
-    activity.startTime !== null &&
-    activity.endTime !== null &&
-    !timesOverlap(holiday.startTime, holiday.endTime, activity.startTime, activity.endTime)
-  ) {
-    return [];
+  // A holiday with hours covers only the activities whose hours meet them; an
+  // activity with no hours (the whole day) is covered by a whole-day holiday.
+  if (holiday.startTime !== null && holiday.endTime !== null) {
+    if (activity.startTime === null || activity.endTime === null) return [];
+    if (!timesOverlap(holiday.startTime, holiday.endTime, activity.startTime, activity.endTime)) return [];
   }
   const first = holiday.startDate;
   const last =
