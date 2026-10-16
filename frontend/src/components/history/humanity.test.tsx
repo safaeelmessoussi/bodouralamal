@@ -87,7 +87,7 @@ describe('R203 — «نظرة شاملة», the content from the Owner’s board
     const fatiha = surahs.find((s) => s.surah === 1)!;
     const verses = fatiha.diagrams![0]!.root.children!.map((v) => v.text);
     expect(verses).toEqual(['الآية 1', 'الآية 2 — الرحمة', 'الآية 3 — المُلك', 'الآية 4', 'الآية 5 — طلب الهداية بصفة الرحمة', 'الآية 6 — أهل العلم والعمل', 'الآية 7']);
-    expect(fatiha.diagrams!.map((d) => d.title)).toEqual(['الآيات وما تحتها', 'التوحيد في السورة', 'أقسام الناس', 'مدار الأسماء والصفات', 'الحمد والشكر والتسبيح', 'مراتب العلم']);
+    expect(fatiha.diagrams!.map((d) => d.title)).toEqual(['خطاطة السورة', 'التوحيد في السورة', 'أقسام الناس', 'مدار الأسماء والصفات', 'الحمد والشكر والتسبيح', 'مراتب العلم']);
   });
 
   it('R204 — the Owner’s additions: عام الجماعة opens the Umayyad era, al-Nasa’i has his text', () => {
@@ -327,5 +327,17 @@ describe('R203 — the page', () => {
     expect(html).not.toContain('humanity__steps');
     expect(html).toMatch(/humanity__crumb is-back[^>]*>(?:(?!<\/button>).)*المرحلة المكية/s);
     expect(html).not.toContain('aria-current="location"');
+  });
+});
+
+describe('R223 — every Surah with diagrams opens on «خطاطة السورة»', async () => {
+  const { SURAH_DIAGRAMS } = await import('./surah-diagrams.js');
+  it('its first diagram, for every Surah that has any; Maryam\'s holds its five parts', () => {
+    for (const surah of SURAH_DIAGRAMS.values()) {
+      if (surah.diagrams.length > 0) expect(surah.diagrams[0]!.title, surah.name).toBe('خطاطة السورة');
+    }
+    const maryam = SURAH_DIAGRAMS.get(19)!;
+    expect(maryam.diagrams[0]!.root.children).toHaveLength(5);
+    expect(maryam.diagrams.slice(1).map((d) => d.root.label)).toEqual(maryam.diagrams[0]!.root.children!.map((c) => c.label));
   });
 });

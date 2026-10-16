@@ -77,7 +77,7 @@ export function SurahPage({
           </h3>
           <div className="humanity__diagrams surah-library__diagrams">
             {profile.diagrams.map((diagram) => (
-              <HumanityDiagram key={diagram.title} diagram={diagram} />
+              <HumanityDiagram key={diagram.title} diagram={diagram} heading={title} />
             ))}
           </div>
         </section>

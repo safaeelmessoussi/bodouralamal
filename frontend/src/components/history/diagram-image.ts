@@ -146,14 +146,15 @@ function depthOf(laid: Laid): number {
 }
 
 /** Draws the whole tree, every branch open, and returns it as a PNG. */
-export async function diagramPng(diagram: HistoryDiagram): Promise<Blob> {
+export async function diagramPng(diagram: HistoryDiagram, heading?: string): Promise<Blob> {
   await document.fonts.ready;
   const palette = readTokens();
   const rtl = (document.documentElement.dir || 'rtl') === 'rtl';
   const measure = document.createElement('canvas').getContext('2d')!;
   measure.direction = rtl ? 'rtl' : 'ltr';
   const tree = layout(measure, palette.font, diagram.root, 0, 0, 'none');
-  const titleHeight = 30 + 16;
+  // R223 — the Surah's name as the title, the diagram's own as the subtitle.
+  const titleHeight = heading ? 30 + 26 + 16 : 30 + 16;
   place(tree, MARGIN + titleHeight);
 
   const columns = depthOf(tree) + 1;
@@ -177,7 +178,12 @@ export async function diagramPng(diagram: HistoryDiagram): Promise<Blob> {
   ctx.fillStyle = palette.ink;
   ctx.font = `700 22px ${palette.font}`;
   ctx.textAlign = rtl ? 'right' : 'left';
-  ctx.fillText(diagram.title, rtl ? width - MARGIN : MARGIN, MARGIN);
+  ctx.fillText(heading ?? diagram.title, rtl ? width - MARGIN : MARGIN, MARGIN);
+  if (heading) {
+    ctx.fillStyle = palette.muted;
+    ctx.font = `600 18px ${palette.font}`;
+    ctx.fillText(diagram.title, rtl ? width - MARGIN : MARGIN, MARGIN + 32);
+  }
 
   const draw = (laid: Laid): void => {
     const colours = palette.tones[laid.tone];
@@ -236,13 +242,14 @@ export async function diagramPng(diagram: HistoryDiagram): Promise<Blob> {
   });
 }
 
-/** Saves the PNG under the diagram's title. */
-export async function downloadDiagram(diagram: HistoryDiagram): Promise<void> {
-  const blob = await diagramPng(diagram);
+/** Saves the PNG as «{Surah} — {diagram}». */
+export async function downloadDiagram(diagram: HistoryDiagram, heading?: string): Promise<void> {
+  const blob = await diagramPng(diagram, heading);
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${diagram.title.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'diagram'}.png`;
+  const name = heading ? `${heading} — ${diagram.title}` : diagram.title;
+  link.download = `${name.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'diagram'}.png`;
   document.body.appendChild(link);
   link.click();
   link.remove();

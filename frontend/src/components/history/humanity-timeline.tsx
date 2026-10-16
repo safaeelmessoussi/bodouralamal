@@ -219,7 +219,7 @@ export function HumanityTimeline({
             {node.diagrams && node.diagrams.length > 0 ? (
               <div className="humanity__diagrams">
                 {node.diagrams.map((diagram) => (
-                  <HumanityDiagram key={diagram.title} diagram={diagram} />
+                  <HumanityDiagram key={diagram.title} diagram={diagram} heading={node.title} />
                 ))}
               </div>
             ) : null}

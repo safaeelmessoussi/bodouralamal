@@ -349,3 +349,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `surah-page.tsx` AudioTrack: direct player for `stream_url` (`preload="none"`), place kept in `localStorage`, renew-and-resume on error or early end (≤3). `diagram-image.ts`: canvas PNG of the whole tree.
 - `content.tsx`: Global-only branch option removed, branch/Surah filtered server-side, Surah filter «الكل»/«بدون»; upload «الظهور» «عام» from the start; `BranchScopeField` one dropdown «الكل»; `GroupDialog` Level → branch → name.
 - `ops:apply-holidays` (DRY_RUN) — R199 §5 over every live holiday, one audit row each; TASKS E14–E17.
+
+## 2026-10-16 — SRS Revision 224 §1: «خطاطة السورة» first, image titled by the Surah
+- `humanity-data.ts`: al-Fatiha's «الآيات وما تحتها» → «خطاطة السورة»; Maryam gains d0 «خطاطة السورة» (its five parts as branches); six content locales re-keyed (Maryam d{n} → d{n+1}, new d0 from the parts).
+- `diagram-image.ts`: `heading` (the Surah) as title, the diagram as subtitle; file «{Surah} — {diagram}.png».

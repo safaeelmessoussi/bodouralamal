@@ -21,9 +21,12 @@ import {
  */
 export function HumanityDiagram({
   diagram,
+  heading,
   startOpen = false,
 }: {
   diagram: HistoryDiagram;
+  /** R223 — the Surah the diagram is of: the downloaded image's title. */
+  heading?: string;
   /** Every branch open from the start, as «فتح الكل» leaves it (a static render). */
   startOpen?: boolean;
 }): ReactNode {
@@ -63,7 +66,7 @@ export function HumanityDiagram({
             <button
               type="button"
               className="hdiagram__action hdiagram__action--download"
-              onClick={() => void downloadDiagram(diagram).catch(() => undefined)}
+              onClick={() => void downloadDiagram(diagram, heading).catch(() => undefined)}
             >
               {t("content.history.diagram.downloadImage")}
             </button>
