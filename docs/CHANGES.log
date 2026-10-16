@@ -363,3 +363,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-16 — SRS Revision 224 §3: the platform's one dropdown
 - `ui/dropdown.tsx` `Dropdown` (trigger + in-flow panel, search past `SEARCH_THRESHOLD` 30, arrows/Home/End/Escape, hidden native `<select>` in step carrying the field id); `SelectField`, `SearchableSelect` (✕ withdrawn: the empty choice is the list's first line) and the library/content/circle filters draw through it.
 - `MultiSelectField`: search past 30, «تحديد الكل / إلغاء التحديد»; empty-choice words: «اختيار…» required, «بدون» optional; `LevelSelect required` in the group, circle and enrolment forms; six placeholders → «اختيار…», «صاحب المحتوى» «بدون».
+
+## 2026-10-16 — SRS Revision 224 §4: the stored texts in the reader's language
+- Migration `r224_text_translation` (`TextTranslation`: source, locale, text, origin; CHECKs locale/origin/non-empty); `GET /translations?locale=` (public, 5-min cache); `ops:import-translations` (DRY_RUN; keeps `manual` rows) from `ops/data/translations-r224.ts`.
+- Frontend `lib/data-translation.ts`: exact → pattern → separators → words; `surah:`/`word:` keys by context; `api()` GET responses pass through it on the public pages (`prepareLocale` loads the dictionary).
+- 286 Production texts + 114 Surahs + patterns translated by six translator agents (312 distinct texts each; «النساء»/«الجمعة» split by kind).
+- Header: on a left-to-right page the burger stays up to 100rem (the French signed-in bar measured ~1550px and scrolled the page sideways); `check-header-nav-exclusive.sh` checks a `[dir=…]` block flips both navigations together. «حسب السورة» list: diagram-only Surah names translated.

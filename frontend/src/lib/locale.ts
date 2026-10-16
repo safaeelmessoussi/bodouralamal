@@ -4,6 +4,7 @@ import {
 } from '../components/history/humanity-i18n.js';
 import { LOCALES, applyLocale, type FlatCatalog, type Locale } from '../i18n/index.js';
 import { resolveRoute } from './route.js';
+import { setDataDictionary } from './data-translation.js';
 
 /**
  * **SRS Revision 209 — which language a page reads in.**
@@ -107,13 +108,18 @@ export async function prepareLocale(): Promise<Locale> {
   let catalog: FlatCatalog | null = null;
   if (wanted !== 'ar') {
     try {
-      const [ui, content] = await Promise.all([
+      const [ui, content, data] = await Promise.all([
         CATALOGS[`../i18n/locales/${wanted}.json`]?.(),
         resolveRoute(pathname) === 'resources'
           ? CONTENT[`../components/history/locales/${wanted}.json`]?.()
           : undefined,
+        // R224 §4 — the stored texts (names, titles) in this language.
+        fetch(`/api/v1/translations?locale=${encodeURIComponent(wanted)}`)
+          .then((r) => (r.ok ? (r.json() as Promise<{ data: Record<string, string> }>) : null))
+          .catch(() => null),
       ]);
       catalog = ui ?? null;
+      setDataDictionary(catalog ? (data?.data ?? null) : null);
       setHumanityDictionary(catalog ? (content ?? null) : null);
     } catch {
       catalog = null;

@@ -15,6 +15,7 @@
  *     signed payload alone and rejects a body that carries `email` at all.
  */
 import { refreshAccessToken } from './token-refresh.js';
+import { translateDeep } from './data-translation.js';
 
 export interface ApiOptions {
   token?: string | null;
@@ -115,7 +116,9 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     throw new ApiError(response.status, envelope);
   }
   if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  // R224 §4 — a public page in another language reads the stored texts in it.
+  const parsed = (await response.json()) as T;
+  return method === 'GET' ? translateDeep(parsed) : parsed;
 }
 
 /** The TD-3.8 envelope's payload. */

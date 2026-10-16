@@ -2299,6 +2299,37 @@
         }
       }
     },
+    "/translations": {
+      "get": {
+        "summary": "The stored texts in one language",
+        "description": "SRS Revision 224 §4. **Public**, like the pages that read it: `?locale=` one of `en` `fr` `es` `de` `zgh` `shi-Latn`. Returns `{ data: { \"<Arabic text>\": \"<translation>\" } }` — names and titles the platform stores (Categories, Levels, Subjects, branches, groups, circles, types, activity, content and exam titles, Surah names) and the patterns of the titles the server composes (`{x}` placeholders, e.g. «سورة {surah}»). A text with no entry stays Arabic; a person's name is never in it. `Cache-Control: public, max-age=300`.",
+        "responses": {
+          "200": {
+            "description": "The dictionary."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown locale.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/events": {
       "get": {
         "summary": "List event definitions",

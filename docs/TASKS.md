@@ -68,11 +68,12 @@ Ends when the Moroccan VPS exists: restore there, OVH returns to Staging, the si
 | E5 | Restate `verify-assessment-library.sh` against R136's source/occurrence split (stale, 24/31) | S |
 | E6 | `verify-backup-restore.sh` into hosted CI; integration/backup stacks off ephemeral host ports (55438, 58083, 59005, 59006) | S |
 | E7 | «حالة النظام»: backup freshness + certificate expiry via a host-published status file (blocked on D7) | M |
-| E12 | R209–R219 translations: the Owner reviews en/fr/es/de; a native speaker reviews `zgh` (Tifinagh) and `shi-Latn` (Tachelhit) — `frontend/src/i18n/locales/*.json`, `components/history/locales/*.json` | M |
+| E12 | R209–R224 translations (incl. the stored texts, `backend/src/ops/data/translations-r224.ts`; Level names and Amazigh choices flagged by the translators): the Owner reviews en/fr/es/de; a native speaker reviews `zgh` (Tifinagh) and `shi-Latn` (Tachelhit) — `frontend/src/i18n/locales/*.json`, `components/history/locales/*.json` | M |
 | E13 | **LATER (Owner, 2026-10-12)** — admin data chatbot (Arabic questions about the database, R215 §5): waits for the AI provider and the personal-data decision (Moroccan law 09-08: names/grades leaving the server); when built, admins answered within their own branches, every question audited | L |
-| E14 | **Production — run once after deploying R224** (Owner-approved 2026-10-16): `ops:apply-holidays` with `DRY_RUN=1`, read the list, then without it — cancels the classes and activity dates of the eight holidays entered before R199 | S |
+| E14 | **Production — run once after deploying R224** (Owner-approved 2026-10-16): `ops:apply-holidays` and `ops:import-translations`, each with `DRY_RUN=1` first, then without | S |
 | E16 | Dropdown rules (R224 §3) — built in the shared components; remaining: circles and teacher lists narrowed by a chosen branch where they have their own loaders, and a per-screen review of each optional list's «بدون»/«الكل» | M |
-| E17 | Automatic translation of admin-entered data into the reader's language (Owner, 2026-10-16) — provider choice (self-hosted vs external; data leaves the server?) is the Owner's | L |
+| E17 | Translation of FUTURE texts (R224 §4 built the store and the 2026-10-16 import): a free automatic translator does not fit the 4 GB server (LibreTranslate ≈1–1.5 GB beside recording; no Amazigh) — Owner to choose: a periodic «untranslated texts» list translated on request and re-imported, or a larger server | M |
+| E18 | **Production disk 99% full** (38 GB, 549 MB free, 2026-10-16): find and free space (old release images, logs, backups) — Owner's authorisation | S |
 | E10 | Tables (R198 §6 built the rest): server sort still missing for columns that are sets or derived — users (e-mail, roles, branches), approvals (type, bundle, branch, requested, framing; three sources merged per page), Trash (record label in per-entity JSONB, purgeable/restorable) — they sort on screen only once one page holds the whole list; add the «maximum related details» columns per table — which columns is the Owner's per table | M |
 
 ## Launch gate (§18/§19 — when go-live is lifted)

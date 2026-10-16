@@ -4,6 +4,7 @@ import type { ContentItem, LibraryEntry } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
 import { SURAH_DIAGRAMS, type SurahDiagrams } from '../history/surah-diagrams.js';
 import { SurahPage, type SurahItem } from './surah-page.js';
+import { translateText } from '../../lib/data-translation.js';
 
 /**
  * **«حسب السورة» — the library read by Surah** (SRS Revision 196).
@@ -71,7 +72,8 @@ export function withDiagramSurahs(
 ): SurahGroup[] {
   const all = new Map(groups.map((group) => [group.id, group]));
   for (const { surah, name } of diagrams.values()) {
-    if (!all.has(surah)) all.set(surah, { id: surah, name, items: [] });
+    // R224 §4 — the Surah's name in the reader's language (it is Arabic in the tree's data).
+    if (!all.has(surah)) all.set(surah, { id: surah, name: translateText(name, 0, true), items: [] });
   }
   return [...all.values()].sort((a, b) => a.id - b.id);
 }

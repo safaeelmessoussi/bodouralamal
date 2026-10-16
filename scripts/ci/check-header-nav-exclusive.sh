@@ -90,6 +90,12 @@ def display_rules(selector):
         start = css.index("{", at)
         end = css.index("}", start)
         body = css[start + 1:end]
+        # R224 §4 — a rule scoped to a reading direction (`[dir='ltr'] …`) is a
+        # per-language exception, checked as a whole block below.
+        head_start = max(css.rfind("}", 0, at), css.rfind("{", 0, at)) + 1
+        if "[dir=" in css[head_start:at]:
+            index = end
+            continue
         m = re.search(r"(?:^|;)\s*display:\s*([a-z-]+)", body)
         if m:
             before = css[:at]
@@ -129,6 +135,18 @@ for wide, label in ((False, "narrow"), (True, "wide")):
         failures.append("narrow: the horizontal navigation must not render")
     if wide and actions != "flex":
         failures.append(f"wide: desktop actions should be flex, got {actions}")
+
+# R224 §4 — a direction-scoped block must flip BOTH navigations together:
+# the bar hidden and the burger shown, so one navigation shows at every width.
+for m in re.finditer(r"\[dir='(ltr|rtl)'\]\s*\.app-header__burger\s*\{([^}]*)\}", css):
+    block_start = css.rfind("@media", 0, m.start())
+    block = css[block_start:m.end()]
+    for selector in (".app-header__nav", ".app-header__actions--desktop"):
+        hidden = re.search(r"\[dir='" + m.group(1) + r"'\]\s*" + re.escape(selector) + r"[^{]*\{[^}]*display:\s*none", block)
+        if not hidden:
+            failures.append(f"[dir={m.group(1)}] shows the burger without hiding {selector}")
+    if not re.search(r"display:\s*inline-flex", m.group(2)):
+        failures.append(f"[dir={m.group(1)}] block does not show the burger")
 
 if failures:
     print("FAIL: header navigation exclusivity (frontend/src/styles.css)")

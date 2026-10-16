@@ -234,6 +234,22 @@
   }
 }
 
+/* R224 §4 — a translated page (left to right) has longer words: the French
+ * bar of a signed-in page measured ~1550px, so between 60rem and 100rem it
+ * keeps the burger, exactly one navigation still showing at every width. */
+@media (min-width: 60rem) and (max-width: 99.99rem) {
+  html[dir='ltr'] .app-header__nav,
+  html[dir='ltr'] .app-header__actions--desktop {
+    display: none;
+  }
+  html[dir='ltr'] .app-header__burger {
+    display: inline-flex;
+  }
+  html[dir='ltr'] .app-header__actions--mobile {
+    display: flex;
+  }
+}
+
 /* ── Mobile menu ─────────────────────────────────────────────────────────── */
 
 /* The sheet under the bar keeps the bar's ground, so opening it reads as the

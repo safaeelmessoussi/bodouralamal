@@ -4541,3 +4541,23 @@ model TeacherAvailability {
   @@index([userId, weekday])
   @@map("teacher_availability")
 }
+
+/// **SRS Revision 224 §4 — the translation of a text the platform stores**
+/// (the Owner, 2026-10-16: «everything in the platform translated to the
+/// language chosen by the user … without making the admin enter the data in
+/// all languages»). Keyed by the Arabic TEXT itself, not by a row, so the same
+/// name reads the same wherever it appears (a Level in a filter, on a chip, in
+/// a composed title). `{x}` in a source is a pattern («سورة {surah}»). Read by
+/// the public pages in the reader's language; a text with no translation
+/// stays Arabic. `origin` says who made it: `initial` (the R224 import),
+/// `manual` (corrected by a person), `machine` (a future automatic one).
+model TextTranslation {
+  source    String   @db.Text
+  locale    String   @db.VarChar(16)
+  text      String   @db.Text
+  origin    String   @default("initial") @db.VarChar(16)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([locale, source])
+  @@map("text_translation")
+}

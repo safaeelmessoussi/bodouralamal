@@ -29,6 +29,7 @@ import * as assessments from './controllers/assessment.controller.js';
 import * as onlineClassCtl from './controllers/online-class.controller.js';
 import * as recordingCtl from './controllers/session-recording.controller.js';
 import * as libraryCtl from './controllers/library.controller.js';
+import * as translationCtl from './controllers/translation.controller.js';
 import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
 import * as schedulingTypes from './controllers/scheduling-type.controller.js';
@@ -331,6 +332,8 @@ export function createApp(
   // TD-3.10 (Revision 36): the calendar screen's reference data in one read.
   // Public and cacheable; mounted before the guarded router for that reason.
   api.get('/calendar/bootstrap', calendarBootstrap.read(prisma));
+  // R224 §4 — the stored texts in the reader's language (public, cached).
+  api.get('/translations', translationCtl.read(prisma));
   // R167 §2 — Morocco's current official offset, from the host's zone database.
   api.get('/clock', clock.read());
   // R175 §2 — what the public chrome may offer on THIS deployment. Public,
