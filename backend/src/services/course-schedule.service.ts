@@ -1530,7 +1530,7 @@ export async function updateCourseSchedule(
     }
     const roomId = data.roomId === undefined ? existing.roomId : data.roomId;
     const roomBranchId = roomId
-      ? ((await prisma.room.findFirst({ where: { id: roomId }, select: { branchId: true } }))?.branchId ?? null)
+      ? ((await prisma.room.findFirst({ where: { id: roomId, deletedAt: null }, select: { branchId: true } }))?.branchId ?? null)
       : null;
     branchId =
       namedBranches.length === 1
