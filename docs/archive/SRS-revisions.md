@@ -5,6 +5,8 @@
 Moved out of `docs/SRS.md` on 2026-09-25 (Owner decision, cleanup). Each entry is the Document Owner's decision as recorded at the time; the normative clauses in `docs/SRS.md` cite them by number. Historical — not loaded by default (CLAUDE.md).
 
 
+**Revision 227 (Document Owner, 2026-10-17 — «in تعديل العنصر, i changed the branch from targa to amerchich, the change was saved, but that event still appears in the calendar as targa one, and filtering targa one includes it as targa one»):** **BUILT.** A class re-addressed to branches none of which is its own moves with its audience — the one branch named, else its room's when among them, else the first, as a creation chooses — so «الفرع», the branch filters and the calendar read it there (every occurrence reads the class's branch). Moving a class is the administration's (in the new branch too); its room must be of that branch. An unchanged form re-saved sends the audience when it disagrees with the class's branch, so a class already in that state is put right by saving it again.
+
 **Revision 226 (Document Owner, 2026-10-17 — «the width of the elements in the drop downs in the laptop view is too small making it not readable»):** **BUILT.** An open list is as wide as its longest choice — never narrower than its control, never wider than 24rem or the screen — and lines up with the control's other edge when it would leave the screen.
 
 **Revision 225 (Document Owner, 2026-10-17 — «the drop downs now when opened move the whole page down, while they need only to hover over what is below them»):** **BUILT.** An open list floats over what is below it (the page no longer moves) and opens upward when the screen has no room below.

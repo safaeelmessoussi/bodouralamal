@@ -1506,6 +1506,46 @@ export async function updateCourseSchedule(
     );
   }
 
+  /**
+   * **R227 (Owner-reported, 2026-10-17) — the class follows its audience to
+   * another branch.** «تعديل العنصر» changed «فروع» from تاركة to أمرشيش and
+   * the class stayed a تاركة class: its own `branch_id` (what «الفرع», the
+   * branch filter and an Admin's scope read) was frozen while its audience
+   * moved. When the audience names branches and none is the class's own, the
+   * class moves with it — the one branch named, else the room's when it is
+   * among them, else the first — exactly as a creation chooses
+   * (`homeBranchOf`). Every occurrence reads the class's branch, so they all
+   * follow. Moving a class is the administration's, in the new branch too,
+   * and its room must be one of that branch.
+   */
+  const namedBranches = [...new Set(data.dimensions?.branchIds ?? [])];
+  let branchId = existing.branchId;
+  if (
+    existing.teachingMode === "multi_dimension" &&
+    namedBranches.length > 0 &&
+    !namedBranches.includes(existing.branchId)
+  ) {
+    if (selfServiceTeacher) {
+      throw new AppError("FORBIDDEN", "moving a class to another branch is the administration's");
+    }
+    const roomId = data.roomId === undefined ? existing.roomId : data.roomId;
+    const roomBranchId = roomId
+      ? ((await prisma.room.findFirst({ where: { id: roomId }, select: { branchId: true } }))?.branchId ?? null)
+      : null;
+    branchId =
+      namedBranches.length === 1
+        ? namedBranches[0]!
+        : roomBranchId !== null && namedBranches.includes(roomBranchId)
+          ? roomBranchId
+          : namedBranches[0]!;
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId, "no such branch");
+    if (roomId && roomBranchId !== branchId) {
+      throw new AppError("VALIDATION_FAILED", "the room belongs to another branch than the class's new one", {
+        reason: "ROOM_BRANCH_MISMATCH",
+      });
+    }
+  }
+
   const horizon = await horizonFor(prisma, now);
 
   return prisma.$transaction(async (tx) => {
@@ -1527,7 +1567,8 @@ export async function updateCourseSchedule(
     );
 
     const merged = {
-      branchId: existing.branchId,
+      // R227 — the branch the class will have after this edit.
+      branchId,
       roomId: data.roomId === undefined ? existing.roomId : data.roomId,
       startTime: data.startTime ?? existing.startTime,
       endTime: data.endTime ?? existing.endTime,
@@ -1606,6 +1647,8 @@ export async function updateCourseSchedule(
         roomId: delivery.roomId,
         deliveryMode: delivery.deliveryMode,
         onlineMediaMode: delivery.onlineMediaMode,
+        // R227 — moved with its audience, when it was.
+        ...(branchId === existing.branchId ? {} : { branchId }),
         // R109 — absent means *leave the tier as it is*, never *reset it to the
         // default*. That distinction is exactly the one NEW B §A found broken on
         // the Event form, where the wrong value and the intended default were
@@ -1668,7 +1711,7 @@ export async function updateCourseSchedule(
         tx,
         "multi_dimension",
         undefined,
-        existing.branchId,
+        branchId,
         data.dimensions,
         existing.subjectId ?? undefined,
       );
@@ -1814,6 +1857,8 @@ export async function updateCourseSchedule(
         delivery_mode: delivery.deliveryMode,
         online_media_mode: delivery.onlineMediaMode,
         room_id: delivery.roomId,
+        // R227 — the branch, old→new, when the class moved with its audience.
+        ...(branchId === existing.branchId ? {} : { branch_moved: { from: existing.branchId, to: branchId } }),
         // R109 — old→new, and only when it actually moved. A row that records
         // the tier on every edit would bury the one edit that changed it.
         ...(data.visibility !== undefined &&

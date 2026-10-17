@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { readCalendar, type CalendarQuery } from "./calendar.service.js";
-import { listCourseSchedules } from "./course-schedule.service.js";
+import { listCourseSchedules, updateCourseSchedule } from "./course-schedule.service.js";
 import { listEvents } from "./event.service.js";
 import {
   clearTeachingContext,
@@ -313,5 +313,52 @@ describe("R221 — the scheduling list narrows by Category, Level, group and cir
     expect(ids).toContain(forLevel.id);
     expect(ids).toContain(forEveryone.id);
     expect(ids).not.toContain(forOtherCategory.id);
+  });
+});
+
+/**
+ * **R227 (Owner-reported, 2026-10-17) — a class follows its audience to
+ * another branch.** «فروع» changed from تاركة to أمرشيش, saved, and the class
+ * was still a تاركة class on the calendar and under the تاركة filter.
+ */
+describe("R227 — re-addressing a class to another branch moves the class", () => {
+  it("the class's own branch follows the one branch its audience now names, and only then", async () => {
+    const admin = await prisma.user.create({ data: { nameArabic: `${TAG} مشرفة`, sex: "female", accountStatus: "active" } });
+    const superAdmin = {
+      userId: admin.id,
+      roles: ["super_admin"],
+      roleScopes: [{ role: "super_admin", branches: null }],
+    } as never;
+    const other = await makeBranch("فرع آخر");
+    const sessionId = await multiDimensionClass(ctx, { levelIds: [ctx.levelId] });
+    const { scheduleId } = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { scheduleId: true } });
+    await prisma.courseScheduleBranch.create({ data: { scheduleId, branchId: ctx.branchId } });
+
+    // Re-addressed within its own branch: it stays.
+    await updateCourseSchedule(prisma, superAdmin, scheduleId, {
+      version: 0,
+      dimensions: { branchIds: [ctx.branchId], levelIds: [ctx.levelId] },
+    } as never);
+    expect((await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id: scheduleId } })).branchId).toBe(ctx.branchId);
+
+    // Re-addressed to another branch: it moves, and the filters read it there.
+    const v = (await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id: scheduleId } })).version;
+    await updateCourseSchedule(prisma, superAdmin, scheduleId, {
+      version: v,
+      dimensions: { branchIds: [other], levelIds: [ctx.levelId] },
+    } as never);
+    expect((await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id: scheduleId } })).branchId).toBe(other);
+    const ids = async (branchId: string) =>
+      (await listCourseSchedules(prisma, superAdmin, { branchId, pageSize: 100 })).data.map((r) => r.id);
+    expect(await ids(other)).toContain(scheduleId);
+    expect(await ids(ctx.branchId)).not.toContain(scheduleId);
+    expect(
+      (await readCalendar(prisma, null, { ...range, branchId: ctx.branchId })).map((o) => o.id),
+    ).not.toContain(sessionId);
+
+    await prisma.recurringCourseSchedule.update({ where: { id: scheduleId }, data: { branchId: ctx.branchId } });
+    await prisma.courseScheduleBranch.deleteMany({ where: { scheduleId } });
+    await prisma.auditLog.deleteMany({ where: { actorUserId: admin.id } });
+    await prisma.user.delete({ where: { id: admin.id } });
   });
 });

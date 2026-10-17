@@ -216,10 +216,10 @@ describe('the submitted scope carries every dimension the reader chose, combined
     }
   });
 
-  it('R176 §2 — on edit the scope is sent only when it changed', () => {
+  it('R176 §2 — on edit the scope is sent only when it changed (R227: or when it names branches the class is not in)', () => {
     expect(source).toContain('editing && !scopeChanged');
     expect(source).toMatch(/scope:\s*\n[\s\S]{0,400}editing && !scopeChanged\s*\n\s*\? undefined/);
-    expect(source).toMatch(/mode === 'multi_dimension'\s*\n\s*\? editing && !scopeChanged\s*\n\s*\? \{\}/);
+    expect(source).toMatch(/mode === 'multi_dimension'\s*\n\s*\? editing &&\s*\n\s*!scopeChanged &&[\s\S]{0,300}!audienceSelection\.branchIds\.includes\(item\.ids\.branchId\)[\s\S]{0,40}\? \{\}/);
   });
 });
 

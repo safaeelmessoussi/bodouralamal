@@ -2416,9 +2416,17 @@ export function SchedulingDialog({
                   ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
                 ],
           teachingMode: mode,
-          // R176 §2 — on edit, the audience travels only when it changed.
+          // R176 §2 — on edit, the audience travels only when it changed, or
+          // (R227) when it names branches the class itself is not in: the
+          // server then moves the class with it.
           ...(mode === 'multi_dimension'
-            ? editing && !scopeChanged
+            ? editing &&
+              !scopeChanged &&
+              !(
+                audienceSelection.branchIds.length > 0 &&
+                item?.ids.branchId != null &&
+                !audienceSelection.branchIds.includes(item.ids.branchId)
+              )
               ? {}
               : { dimensions: audienceDimensions(audienceSelection) }
             : { targetId }),

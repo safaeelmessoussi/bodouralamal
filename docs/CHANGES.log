@@ -377,3 +377,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-17 — SRS Revision 226: readable open lists
 - `forms.css` `.dropdown-select__panel`: `inline-size: max-content`, `min-inline-size: 100%`, `max-inline-size: min(24rem, 100vw − gutters)`, start-aligned; `.aligns-end` when `fitPanel()` (dropdown.tsx, on open) finds it off-screen.
 - Verified 1848 px: the Level filter's list 88 → 384 px, choices on one line; 390 px: inside the screen.
+
+## 2026-10-17 — SRS Revision 227: a class follows its audience to another branch
+- `updateCourseSchedule`: a `multi_dimension` edit naming branches that exclude the class's own moves `branch_id` (one named → it; else the room's if named; else the first); FORBIDDEN for a teacher-only actor; Admin scope on the new branch; `ROOM_BRANCH_MISMATCH` when the room stays elsewhere; audited `branch_moved`.
+- `scheduling.tsx`: on edit the audience is also sent when it names branches the class is not in (re-saving puts an existing class right).
+- Verified: `calendar-r176` R227 case (filters and calendar read the new branch), course-schedule suites.
