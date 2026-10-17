@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ChoiceField, FieldShell } from './field.js';
-import { SEARCH_THRESHOLD } from './dropdown.js';
+import { opensUp, SEARCH_THRESHOLD } from './dropdown.js';
 import { Icon } from './icon.js';
 import { useDisclosure } from '../../lib/use-disclosure.js';
 import { t } from '../../i18n/index.js';
@@ -79,6 +79,7 @@ export function MultiSelectField({
   const { open, toggle, containerRef } = useDisclosure<HTMLDivElement>();
   const [query, setQuery] = useState('');
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const [up, setUp] = useState(false);
 
   /**
    * **The closed control names WHAT was chosen** (Owner, 2026-09-20 — SRS
@@ -111,7 +112,7 @@ export function MultiSelectField({
   return (
     <FieldShell label={label} error={error} hint={hint} required={required}>
       {({ id, describedBy }) => (
-        <div className="dropdown-select multi-select" ref={containerRef}>
+        <div className={up ? 'dropdown-select multi-select opens-up' : 'dropdown-select multi-select'} ref={containerRef}>
           <button
             id={id}
             ref={triggerRef}
@@ -122,7 +123,10 @@ export function MultiSelectField({
             disabled={disabled}
             aria-invalid={error ? true : undefined}
             aria-describedby={describedBy}
-            onClick={toggle}
+            onClick={() => {
+              if (!open) setUp(opensUp(containerRef.current));
+              toggle();
+            }}
           >
             <span className="dropdown-trigger__label" title={summary}>
               {summary}

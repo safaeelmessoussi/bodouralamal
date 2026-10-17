@@ -369,3 +369,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Frontend `lib/data-translation.ts`: exact → pattern → separators → words; `surah:`/`word:` keys by context; `api()` GET responses pass through it on the public pages (`prepareLocale` loads the dictionary).
 - 286 Production texts + 114 Surahs + patterns translated by six translator agents (312 distinct texts each; «النساء»/«الجمعة» split by kind).
 - Header: on a left-to-right page the burger stays up to 100rem (the French signed-in bar measured ~1550px and scrolled the page sideways); `check-header-nav-exclusive.sh` checks a `[dir=…]` block flips both navigations together. «حسب السورة» list: diagram-only Surah names translated.
+
+## 2026-10-17 — SRS Revision 225: open lists float
+- `forms.css`: `.dropdown-select` relative, `.dropdown-select__panel` absolute (z-index 30, `--shadow-md`), `.opens-up` above the trigger; `opensUp()` (dropdown.tsx) read on open by `Dropdown` and `MultiSelectField`.
+- Verified: group dialog — the next field moved 0 px, the list on top; calendar filters — the grid moved 0 px.

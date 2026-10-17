@@ -75,6 +75,7 @@ export function Dropdown({
   const [query, setQuery] = useState('');
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const [up, setUp] = useState(false);
 
   const chosen = options.find((o) => o.value === value) ?? null;
   const searchable = options.length > searchThreshold;
@@ -98,6 +99,7 @@ export function Dropdown({
 
   function openPanel(focusFirst: boolean): void {
     if (disabled) return;
+    setUp(opensUp(containerRef.current));
     setOpen(true);
     if (focusFirst && !searchable) {
       window.setTimeout(() => {
@@ -136,7 +138,7 @@ export function Dropdown({
   // R224 §3 — nothing chosen reads «اختيار…» when an answer is required, «بدون» otherwise.
   const shown = chosen ? chosen.label : (placeholder ?? t(required ? 'common.choose' : 'common.noneChosen'));
   return (
-    <div className={`dropdown-select single-select ${className}`.trim()} ref={containerRef}>
+    <div className={`dropdown-select single-select ${up ? 'opens-up' : ''} ${className}`.replace(/\s+/g, ' ').trim()} ref={containerRef}>
       {/* In step with the trigger, for whatever drives the form through it. */}
       <select
         id={id}
@@ -268,4 +270,15 @@ function fold(text: string): string {
     .replace(/[أإآ]/g, 'ا')
     .replace(/ى/g, 'ي')
     .replace(/ة/g, 'ه');
+}
+
+/**
+ * R225 — whether a list opened here should open upward: too little room below
+ * on the screen, and more above. Read when the list opens.
+ */
+export function opensUp(container: HTMLElement | null, needed = 300): boolean {
+  if (!container) return false;
+  const rect = container.getBoundingClientRect();
+  const below = window.innerHeight - rect.bottom;
+  return below < needed && rect.top > below;
 }
