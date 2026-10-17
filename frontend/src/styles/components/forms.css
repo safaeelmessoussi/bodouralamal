@@ -599,9 +599,16 @@
 .dropdown-select {
   position: relative;
 }
+/* R226 (Owner, 2026-10-17) — the open list is as wide as its longest choice
+   («too small making it not readable»): never narrower than its control,
+   never wider than 24rem or the screen; it lines up with the control's start
+   edge, or its end edge when it would leave the screen (`.aligns-end`). */
 .dropdown-select__panel {
   position: absolute;
-  inset-inline: 0;
+  inset-inline-start: 0;
+  inline-size: max-content;
+  min-inline-size: 100%;
+  max-inline-size: min(24rem, calc(100vw - 2 * var(--space-4)));
   inset-block-start: 100%;
   z-index: 30;
   box-shadow: var(--shadow-md);
@@ -613,6 +620,10 @@
   border-radius: var(--radius-md);
   background: var(--color-surface);
   animation: menu-panel-in var(--transition-base);
+}
+.dropdown-select.aligns-end .dropdown-select__panel {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
 }
 .dropdown-select.opens-up .dropdown-select__panel {
   inset-block-start: auto;

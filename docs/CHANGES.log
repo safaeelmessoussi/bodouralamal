@@ -373,3 +373,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-17 — SRS Revision 225: open lists float
 - `forms.css`: `.dropdown-select` relative, `.dropdown-select__panel` absolute (z-index 30, `--shadow-md`), `.opens-up` above the trigger; `opensUp()` (dropdown.tsx) read on open by `Dropdown` and `MultiSelectField`.
 - Verified: group dialog — the next field moved 0 px, the list on top; calendar filters — the grid moved 0 px.
+
+## 2026-10-17 — SRS Revision 226: readable open lists
+- `forms.css` `.dropdown-select__panel`: `inline-size: max-content`, `min-inline-size: 100%`, `max-inline-size: min(24rem, 100vw − gutters)`, start-aligned; `.aligns-end` when `fitPanel()` (dropdown.tsx, on open) finds it off-screen.
+- Verified 1848 px: the Level filter's list 88 → 384 px, choices on one line; 390 px: inside the screen.

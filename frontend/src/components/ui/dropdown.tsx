@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
 import { useDisclosure } from '../../lib/use-disclosure.js';
@@ -76,6 +76,9 @@ export function Dropdown({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const [up, setUp] = useState(false);
+  useLayoutEffect(() => {
+    if (open) fitPanel(containerRef.current);
+  }, [open, containerRef]);
 
   const chosen = options.find((o) => o.value === value) ?? null;
   const searchable = options.length > searchThreshold;
@@ -281,4 +284,17 @@ export function opensUp(container: HTMLElement | null, needed = 300): boolean {
   const rect = container.getBoundingClientRect();
   const below = window.innerHeight - rect.bottom;
   return below < needed && rect.top > below;
+}
+
+/**
+ * R226 — once a list is open, keep it on the screen: if it runs past either
+ * edge from the control's start, it lines up with the control's end instead.
+ */
+export function fitPanel(container: HTMLElement | null): void {
+  if (!container) return;
+  container.classList.remove('aligns-end');
+  const panel = container.querySelector<HTMLElement>('.dropdown-select__panel');
+  if (!panel) return;
+  const rect = panel.getBoundingClientRect();
+  if (rect.left < 0 || rect.right > document.documentElement.clientWidth) container.classList.add('aligns-end');
 }

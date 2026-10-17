@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ChoiceField, FieldShell } from './field.js';
-import { opensUp, SEARCH_THRESHOLD } from './dropdown.js';
+import { fitPanel, opensUp, SEARCH_THRESHOLD } from './dropdown.js';
 import { Icon } from './icon.js';
 import { useDisclosure } from '../../lib/use-disclosure.js';
 import { t } from '../../i18n/index.js';
@@ -80,6 +80,9 @@ export function MultiSelectField({
   const [query, setQuery] = useState('');
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [up, setUp] = useState(false);
+  useLayoutEffect(() => {
+    if (open) fitPanel(containerRef.current);
+  }, [open, containerRef]);
 
   /**
    * **The closed control names WHAT was chosen** (Owner, 2026-09-20 — SRS
