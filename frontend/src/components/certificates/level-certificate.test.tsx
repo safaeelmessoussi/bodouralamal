@@ -31,7 +31,8 @@ describe('R228 — the association\'s «شهادة تقديرية»', () => {
     const html = renderToStaticMarkup(<LevelCertificate certificate={certificate} />);
     for (const expected of [
       'شهادة تقديرية',
-      'وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا',
+      'وَرَتِّلِ اِ۬لْقُرْءَانَ تَرْتِيلاًۖ',
+      'المزمل: 3',
       'فاطمة الزهراء العلوي',
       'ببرنامج المستوى الثاني',
       'المستوى الأول'.replace('الأول', 'الثاني'),

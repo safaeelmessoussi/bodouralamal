@@ -685,9 +685,11 @@ async function seedQuranSurahs(): Promise<void> {
   if (rows.length !== 114) {
     throw new Error(`quran-surahs.json must contain exactly 114 surahs, found ${rows.length}`);
   }
+  // R230 — رواية ورش عن نافع (the later Madani count): 6214 verses, as the
+  // King Fahd Complex's Warsh data counts them (Hafs counted 6236).
   const totalAyahs = rows.reduce((sum, row) => sum + row.totalAyahs, 0);
-  if (totalAyahs !== 6236) {
-    throw new Error(`quran-surahs.json ayah total must be 6236, found ${totalAyahs}`);
+  if (totalAyahs !== 6214) {
+    throw new Error(`quran-surahs.json ayah total must be 6214 (Warsh), found ${totalAyahs}`);
   }
 
   for (const row of rows) {

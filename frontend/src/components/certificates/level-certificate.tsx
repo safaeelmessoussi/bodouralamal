@@ -9,7 +9,7 @@ import { t, tList } from '../../i18n/index.js';
  * certificate delivered by the institute»).
  *
  * Drawn after the association's printed certificate: «شهادة تقديرية» and
- * «﴿وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا﴾» at the head, the association's logo in
+ * «﴿وَرَتِّلِ اِ۬لْقُرْءَانَ تَرْتِيلاًۖ﴾» (المزمل: 3, Warsh) at the head, the association's logo in
  * the top corner, purple and gold ribbons across two corners, a thin gold
  * frame, the attestation in the middle — her name in blue ink, the Level's
  * place and name, what it covers, the school year — the association's blessing,

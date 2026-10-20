@@ -703,7 +703,10 @@ button.humanity__station.is-active {
   border-radius: var(--radius-xs);
   background: var(--tone-soft, var(--color-primary-soft));
   color: var(--tone, var(--color-primary));
-  font-family: var(--font-family-display);
+  /* R230 — the Warsh mushaf's face. */
+  font-family: var(--font-family-quran);
+  font-size: 1.12em;
+  line-height: 1.9;
 }
 
 .humanity__group {

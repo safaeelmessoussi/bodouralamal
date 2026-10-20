@@ -392,3 +392,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-20 — SRS Revision 229: the student portal in its subject's gender
 - `GET /students/me` adds `sex` (acting student); `i18n` `setTextSubject` — `t(path)` takes `path_female`/`path_male` when a subject is set; `lib/subject-sex.ts` (tab cache per account/child, `useSubjectSex`); `StudentLayout` primes/fetches it.
 - Variants: `student.nav.dashboard`, `studentDashboard.title/sections`, `student.grades.absent`, `quran.completion.complete`; pinned keys in `student.http` test gain `sex`.
+
+## 2026-10-20 — SRS Revision 230: رواية ورش عن نافع everywhere
+- Migration `r230_warsh_ayah_counts` (Warsh totals; logs past the Warsh end clamped; `student_surah_progress` recomputed); seed JSON + 6214 assertion.
+- 193 verse quotations → KFGQPC Warsh text (content, six locales, certificate); Maryam references Hafs→Warsh; font `styles/fonts/kfgqpc-warsh.woff2` (`--font-family-quran`), source note beside it.
+- Memory: Warsh is the default riwaya. Verified: quran/quran-entry/journey integration (134), backend 386, frontend 1686, Maryam numbers equal in every locale, verse rendered in the Warsh face.

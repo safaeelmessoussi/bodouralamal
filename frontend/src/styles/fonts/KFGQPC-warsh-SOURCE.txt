@@ -1,0 +1,6 @@
+KFGQPC Uthmanic Warsh font, version 10 — King Fahd Glorious Quran Printing
+Complex (مجمع الملك فهد لطباعة المصحف الشريف), published for developers at
+https://qurancomplex.gov.sa/en/techquran/dev/ (mirror: https://github.com/ibnhazm/KFGQPC).
+Used unmodified to display the Qur'an in رواية ورش عن نافع (SRS Revision 230).
+The verse text the platform quotes comes from the same Complex's Warsh data
+(warshData_v10.json, 6214 verses).

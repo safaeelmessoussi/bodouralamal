@@ -21,6 +21,17 @@
  * the others, and its unicode-range limits it to Tifinagh — it is fetched only
  * by a page that shows Tifinagh, and never draws Arabic or Latin text.
  * Licence: `../fonts/OFL-noto-sans-tifinagh.txt`. */
+/* SRS Revision 230 — the Qur'an in رواية ورش عن نافع: the King Fahd Complex's
+ * Uthmanic Warsh face, which draws the Warsh marks (۪ ۬ ے …) ordinary Arabic
+ * fonts do not. Used only for quoted verses (`--font-family-quran`).
+ * Source: `../fonts/KFGQPC-warsh-SOURCE.txt`. */
+@font-face {
+  font-family: 'KFGQPC Warsh';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/kfgqpc-warsh.woff2') format('woff2');
+}
 @font-face {
   font-family: 'Noto Sans Tifinagh';
   font-style: normal;
@@ -76,6 +87,8 @@
   --font-size-2xl: clamp(2.3rem, 1.7rem + 2.8vw, 3.6rem);
 
   --font-family-base: 'Readex Pro', 'Noto Sans Tifinagh', 'Noto Naskh Arabic', 'Segoe UI', system-ui, -apple-system, 'Tahoma', sans-serif;
+  /* R230 — quoted verses: the Warsh mushaf's own face, then the display face. */
+  --font-family-quran: 'KFGQPC Warsh', 'El Messiri', 'Readex Pro', serif;
   --font-family-display: 'El Messiri', 'Readex Pro', 'Noto Sans Tifinagh', 'Noto Kufi Arabic', 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 

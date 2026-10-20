@@ -9,7 +9,7 @@
     "surahId": 2,
     "nameArabic": "البقرة",
     "nameTransliterated": "Al-Baqarah",
-    "totalAyahs": 286
+    "totalAyahs": 285
   },
   {
     "surahId": 3,
@@ -21,19 +21,19 @@
     "surahId": 4,
     "nameArabic": "النساء",
     "nameTransliterated": "An-Nisa",
-    "totalAyahs": 176
+    "totalAyahs": 175
   },
   {
     "surahId": 5,
     "nameArabic": "المائدة",
     "nameTransliterated": "Al-Ma'idah",
-    "totalAyahs": 120
+    "totalAyahs": 122
   },
   {
     "surahId": 6,
     "nameArabic": "الأنعام",
     "nameTransliterated": "Al-An'am",
-    "totalAyahs": 165
+    "totalAyahs": 167
   },
   {
     "surahId": 7,
@@ -45,13 +45,13 @@
     "surahId": 8,
     "nameArabic": "الأنفال",
     "nameTransliterated": "Al-Anfal",
-    "totalAyahs": 75
+    "totalAyahs": 76
   },
   {
     "surahId": 9,
     "nameArabic": "التوبة",
     "nameTransliterated": "At-Tawbah",
-    "totalAyahs": 129
+    "totalAyahs": 130
   },
   {
     "surahId": 10,
@@ -63,7 +63,7 @@
     "surahId": 11,
     "nameArabic": "هود",
     "nameTransliterated": "Hud",
-    "totalAyahs": 123
+    "totalAyahs": 121
   },
   {
     "surahId": 12,
@@ -75,13 +75,13 @@
     "surahId": 13,
     "nameArabic": "الرعد",
     "nameTransliterated": "Ar-Ra'd",
-    "totalAyahs": 43
+    "totalAyahs": 44
   },
   {
     "surahId": 14,
     "nameArabic": "إبراهيم",
     "nameTransliterated": "Ibrahim",
-    "totalAyahs": 52
+    "totalAyahs": 54
   },
   {
     "surahId": 15,
@@ -99,49 +99,49 @@
     "surahId": 17,
     "nameArabic": "الإسراء",
     "nameTransliterated": "Al-Isra",
-    "totalAyahs": 111
+    "totalAyahs": 110
   },
   {
     "surahId": 18,
     "nameArabic": "الكهف",
     "nameTransliterated": "Al-Kahf",
-    "totalAyahs": 110
+    "totalAyahs": 105
   },
   {
     "surahId": 19,
     "nameArabic": "مريم",
     "nameTransliterated": "Maryam",
-    "totalAyahs": 98
+    "totalAyahs": 99
   },
   {
     "surahId": 20,
     "nameArabic": "طه",
     "nameTransliterated": "Taha",
-    "totalAyahs": 135
+    "totalAyahs": 134
   },
   {
     "surahId": 21,
     "nameArabic": "الأنبياء",
     "nameTransliterated": "Al-Anbiya",
-    "totalAyahs": 112
+    "totalAyahs": 111
   },
   {
     "surahId": 22,
     "nameArabic": "الحج",
     "nameTransliterated": "Al-Hajj",
-    "totalAyahs": 78
+    "totalAyahs": 76
   },
   {
     "surahId": 23,
     "nameArabic": "المؤمنون",
     "nameTransliterated": "Al-Mu'minun",
-    "totalAyahs": 118
+    "totalAyahs": 119
   },
   {
     "surahId": 24,
     "nameArabic": "النور",
     "nameTransliterated": "An-Nur",
-    "totalAyahs": 64
+    "totalAyahs": 62
   },
   {
     "surahId": 25,
@@ -153,13 +153,13 @@
     "surahId": 26,
     "nameArabic": "الشعراء",
     "nameTransliterated": "Ash-Shu'ara",
-    "totalAyahs": 227
+    "totalAyahs": 226
   },
   {
     "surahId": 27,
     "nameArabic": "النمل",
     "nameTransliterated": "An-Naml",
-    "totalAyahs": 93
+    "totalAyahs": 95
   },
   {
     "surahId": 28,
@@ -177,13 +177,13 @@
     "surahId": 30,
     "nameArabic": "الروم",
     "nameTransliterated": "Ar-Rum",
-    "totalAyahs": 60
+    "totalAyahs": 59
   },
   {
     "surahId": 31,
     "nameArabic": "لقمان",
     "nameTransliterated": "Luqman",
-    "totalAyahs": 34
+    "totalAyahs": 33
   },
   {
     "surahId": 32,
@@ -207,13 +207,13 @@
     "surahId": 35,
     "nameArabic": "فاطر",
     "nameTransliterated": "Fatir",
-    "totalAyahs": 45
+    "totalAyahs": 46
   },
   {
     "surahId": 36,
     "nameArabic": "يس",
     "nameTransliterated": "Ya-Sin",
-    "totalAyahs": 83
+    "totalAyahs": 82
   },
   {
     "surahId": 37,
@@ -225,31 +225,31 @@
     "surahId": 38,
     "nameArabic": "ص",
     "nameTransliterated": "Sad",
-    "totalAyahs": 88
+    "totalAyahs": 86
   },
   {
     "surahId": 39,
     "nameArabic": "الزمر",
     "nameTransliterated": "Az-Zumar",
-    "totalAyahs": 75
+    "totalAyahs": 72
   },
   {
     "surahId": 40,
     "nameArabic": "غافر",
     "nameTransliterated": "Ghafir",
-    "totalAyahs": 85
+    "totalAyahs": 84
   },
   {
     "surahId": 41,
     "nameArabic": "فصلت",
     "nameTransliterated": "Fussilat",
-    "totalAyahs": 54
+    "totalAyahs": 53
   },
   {
     "surahId": 42,
     "nameArabic": "الشورى",
     "nameTransliterated": "Ash-Shura",
-    "totalAyahs": 53
+    "totalAyahs": 50
   },
   {
     "surahId": 43,
@@ -261,25 +261,25 @@
     "surahId": 44,
     "nameArabic": "الدخان",
     "nameTransliterated": "Ad-Dukhan",
-    "totalAyahs": 59
+    "totalAyahs": 56
   },
   {
     "surahId": 45,
     "nameArabic": "الجاثية",
     "nameTransliterated": "Al-Jathiyah",
-    "totalAyahs": 37
+    "totalAyahs": 36
   },
   {
     "surahId": 46,
     "nameArabic": "الأحقاف",
     "nameTransliterated": "Al-Ahqaf",
-    "totalAyahs": 35
+    "totalAyahs": 34
   },
   {
     "surahId": 47,
     "nameArabic": "محمد",
     "nameTransliterated": "Muhammad",
-    "totalAyahs": 38
+    "totalAyahs": 39
   },
   {
     "surahId": 48,
@@ -309,13 +309,13 @@
     "surahId": 52,
     "nameArabic": "الطور",
     "nameTransliterated": "At-Tur",
-    "totalAyahs": 49
+    "totalAyahs": 47
   },
   {
     "surahId": 53,
     "nameArabic": "النجم",
     "nameTransliterated": "An-Najm",
-    "totalAyahs": 62
+    "totalAyahs": 61
   },
   {
     "surahId": 54,
@@ -327,25 +327,25 @@
     "surahId": 55,
     "nameArabic": "الرحمن",
     "nameTransliterated": "Ar-Rahman",
-    "totalAyahs": 78
+    "totalAyahs": 77
   },
   {
     "surahId": 56,
     "nameArabic": "الواقعة",
     "nameTransliterated": "Al-Waqi'ah",
-    "totalAyahs": 96
+    "totalAyahs": 99
   },
   {
     "surahId": 57,
     "nameArabic": "الحديد",
     "nameTransliterated": "Al-Hadid",
-    "totalAyahs": 29
+    "totalAyahs": 28
   },
   {
     "surahId": 58,
     "nameArabic": "المجادلة",
     "nameTransliterated": "Al-Mujadilah",
-    "totalAyahs": 22
+    "totalAyahs": 21
   },
   {
     "surahId": 59,
@@ -399,7 +399,7 @@
     "surahId": 67,
     "nameArabic": "الملك",
     "nameTransliterated": "Al-Mulk",
-    "totalAyahs": 30
+    "totalAyahs": 31
   },
   {
     "surahId": 68,
@@ -423,7 +423,7 @@
     "surahId": 71,
     "nameArabic": "نوح",
     "nameTransliterated": "Nuh",
-    "totalAyahs": 28
+    "totalAyahs": 30
   },
   {
     "surahId": 72,
@@ -435,19 +435,19 @@
     "surahId": 73,
     "nameArabic": "المزمل",
     "nameTransliterated": "Al-Muzzammil",
-    "totalAyahs": 20
+    "totalAyahs": 18
   },
   {
     "surahId": 74,
     "nameArabic": "المدثر",
     "nameTransliterated": "Al-Muddaththir",
-    "totalAyahs": 56
+    "totalAyahs": 55
   },
   {
     "surahId": 75,
     "nameArabic": "القيامة",
     "nameTransliterated": "Al-Qiyamah",
-    "totalAyahs": 40
+    "totalAyahs": 39
   },
   {
     "surahId": 76,
@@ -471,7 +471,7 @@
     "surahId": 79,
     "nameArabic": "النازعات",
     "nameTransliterated": "An-Nazi'at",
-    "totalAyahs": 46
+    "totalAyahs": 45
   },
   {
     "surahId": 80,
@@ -531,7 +531,7 @@
     "surahId": 89,
     "nameArabic": "الفجر",
     "nameTransliterated": "Al-Fajr",
-    "totalAyahs": 30
+    "totalAyahs": 32
   },
   {
     "surahId": 90,
@@ -573,7 +573,7 @@
     "surahId": 96,
     "nameArabic": "العلق",
     "nameTransliterated": "Al-Alaq",
-    "totalAyahs": 19
+    "totalAyahs": 20
   },
   {
     "surahId": 97,
@@ -591,7 +591,7 @@
     "surahId": 99,
     "nameArabic": "الزلزلة",
     "nameTransliterated": "Az-Zalzalah",
-    "totalAyahs": 8
+    "totalAyahs": 9
   },
   {
     "surahId": 100,
@@ -603,7 +603,7 @@
     "surahId": 101,
     "nameArabic": "القارعة",
     "nameTransliterated": "Al-Qari'ah",
-    "totalAyahs": 11
+    "totalAyahs": 10
   },
   {
     "surahId": 102,
@@ -633,13 +633,13 @@
     "surahId": 106,
     "nameArabic": "قريش",
     "nameTransliterated": "Quraysh",
-    "totalAyahs": 4
+    "totalAyahs": 5
   },
   {
     "surahId": 107,
     "nameArabic": "الماعون",
     "nameTransliterated": "Al-Ma'un",
-    "totalAyahs": 7
+    "totalAyahs": 6
   },
   {
     "surahId": 108,
