@@ -15,7 +15,8 @@ import { Badge } from '../ui/badge.js';
 import { FormDialog } from '../ui/form-dialog.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { MultiSelectField } from '../ui/multi-select.js';
-import { useScopeOptions } from '../../hooks/use-scope-options.js';
+import { useScopeOptions, type ScopeOptions } from '../../hooks/use-scope-options.js';
+import { TrackFilter } from './track-filter.js';
 import { t } from '../../i18n/index.js';
 import { counted } from '../../lib/arabic-years.js';
 
@@ -103,6 +104,8 @@ export interface SessionAudienceState {
     groups: { value: string; label: string }[];
     circles: { value: string; label: string }[];
   };
+  /** R235 — what «المسار» reads: each Level's Category and track. */
+  scope: Pick<ScopeOptions, 'levelTracks' | 'levelCategoryIds' | 'options'>;
   /** Differs from what it opened on — order-blind. What decides whether a save
    *  SENDS the audience at all: re-sending an inherited audience untouched
    *  would turn it into an override nobody made. */
@@ -199,6 +202,7 @@ export function useSessionAudience({
       groups: groups.map((g) => ({ value: g.id, label: g.name })),
       circles: circles.map((c) => ({ value: c.id, label: c.name })),
     },
+    scope,
     dirty,
     loadFailed,
   };
@@ -227,6 +231,12 @@ export function SessionAudienceFields({
         options={options.categories}
         selected={chosen.categoryIds}
         onChange={(next) => set('categoryIds', next)}
+      />
+      <TrackFilter
+        scope={audience.scope}
+        categoryIds={chosen.categoryIds}
+        levelIds={chosen.levelIds}
+        setLevelIds={(next) => set('levelIds', next)}
       />
       <MultiSelectField
         label={t('admin.calendar.scopeLevel')}

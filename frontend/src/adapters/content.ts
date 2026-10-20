@@ -76,6 +76,8 @@ export interface ContentItem {
   teacher_display_name: string | null;
   /** R215 — the capacity that person made it in; `null` when none is said. */
   author_role?: 'teacher' | 'assistant' | 'admin' | 'student' | null;
+  /** R235 — «الأستاذة فاطمة بوخبزى» for a teaching author (the server's words). */
+  author_title?: string | null;
   /** R215 — their id, for staff (the edit form); `null` for everyone else. */
   author_id?: string | null;
   /** Optional subject label. A BADGE, not a hierarchy tier — see the note in
@@ -182,6 +184,7 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
       // R215 — who made it, under their public name (resolved by the server).
       teacher_display_name: row.author_name ?? null,
       author_role: (row.author_role as ContentItem['author_role']) ?? null,
+      author_title: row.author_title ?? null,
       author_id: row.author_id ?? null,
       subject_name: row.subject_name,
       whole_category: row.whole_category,
@@ -352,6 +355,7 @@ interface LibraryItemWire {
   /** R215 — who made it (public name), in which capacity, and (staff only) who. */
   author_name?: string | null;
   author_role?: string | null;
+  author_title?: string | null;
   author_id?: string | null;
   level_id: string;
   whole_category: boolean;
@@ -459,6 +463,7 @@ async function shelfOf(
       // R215 — who made it, under their public name (resolved by the server).
       teacher_display_name: row.author_name ?? null,
       author_role: (row.author_role as ContentItem['author_role']) ?? null,
+      author_title: row.author_title ?? null,
       author_id: row.author_id ?? null,
       subject_name: row.subject_name,
       whole_category: row.whole_category,

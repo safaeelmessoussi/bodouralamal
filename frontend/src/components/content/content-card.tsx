@@ -104,7 +104,12 @@ function formatSize(bytes: number): string {
 }
 
 /** R215 — «الاسم · الصفة», the capacity only when one is said. */
-export function authorLine(item: Pick<ContentItem, 'teacher_display_name' | 'author_role'>): string {
+/** R235 — a teaching author as the server titles them («الأستاذة فاطمة
+ *  بوخبزى»); any other author by name and role. */
+export function authorLine(
+  item: Pick<ContentItem, 'teacher_display_name' | 'author_role'> & Partial<Pick<ContentItem, 'author_title'>>,
+): string {
+  if (item.author_title) return item.author_title;
   const name = item.teacher_display_name ?? '';
   return item.author_role ? `${name} · ${t(`content.author.role.${item.author_role}`)}` : name;
 }

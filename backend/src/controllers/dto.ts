@@ -26,6 +26,7 @@
  */
 
 import { publicDisplayName } from '../lib/display-name.js';
+import { honoured } from '../lib/item-title.js';
 import type { LegalConsentTextRow } from '../services/legal-consent-text.service.js';
 import type { LegalDocumentRow } from '../services/legal-document.service.js';
 import type { Prisma } from "../generated/prisma/client.js";
@@ -1087,6 +1088,9 @@ export interface LibraryItemDto {
    *  names nobody. `author_id` is for staff only (the edit form). */
   author_name: string | null;
   author_role: string | null;
+  /** R235 — how a reader is shown a TEACHING author: «الأستاذة فاطمة بوخبزى»
+   *  (the one honorific, `lib/item-title.ts`); `null` for any other author. */
+  author_title: string | null;
   author_id: string | null;
   level_id: string;
   /** R167 §5 — addressed to EVERY Level of `category_id`; `level_id` is then
@@ -1197,6 +1201,11 @@ export function libraryItemDto(row: {
         ? null
         : publicDisplayName({ publicDisplayName: row.authorPublicName, nameArabic: row.authorNameArabic }),
     author_role: row.authorNameArabic === null ? null : row.authorRole,
+    // R235 — a مؤطِّرة is named with the honorific, never «· تأطير».
+    author_title:
+      row.authorNameArabic !== null && (row.authorRole === 'teacher' || row.authorRole === 'assistant')
+        ? honoured(publicDisplayName({ publicDisplayName: row.authorPublicName, nameArabic: row.authorNameArabic }))
+        : null,
     author_id: row.authorId,
     level_id: row.levelId,
     whole_category: row.wholeCategory,
@@ -1661,6 +1670,8 @@ export interface ApprovalDto {
     name: string;
     status: string;
     schooling_stage: string | null;
+    /** R235 — the child's date of birth as submitted (R130), `YYYY-MM-DD`. */
+    birth_date: string | null;
     first_name_arabic: string;
     last_name_arabic: string;
     first_name_french: string | null;
@@ -1710,6 +1721,7 @@ export function approvalDto(row: {
     nameArabic: string;
     status: string;
     schoolingStage: string | null;
+    birthDate: string | null;
     firstNameArabic: string;
     lastNameArabic: string;
     firstNameFrench: string | null;
@@ -1770,6 +1782,7 @@ export function approvalDto(row: {
       name: c.nameArabic,
       status: c.status,
       schooling_stage: c.schoolingStage,
+      birth_date: c.birthDate,
       first_name_arabic: c.firstNameArabic,
       last_name_arabic: c.lastNameArabic,
       first_name_french: c.firstNameFrench,
@@ -2157,6 +2170,8 @@ export interface ScopeOptionsDto {
      * never the Category's name (§4.4b).
      */
     self_attendance_allowed: boolean;
+    /** R235 — `younger` «صغار» | `older` «كبار» | `null`. */
+    track: string | null;
     /** The Subjects this Level teaches (§4.4b). Inline so narrowing needs no
      *  second request — and that request was itself Admin-only. */
     subject_ids: string[];
@@ -2183,6 +2198,7 @@ export function scopeOptionsDto(row: {
     categoryName: string;
     defaultVisibility: string;
     selfAttendanceAllowed: boolean;
+    track: string | null;
     subjectIds: string[];
     surahIds: number[];
   }[];
@@ -2201,6 +2217,7 @@ export function scopeOptionsDto(row: {
       category_name: l.categoryName,
       default_visibility: l.defaultVisibility,
       self_attendance_allowed: l.selfAttendanceAllowed,
+      track: l.track,
       subject_ids: l.subjectIds,
       surah_ids: l.surahIds,
     })),

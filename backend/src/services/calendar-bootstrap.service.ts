@@ -50,7 +50,8 @@ export interface CalendarBootstrap {
     minAge: number | null;
     maxAge: number | null;
   }[];
-  levels: { id: string; name: string; categoryId: string; displayOrder: number | null }[];
+  /** R235 — `track`: the Level's line within its Category («صغار»/«كبار»). */
+  levels: { id: string; name: string; categoryId: string; displayOrder: number | null; track: 'younger' | 'older' | null }[];
   branches: { id: string; name: string; displayOrder: number | null }[];
   /**
    * **The Subjects a public calendar filters by** (R84's public matrix).
@@ -171,7 +172,7 @@ export async function calendarBootstrap(
     }),
     prisma.level.findMany({
       where: { deletedAt: null, ...(categoryId ? { categoryId } : {}) },
-      select: { id: true, name: true, categoryId: true, displayOrder: true },
+      select: { id: true, name: true, categoryId: true, displayOrder: true, track: true },
       // R188 §2 — the Super Admin's order: «الفئات»'s first, then each
       // Category's own «المستويات» order (§2.2 scopes a Level's order
       // WITHIN its Category). Ordered by the Level's own `display_order`

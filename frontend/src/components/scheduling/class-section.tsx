@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 import { ScopeSelectors } from '../scope/scope-selectors.js';
 import {
@@ -339,7 +339,10 @@ export function ActivitySection({
   canAssignStaff,
   disabled,
   hideStaffing = false,
+  trackFilter = null,
 }: {
+  /** R235 — «المسار», rendered after «الفئات» where the caller offers it. */
+  trackFilter?: ReactNode;
   /** R72 — the dimensions this caller may fill. A Teacher gets `group` and
    *  only `group`: §4.9 and TD-2 forbid them a branch, category or Level, so
    *  offering those would offer a refusal. */
@@ -404,14 +407,16 @@ export function ActivitySection({
               {dimensions.map((key) => {
                 const value = values[key];
                 return (
-                  <MultiSelectField
-                    key={key}
-                    label={t(DIMENSION_LABEL_KEYS[key])}
-                    selected={value.selected}
-                    onChange={value.onChange}
-                    options={value.options.map((o) => ({ value: o.id, label: o.name }))}
-                    emptyLabel={t('common.all')}
-                  />
+                  <Fragment key={key}>
+                    <MultiSelectField
+                      label={t(DIMENSION_LABEL_KEYS[key])}
+                      selected={value.selected}
+                      onChange={value.onChange}
+                      options={value.options.map((o) => ({ value: o.id, label: o.name }))}
+                      emptyLabel={t('common.all')}
+                    />
+                    {key === 'category' && dimensions.includes('level') ? trackFilter : null}
+                  </Fragment>
                 );
               })}
               {/* **How the choices combine, said once something is chosen**

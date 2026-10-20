@@ -416,3 +416,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-20 — SRS Revision 234: the show walks one Category
 - `show-model.ts`: `walkSequence` = the chosen Category's steps + its milestone (none for the last); `advance` after a milestone → the Categories, after the last Category → graduation as before.
 - `verify-programs-show.mjs`: a non-last Category ends at its milestone with no arrow on, then the Categories. Checked in Chrome on the built page with a simulated four-stage road.
+
+## 2026-10-20 — SRS Revision 235: «المسار» in audiences, age-aware placement, the teacher's title
+- `components/scheduling/track-filter.tsx` (+ test): «المسار» in `AudienceFilters`, `ActivitySection` (Levels now narrowed by Categories), the session audience dialog; scope options + calendar bootstrap carry `track` (the hook dropped it — found in Chrome).
+- Approvals: child `birth_date`, `ageOn`, `suggestedLevel` by age. Content DTO `author_title` («الأستاذة …»), `authorLine` uses it. «المستويات»: «المسار» column.

@@ -369,6 +369,8 @@ export interface LevelRef {
   name: string;
   category_id: string;
   display_order: number | null;
+  /** R235 — the Level's line within its Category; absent on a teacher's own options. */
+  track?: 'younger' | 'older' | null;
 }
 
 export interface BranchRef {

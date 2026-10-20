@@ -88,6 +88,7 @@ export function read(prisma: PrismaClient) {
           name: l.name,
           category_id: l.categoryId,
           display_order: l.displayOrder,
+          track: l.track,
         })),
         branches: bootstrap.branches.map((b) => ({
           id: b.id,

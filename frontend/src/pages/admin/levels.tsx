@@ -120,6 +120,15 @@ export function LevelsPage(): ReactNode {
       cell: (r) => r.category_name,
     },
     {
+      // R235 — «صغار» / «كبار», or «—» for a Category's one line; and «يستقبل الملتحقين الجدد».
+      key: 'track',
+      header: t('admin.levels.colTrack'),
+      cell: (r) =>
+        [r.track ? t(`admin.levels.track.${r.track}`) : '—', r.accepts_newcomers ? t('admin.levels.entryBadge') : null]
+          .filter(Boolean)
+          .join(' · '),
+    },
+    {
       key: 'gender',
       header: t('admin.levels.colGender'),
       // Announced as a word, never as a colour or an icon alone (§14.4).

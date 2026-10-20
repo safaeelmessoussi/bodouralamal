@@ -121,6 +121,8 @@ export interface ScopeOptions {
    * it narrows them itself, from this.
    */
   levelCategoryIds: Record<string, string>;
+  /** R235 — Level id → its track («صغار» `younger` / «كبار» `older`); absent: none. */
+  levelTracks?: Record<string, 'younger' | 'older'>;
   /** Level id → its bare name (R179 §5) — for a label that already says the
    *  Category elsewhere, or none at all («1 — كتاكيت الأمل — مقر تاركة»). */
   levelNames: Record<string, string>;
@@ -371,6 +373,8 @@ export function useScopeOptions({
         max_age: null,
         journey_role: 'step',
         memorisation_hizb: null,
+        // R235 — the track IS carried: «المسار» reads it.
+        track: l.track ?? null,
         display_order: null,
         group_count: 0,
         // R183 §6 — not carried by `/me/scope-options` either.
@@ -631,6 +635,7 @@ export function useScopeOptions({
     levelTeachesNothing:
       wants('subjectId') && ready && wholeCategoryOf(value.levelId) === null && value.levelId !== '' && taughtAtChosen === 0,
     levelCategoryIds: Object.fromEntries(levels.map((l) => [l.id, l.category_id])),
+    levelTracks: Object.fromEntries(levels.flatMap((l) => (l.track ? [[l.id, l.track] as const] : []))),
     levelNames: Object.fromEntries(levels.map((l) => [l.id, l.name])),
     /**
      * R172 §1 — the whole-Category choices a Level control may offer beside

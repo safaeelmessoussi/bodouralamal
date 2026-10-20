@@ -50,6 +50,7 @@ import {
 import {
   audienceDimensions,
   homeBranchOf,
+  TrackFilter,
   useAudienceFilters,
 } from '../../components/scheduling/audience-filters.js';
 import {
@@ -2797,6 +2798,12 @@ export function SchedulingDialog({
                   : TEACHER_SCOPE_DIMENSIONS
             }
             allowGlobal={type !== 'holiday' && canAssignStaff}
+            // R235 — «المسار»: every «صغار» or «كبار» Level at once.
+            trackFilter={
+              type !== 'holiday' && canAssignStaff ? (
+                <TrackFilter scope={scope} categoryIds={categoryIds} levelIds={levelIds} setLevelIds={setLevelIds} />
+              ) : null
+            }
             global={global}
             onGlobal={setGlobal}
             values={{
@@ -2813,7 +2820,10 @@ export function SchedulingDialog({
               level: {
                 selected: levelIds,
                 onChange: setLevelIds,
-                options: scope.options.levelId.map((o) => ({ id: o.value, name: o.label })),
+                // R235 — the Categories chosen narrow the Levels (R198), as on a class.
+                options: scope.options.levelId
+                  .filter((o) => categoryIds.length === 0 || categoryIds.includes(scope.levelCategoryIds[o.value] ?? ''))
+                  .map((o) => ({ id: o.value, name: o.label })),
               },
               /**
                * **Her own groups, from the read that answers her** (R93).

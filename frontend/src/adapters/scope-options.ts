@@ -40,6 +40,8 @@ export interface ScopeOptionsPayload {
      * would always refuse it. Structural — no client compares Category names.
      */
     self_attendance_allowed: boolean;
+    /** R235 — `younger` «صغار» | `older` «كبار» | `null`. */
+    track?: 'younger' | 'older' | null;
     subject_ids: string[];
     /** SRS Revision 165 §2 — this Level's «مقرر الحفظ», as Surah numbers.
      *  Optional: an older server does not send it, which reads as "none". */

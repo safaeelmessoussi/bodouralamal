@@ -96,6 +96,8 @@ export interface ScopeOptions {
      * and no client anywhere compares اليافعات to a string.
      */
     selfAttendanceAllowed: boolean;
+    /** R235 — the Level's line within its Category («صغار»/«كبار»), `null` its one line. */
+    track: 'younger' | 'older' | null;
     /**
      * **The Subjects this Level teaches** (§4.4b `LevelSubject`).
      *
@@ -169,6 +171,7 @@ export async function readScopeOptions(
         id: true,
         name: true,
         categoryId: true,
+        track: true,
         category: { select: { name: true, selfAttendanceAllowed: true } },
         subjects: {
           where: { deletedAt: null, subject: { deletedAt: null } },
@@ -238,6 +241,7 @@ export async function readScopeOptions(
       categoryName: l.category.name,
       defaultVisibility: readDefaultVisibility(byCategory.get(l.categoryId)),
       selfAttendanceAllowed: l.category.selfAttendanceAllowed,
+      track: l.track,
       subjectIds: [...new Set([...l.subjects.map((s) => s.subjectId), ...(wholeCategory.get(l.categoryId) ?? [])])],
       surahIds: l.surahs.map((row) => row.surahId),
     })),
@@ -367,6 +371,7 @@ export async function readCourseScheduleOptions(
         id: true,
         name: true,
         categoryId: true,
+        track: true,
         category: { select: { name: true, selfAttendanceAllowed: true } },
         subjects: {
           where: { deletedAt: null, subject: { deletedAt: null } },
@@ -417,6 +422,7 @@ export async function readCourseScheduleOptions(
       categoryName: l.category.name,
       defaultVisibility: readDefaultVisibility(byCategory.get(l.categoryId)),
       selfAttendanceAllowed: l.category.selfAttendanceAllowed,
+      track: l.track,
       subjectIds,
       surahIds: l.surahs.map((row) => row.surahId),
     };

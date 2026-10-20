@@ -991,6 +991,8 @@ type PlacementStudent = {
   requestedBranch: { id: string; name: string } | null;
   /** R233 — what the suggestion reads beside the entry flag (`null` unknown). */
   sex?: string | null;
+  /** R235 — the date of birth (`YYYY-MM-DD`): the suggestion reads the age too. */
+  birthDate?: string | null;
 };
 
 type PlacementChoice = {
@@ -1008,13 +1010,18 @@ type PlacementChoice = {
 export function initialPlacementChoices(
   students: readonly PlacementStudent[],
   levels: readonly (Pick<Level, 'id' | 'category_id'> &
-    Partial<Pick<Level, 'accepts_newcomers' | 'gender_restriction'>>)[],
+    Partial<Pick<Level, 'accepts_newcomers' | 'gender_restriction' | 'min_age' | 'max_age'>>)[],
   groups: readonly Pick<AdministrativeGroup, 'id' | 'level_id'>[],
+  today: string = new Date().toISOString().slice(0, 10),
 ): Record<string, PlacementChoice> {
   return Object.fromEntries(
     students.flatMap((student) => {
       const wanted = student.requestedCategory?.id;
-      const first = wanted ? suggestedLevel(levels.filter((level) => level.category_id === wanted), student.sex ?? null) : null;
+      const first = wanted ? suggestedLevel(
+            levels.filter((level) => level.category_id === wanted),
+            student.sex ?? null,
+            ageOn(student.birthDate ?? null, today),
+          ) : null;
       if (!first) return [];
       const inLevel = groups.filter((group) => group.level_id === first.id);
       return [[
@@ -1029,6 +1036,15 @@ export function initialPlacementChoices(
   );
 }
 
+/** R235 — whole years on `today` from a `YYYY-MM-DD` birth date; `null` unknown. */
+export function ageOn(birthDate: string | null, today: string): number | null {
+  if (!birthDate) return null;
+  const [by, bm, bd] = birthDate.split('-').map(Number);
+  const [ty, tm, td] = today.split('-').map(Number);
+  if (!by || !ty) return null;
+  return ty - by - ((tm! < bm! || (tm === bm && td! < bd!)) ? 1 : 0);
+}
+
 /** R233 — a Level's `gender_restriction` admits this sex (an unknown sex: unrestricted only). */
 export function sexFits(restriction: string | undefined, sex: string | null): boolean {
   if (!restriction || restriction === 'any') return true;
@@ -1041,12 +1057,19 @@ export function sexFits(restriction: string | undefined, sex: string | null): bo
  * entry Level, else a Level that fits, else the first. A suggestion only —
  * the administration places, and is warned off a non-entry Level.
  */
-export function suggestedLevel<L extends Partial<Pick<Level, 'accepts_newcomers' | 'gender_restriction'>>>(
-  inCategory: readonly L[],
-  sex: string | null,
-): L | null {
+export function suggestedLevel<
+  L extends Partial<Pick<Level, 'accepts_newcomers' | 'gender_restriction' | 'min_age' | 'max_age'>>,
+>(inCategory: readonly L[], sex: string | null, age: number | null = null): L | null {
+  const fitting = inCategory.filter((l) => l.accepts_newcomers === true && sexFits(l.gender_restriction, sex));
+  // R235 — with an age, the entry Level whose range is nearest it (0 inside).
+  if (age !== null && fitting.length > 1) {
+    const distance = (l: L): number =>
+      l.min_age != null && age < l.min_age ? l.min_age - age : l.max_age != null && age > l.max_age ? age - l.max_age : 0;
+    const stated = fitting.filter((l) => l.min_age != null || l.max_age != null);
+    if (stated.length > 0) return [...stated].sort((a, b) => distance(a) - distance(b))[0]!;
+  }
   return (
-    inCategory.find((l) => l.accepts_newcomers === true && sexFits(l.gender_restriction, sex)) ??
+    fitting[0] ??
     inCategory.find((l) => l.accepts_newcomers === true) ??
     inCategory.find((l) => sexFits(l.gender_restriction, sex)) ??
     inCategory[0] ??
@@ -1441,6 +1464,7 @@ function ChildDecisionDialog({
           requestedCategory: c.requested_category,
           requestedBranch: c.requested_branch,
           sex: c.sex,
+          birthDate: c.birth_date ?? null,
         }))}
         title={t('admin.approvals.placeTitle')}
         branches={branches}

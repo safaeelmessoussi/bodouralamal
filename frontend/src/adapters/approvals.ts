@@ -35,6 +35,8 @@ export interface ApprovalChild {
   name: string;
   status: 'pending' | 'approved' | 'rejected';
   schooling_stage: string | null;
+  /** R235 — the date of birth as submitted (R130), `YYYY-MM-DD`; `null` before R130. */
+  birth_date?: string | null;
   first_name_arabic: string;
   last_name_arabic: string;
   first_name_french: string | null;

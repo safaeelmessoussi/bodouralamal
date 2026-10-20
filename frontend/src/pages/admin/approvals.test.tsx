@@ -8,6 +8,7 @@ import {
   decisionFailure,
   initialPlacementChoices,
   suggestedLevel,
+  ageOn,
   registrationNeedsApplicantPlacement,
 } from './approvals.js';
 import PAGE from './approvals.tsx?raw';
@@ -195,5 +196,23 @@ describe('R233 — a newcomer is offered an entry Level that fits', () => {
   it('warns, never blocks, on a Level that takes no newcomers', () => {
     expect(ar.admin.approvals.notEntryLevel).toContain('لا يستقبل الملتحقين الجدد');
     expect(PAGE).toContain("t('admin.approvals.notEntryLevel')");
+  });
+});
+
+describe('R235 — the child’s age picks between entry Levels', () => {
+  const teens = [
+    { id: 'kbar', accepts_newcomers: true, gender_restriction: 'girls_only' as const, min_age: 11, max_age: 13 },
+    { id: 'sghar', accepts_newcomers: true, gender_restriction: 'girls_only' as const, min_age: 8, max_age: 10 },
+  ];
+  it('reads whole years on the day', () => {
+    expect(ageOn('2017-10-21', '2026-10-20')).toBe(8);
+    expect(ageOn('2017-10-20', '2026-10-20')).toBe(9);
+    expect(ageOn(null, '2026-10-20')).toBeNull();
+  });
+  it('suggests the entry Level whose ages hold the child, else the nearest', () => {
+    expect(suggestedLevel(teens, 'female', 9)?.id).toBe('sghar');
+    expect(suggestedLevel(teens, 'female', 12)?.id).toBe('kbar');
+    expect(suggestedLevel(teens, 'female', 15)?.id).toBe('kbar');
+    expect(suggestedLevel(teens, 'female', null)?.id).toBe('kbar');
   });
 });

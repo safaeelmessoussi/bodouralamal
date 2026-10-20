@@ -133,6 +133,8 @@ export interface ApprovalItem {
     nameArabic: string;
     status: 'pending' | 'approved' | 'rejected';
     schoolingStage: string | null;
+    /** R235 — the date of birth as submitted (R130), `YYYY-MM-DD`; placement suggests by it. */
+    birthDate: string | null;
     firstNameArabic: string;
     lastNameArabic: string;
     firstNameFrench: string | null;
@@ -445,6 +447,7 @@ export async function listApprovals(
           nameArabic: composeArabicName(c.firstNameArabic, c.lastNameArabic),
           status: c.status,
           schoolingStage: c.schoolingStage,
+          birthDate: c.birthDate ? c.birthDate.toISOString().slice(0, 10) : null,
           firstNameArabic: c.firstNameArabic,
           lastNameArabic: c.lastNameArabic,
           firstNameFrench: c.firstNameFrench,
@@ -628,6 +631,7 @@ export async function listApprovals(
           nameArabic: composeArabicName(c.firstNameArabic, c.lastNameArabic),
           status: c.status,
           schoolingStage: c.schoolingStage,
+          birthDate: c.birthDate ? c.birthDate.toISOString().slice(0, 10) : null,
           firstNameArabic: c.firstNameArabic,
           lastNameArabic: c.lastNameArabic,
           firstNameFrench: c.firstNameFrench,

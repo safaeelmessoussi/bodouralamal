@@ -7,6 +7,9 @@ import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import { t } from '../../i18n/index.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { fetchAllPages } from './session-audience-dialog.js';
+import { TrackFilter } from './track-filter.js';
+
+export { TrackFilter };
 
 /**
  * **Who a class is for, as five filters — and never a «نمط التدريس»** (SRS
@@ -364,6 +367,12 @@ export function AudienceFilters({
         onChange={setters.setCategoryIds}
         options={scope.options.categoryId}
         emptyLabel={t('common.all')}
+      />
+      <TrackFilter
+        scope={scope}
+        categoryIds={selection.categoryIds}
+        levelIds={selection.levelIds}
+        setLevelIds={setters.setLevelIds}
       />
       <MultiSelectField
         label={t('admin.calendar.scopeLevel')}

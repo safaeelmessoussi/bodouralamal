@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { kindOf } from '../adapters/content.js';
 import type { ContentItem, LevelContent, LevelSummary } from '../adapters/content.js';
-import { ContentCard } from '../components/content/content-card.js';
+import { authorLine, ContentCard } from '../components/content/content-card.js';
 import {
   applyFilters,
   EMPTY_FILTERS,
@@ -299,5 +299,14 @@ describe('the library groups and filters by Surah (R177 §7)', () => {
     expect(source).toContain("t('content.surahGroupLabel')");
     // An item about no Surah stays under the Subject itself, never invented into a group.
     expect(source).toContain('if (e.surah_id === null) subject.items.push(e.item);');
+  });
+});
+
+describe('R235 — a teaching author by the honorific, never «· تأطير»', () => {
+  it('uses the server’s title for a مؤطِّرة, and name · role for anyone else', () => {
+    expect(
+      authorLine({ teacher_display_name: 'فاطمة بوخبزى', author_role: 'teacher', author_title: 'الأستاذة فاطمة بوخبزى' }),
+    ).toBe('الأستاذة فاطمة بوخبزى');
+    expect(authorLine({ teacher_display_name: 'سعاد', author_role: 'admin', author_title: null })).toContain('سعاد · ');
   });
 });
