@@ -1413,6 +1413,10 @@ export interface LevelCoreDto {
   journey_role: string;
   /** R181 §6 — «مقرر الحفظ» in Hizb; `null` is «not stated». */
   memorisation_hizb: number | null;
+  /** R233 — `younger` («صغار») | `older` («كبار») | `null` (the Category's one line). */
+  track: string | null;
+  /** R233 — an entry Level: placement suggests it to a newcomer. */
+  accepts_newcomers: boolean;
   version: number;
 }
 
@@ -1422,6 +1426,8 @@ export interface LevelJourneyColumns {
   maxAge: number | null;
   journeyRole: string;
   memorisationHizb: number | null;
+  track: string | null;
+  acceptsNewcomers: boolean;
 }
 
 export function levelCoreDto(row: {
@@ -1444,6 +1450,8 @@ export function levelCoreDto(row: {
     max_age: row.maxAge,
     journey_role: row.journeyRole,
     memorisation_hizb: row.memorisationHizb,
+    track: row.track,
+    accepts_newcomers: row.acceptsNewcomers,
     version: row.version,
   };
 }
@@ -1508,6 +1516,8 @@ export function levelDto(row: {
     max_age: row.maxAge,
     journey_role: row.journeyRole,
     memorisation_hizb: row.memorisationHizb,
+    track: row.track,
+    accepts_newcomers: row.acceptsNewcomers,
     group_count: row.groupCount,
     subject_count: row.subjectCount,
     subject_ids: row.subjectIds,
@@ -1549,6 +1559,8 @@ export function createdLevelDto(level: {
     max_age: level.maxAge,
     journey_role: level.journeyRole,
     memorisation_hizb: level.memorisationHizb,
+    track: level.track,
+    accepts_newcomers: level.acceptsNewcomers,
     version: level.version,
   };
 }

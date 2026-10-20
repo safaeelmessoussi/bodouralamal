@@ -41,6 +41,9 @@ export interface PublicProgramLevel {
   /** R180 §6 — `step` (the next rung) or `preparatory` (leads into the
    *  Category's first step; not required of those who enter there). */
   journeyRole: 'step' | 'preparatory';
+  /** R233 — the line of Levels within the Category, and an entry Level. */
+  track: 'younger' | 'older' | null;
+  acceptsNewcomers: boolean;
   /** R181 §6 — «مقرر الحفظ» in Hizb, the Owner's measure; `null` is «not stated». */
   memorisationHizb: number | null;
   subjects: PublicSubjectRef[];
@@ -102,6 +105,8 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
       minAge: true,
       maxAge: true,
       journeyRole: true,
+      track: true,
+      acceptsNewcomers: true,
       memorisationHizb: true,
     },
     // Ordering is scoped within the parent Category (§2.2), same as the
@@ -197,6 +202,8 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
       minAge: level.minAge,
       maxAge: level.maxAge,
       journeyRole: level.journeyRole,
+      track: level.track,
+      acceptsNewcomers: level.acceptsNewcomers,
       memorisationHizb: level.memorisationHizb,
       subjects: subjectsByLevel.get(level.id) ?? [],
       surahs: surahsByLevel.get(level.id) ?? [],

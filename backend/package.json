@@ -26,6 +26,7 @@
     "ops:empty-trash": "node dist/src/ops/empty-trash.js",
     "ops:apply-holidays": "node dist/src/ops/apply-holidays.js",
     "ops:import-translations": "node dist/src/ops/import-translations.js",
+    "ops:apply-programmes": "node dist/src/ops/apply-programmes.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts"
   },
   "dependencies": {

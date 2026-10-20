@@ -214,6 +214,8 @@ export function createLevelHandler(prisma: PrismaClient) {
       ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
       ...(body.journey_role !== undefined ? { journeyRole: body.journey_role } : {}),
       ...(body.memorisation_hizb !== undefined ? { memorisationHizb: body.memorisation_hizb } : {}),
+      ...(body.track !== undefined ? { track: body.track } : {}),
+      ...(body.accepts_newcomers !== undefined ? { acceptsNewcomers: body.accepts_newcomers } : {}),
     });
     res.status(201).json({ data: createdLevelDto(created.level) });
   };
@@ -233,6 +235,8 @@ export function updateLevelHandler(prisma: PrismaClient) {
       ...(body.max_age !== undefined ? { maxAge: body.max_age } : {}),
       ...(body.journey_role !== undefined ? { journeyRole: body.journey_role } : {}),
       ...(body.memorisation_hizb !== undefined ? { memorisationHizb: body.memorisation_hizb } : {}),
+      ...(body.track !== undefined ? { track: body.track } : {}),
+      ...(body.accepts_newcomers !== undefined ? { acceptsNewcomers: body.accepts_newcomers } : {}),
       // R181 §1 — a move between Categories.
       ...(body.category_id !== undefined ? { categoryId: body.category_id } : {}),
     });

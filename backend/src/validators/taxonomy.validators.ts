@@ -20,6 +20,8 @@ import { displayOrder, entityDescription, entityName, uuid, version } from './co
 // once took; the schemas are not strict, so an old client's field is dropped
 // rather than refused — the server never stores it).
 const levelAge = z.number().int().min(0).max(120).nullable();
+/** R233 — `younger` («صغار») or `older` («كبار»); `null` — the Category's one line. */
+const levelTrack = z.enum(['younger', 'older']).nullable();
 
 export const createCategorySchema = z.object({
   name: entityName,
@@ -101,6 +103,9 @@ export const createLevelSchema = z
     journey_role: journeyRole.optional(),
     // R181 §6 — «مقرر الحفظ» in Hizb (0–60); `null` is «not stated».
     memorisation_hizb: z.number().int().min(0).max(60).nullable().optional(),
+    // R233 — the line of Levels («صغار»/«كبار»), and an entry Level.
+    track: levelTrack.optional(),
+    accepts_newcomers: z.boolean().optional(),
   })
   // **`.strict()`, and for the reason the update schema already is:** stripping
   // `branch_id` would let a client send one, receive `201`, and believe a group
@@ -130,6 +135,8 @@ export const updateLevelSchema = z
     max_age: levelAge.optional(),
     journey_role: journeyRole.optional(),
     memorisation_hizb: z.number().int().min(0).max(60).nullable().optional(),
+    track: levelTrack.optional(),
+    accepts_newcomers: z.boolean().optional(),
   })
   .strict();
 

@@ -196,6 +196,10 @@ export interface Level {
   journey_role: JourneyRole;
   /** R181 §6 — «مقرر الحفظ» in Hizb; `null` is «not stated». */
   memorisation_hizb: number | null;
+  /** R233 — the line of Levels within the Category («صغار»/«كبار»), and an
+   *  entry Level placement suggests to a newcomer. Optional for older fixtures. */
+  track?: LevelTrack | null;
+  accepts_newcomers?: boolean;
   group_count: number;
   subject_count: number;
   /** The Subjects the Level teaches on its own — one read for «مواد المستوى». */
@@ -223,6 +227,8 @@ export interface Level {
  * it may hold groups at several branches later.
  */
 export type JourneyRole = 'step' | 'preparatory';
+/** R233 — `younger` «صغار», `older` «كبار». */
+export type LevelTrack = 'younger' | 'older';
 
 export interface CreateLevelInput {
   name: string;
@@ -235,6 +241,8 @@ export interface CreateLevelInput {
   max_age?: number | null;
   journey_role?: JourneyRole;
   memorisation_hizb?: number | null;
+  track?: LevelTrack | null;
+  accepts_newcomers?: boolean;
 }
 
 /** R181 §1 — `category_id` moves the Level (it lists last in the new
@@ -249,6 +257,8 @@ export interface UpdateLevelInput {
   max_age?: number | null;
   journey_role?: JourneyRole;
   memorisation_hizb?: number | null;
+  track?: LevelTrack | null;
+  accepts_newcomers?: boolean;
 }
 
 export async function listLevels(

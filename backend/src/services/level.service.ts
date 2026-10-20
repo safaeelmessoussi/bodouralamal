@@ -55,6 +55,9 @@ export interface CreateLevelInput {
   maxAge?: number | null;
   journeyRole?: 'step' | 'preparatory';
   memorisationHizb?: number | null;
+  /** R233 — the line of Levels and the entry flag. */
+  track?: 'younger' | 'older' | null;
+  acceptsNewcomers?: boolean;
   /**
    * ~~**Required (Revision 43.1).** Where المجموعة 1 sits.~~ **Removed by
    * Revision 66.** A Level belongs to a Category and to no Branch, and it no
@@ -104,6 +107,9 @@ export interface LevelSummary {
   journeyRole: 'step' | 'preparatory';
   /** R181 §6 — «مقرر الحفظ» in Hizb; `null` is «not stated». */
   memorisationHizb: number | null;
+  /** R233 — the line of Levels («صغار»/«كبار») and the entry flag. */
+  track: 'younger' | 'older' | null;
+  acceptsNewcomers: boolean;
   groupCount: number;
   subjectCount: number;
   /**
@@ -258,6 +264,8 @@ export async function listLevels(
       maxAge: true,
       journeyRole: true,
       memorisationHizb: true,
+      track: true,
+      acceptsNewcomers: true,
       version: true,
       category: { select: { name: true } },
       subjects: { where: { deletedAt: null, subject: { deletedAt: null } }, select: { subjectId: true } },
@@ -296,6 +304,8 @@ export async function listLevels(
     maxAge: row.maxAge,
     journeyRole: row.journeyRole,
     memorisationHizb: row.memorisationHizb,
+    track: row.track,
+    acceptsNewcomers: row.acceptsNewcomers,
     groupCount: row._count.administrativeGroups,
     subjectCount: row._count.subjects,
     subjectIds: row.subjects.map((link) => link.subjectId),
@@ -359,6 +369,8 @@ export async function updateLevel(
     maxAge?: number | null;
     journeyRole?: 'step' | 'preparatory';
     memorisationHizb?: number | null;
+    track?: 'younger' | 'older' | null;
+    acceptsNewcomers?: boolean;
     /**
      * **R181 §1 — a Level may move to another Category** (the Owner,
      * 2026-09-30; supersedes R66's refusal). What a move means: the Level's
@@ -615,6 +627,8 @@ export async function createLevel(
         maxAge: input.maxAge ?? null,
         journeyRole: input.journeyRole ?? 'step',
         memorisationHizb: input.memorisationHizb ?? null,
+        track: input.track ?? null,
+        acceptsNewcomers: input.acceptsNewcomers ?? false,
         createdById: actor.userId,
       },
     });

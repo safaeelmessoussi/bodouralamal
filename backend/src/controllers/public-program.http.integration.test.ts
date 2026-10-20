@@ -132,7 +132,7 @@ describe("GET /programs — public access", () => {
       // R181 §6 — the Hizb count joins the projection; R184 §2 — the audience
       // (`gender_restriction`, R181 §7) leaves it again: the page writes no
       // audience words, so the column has no public reader.
-      ["description", "id", "journey_role", "max_age", "memorisation_hizb", "min_age", "name", "subjects", "surahs"].sort(),
+      ["accepts_newcomers", "description", "id", "journey_role", "max_age", "memorisation_hizb", "min_age", "name", "subjects", "surahs", "track"].sort(),
     );
     for (const leaked of [
       "enrollment_count",

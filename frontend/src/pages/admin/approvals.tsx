@@ -989,6 +989,8 @@ type PlacementStudent = {
   name: string;
   requestedCategory: { id: string; name: string } | null;
   requestedBranch: { id: string; name: string } | null;
+  /** R233 — what the suggestion reads beside the entry flag (`null` unknown). */
+  sex?: string | null;
 };
 
 type PlacementChoice = {
@@ -1005,13 +1007,14 @@ type PlacementChoice = {
  */
 export function initialPlacementChoices(
   students: readonly PlacementStudent[],
-  levels: readonly Pick<Level, 'id' | 'category_id'>[],
+  levels: readonly (Pick<Level, 'id' | 'category_id'> &
+    Partial<Pick<Level, 'accepts_newcomers' | 'gender_restriction'>>)[],
   groups: readonly Pick<AdministrativeGroup, 'id' | 'level_id'>[],
 ): Record<string, PlacementChoice> {
   return Object.fromEntries(
     students.flatMap((student) => {
       const wanted = student.requestedCategory?.id;
-      const first = wanted ? levels.find((level) => level.category_id === wanted) : null;
+      const first = wanted ? suggestedLevel(levels.filter((level) => level.category_id === wanted), student.sex ?? null) : null;
       if (!first) return [];
       const inLevel = groups.filter((group) => group.level_id === first.id);
       return [[
@@ -1023,6 +1026,31 @@ export function initialPlacementChoices(
         },
       ]];
     }),
+  );
+}
+
+/** R233 — a Level's `gender_restriction` admits this sex (an unknown sex: unrestricted only). */
+export function sexFits(restriction: string | undefined, sex: string | null): boolean {
+  if (!restriction || restriction === 'any') return true;
+  return (restriction === 'girls_only' && sex === 'female') || (restriction === 'boys_only' && sex === 'male');
+}
+
+/**
+ * **R233 — the Level suggested to a newcomer**, in the Category's own order: an
+ * entry Level («يستقبل الملتحقين الجدد») the applicant's sex fits, else an
+ * entry Level, else a Level that fits, else the first. A suggestion only —
+ * the administration places, and is warned off a non-entry Level.
+ */
+export function suggestedLevel<L extends Partial<Pick<Level, 'accepts_newcomers' | 'gender_restriction'>>>(
+  inCategory: readonly L[],
+  sex: string | null,
+): L | null {
+  return (
+    inCategory.find((l) => l.accepts_newcomers === true && sexFits(l.gender_restriction, sex)) ??
+    inCategory.find((l) => l.accepts_newcomers === true) ??
+    inCategory.find((l) => sexFits(l.gender_restriction, sex)) ??
+    inCategory[0] ??
+    null
   );
 }
 
@@ -1231,6 +1259,10 @@ function PlacementDialog({
                     // would have been the one that did not (2026-08-17).
                     .map((l) => ({ value: l.id, label: levelLabel(l) })),
                 ]}
+                // R233 — a newcomer joins at an entry Level; elsewhere, a warning.
+                {...(picked?.levelId && levels.find((l) => l.id === picked.levelId)?.accepts_newcomers === false
+                  ? { hint: t('admin.approvals.notEntryLevel') }
+                  : {})}
               />
               {picked && inLevel.length > 1 ? (
                 <SelectField
@@ -1408,6 +1440,7 @@ function ChildDecisionDialog({
           name: c.name,
           requestedCategory: c.requested_category,
           requestedBranch: c.requested_branch,
+          sex: c.sex,
         }))}
         title={t('admin.approvals.placeTitle')}
         branches={branches}

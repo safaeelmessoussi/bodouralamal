@@ -7,6 +7,7 @@ import { ApiError } from '../../lib/api.js';
 import {
   decisionFailure,
   initialPlacementChoices,
+  suggestedLevel,
   registrationNeedsApplicantPlacement,
 } from './approvals.js';
 import PAGE from './approvals.tsx?raw';
@@ -174,5 +175,25 @@ describe('R168 §1 — a row with no single decision offers the review, never a 
 
   it('never offers «الموافقة دون دور» when the act IS the decision on one requested role', () => {
     expect(source).toMatch(/\{grantable \? null : \(/);
+  });
+});
+
+describe('R233 — a newcomer is offered an entry Level that fits', () => {
+  const levels = [
+    { id: 'k', accepts_newcomers: false, gender_restriction: 'any' as const },
+    { id: 'girls-entry', accepts_newcomers: true, gender_restriction: 'girls_only' as const },
+    { id: 'boys-entry', accepts_newcomers: true, gender_restriction: 'boys_only' as const },
+  ];
+
+  it('prefers an entry Level the applicant’s sex fits, then any entry Level, then the first', () => {
+    expect(suggestedLevel(levels, 'male')?.id).toBe('boys-entry');
+    expect(suggestedLevel(levels, 'female')?.id).toBe('girls-entry');
+    expect(suggestedLevel(levels, null)?.id).toBe('girls-entry');
+    expect(suggestedLevel([{ id: 'a', accepts_newcomers: false }, { id: 'b', accepts_newcomers: false }], 'male')?.id).toBe('a');
+  });
+
+  it('warns, never blocks, on a Level that takes no newcomers', () => {
+    expect(ar.admin.approvals.notEntryLevel).toContain('لا يستقبل الملتحقين الجدد');
+    expect(PAGE).toContain("t('admin.approvals.notEntryLevel')");
   });
 });

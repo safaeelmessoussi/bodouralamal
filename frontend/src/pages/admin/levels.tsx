@@ -11,6 +11,7 @@ import {
   type CreateLevelInput,
   type GenderRestriction,
   type JourneyRole,
+  type LevelTrack,
   type Level,
 } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
@@ -25,7 +26,7 @@ import {
   type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { NumberField, SelectField, TextArea, TextField } from '../../components/ui/field.js';
+import { CheckboxField, NumberField, SelectField, TextArea, TextField } from '../../components/ui/field.js';
 import { ageRangeLabel } from '../../lib/category-audience.js';
 import { ageRangeError } from './taxonomy.js';
 import { useSession } from '../../contexts/session.js';
@@ -250,6 +251,8 @@ export function LevelsPage(): ReactNode {
             max_age: input.max_age ?? null,
             ...(input.journey_role !== undefined ? { journey_role: input.journey_role } : {}),
             memorisation_hizb: input.memorisation_hizb ?? null,
+            track: input.track ?? null,
+            ...(input.accepts_newcomers !== undefined ? { accepts_newcomers: input.accepts_newcomers } : {}),
             // R181 §1 — sent only when she changed it: a move is an act.
             ...(input.category_id !== existing.category_id ? { category_id: input.category_id } : {}),
           },
@@ -441,6 +444,9 @@ function LevelFormDialog({
     maxAge: level?.max_age == null ? '' : String(level.max_age),
     journeyRole: (level?.journey_role ?? 'step') as JourneyRole,
     hizb: level?.memorisation_hizb == null ? '' : String(level.memorisation_hizb),
+    // R233 — the line of Levels («» none) and the entry flag.
+    track: (level?.track ?? '') as LevelTrack | '',
+    acceptsNewcomers: level?.accepts_newcomers ?? false,
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
@@ -468,6 +474,8 @@ function LevelFormDialog({
       max_age: form.maxAge.trim() === '' ? null : Number(form.maxAge),
       journey_role: form.journeyRole,
       memorisation_hizb: form.hizb.trim() === '' ? null : Number(form.hizb),
+      track: form.track === '' ? null : form.track,
+      accepts_newcomers: form.acceptsNewcomers,
     });
   }
 
@@ -563,6 +571,26 @@ function LevelFormDialog({
             label: t(`admin.levels.journeyRole.${role}`),
           }))}
           hint={t('admin.levels.journeyRoleHint')}
+        />
+
+        {/* R233 — a Category's parallel lines («صغار» / «كبار»): the journey
+            walks each apart, and the certificate counts within it. */}
+        <SelectField
+          label={t('admin.levels.trackLabel')}
+          value={form.track}
+          onChange={(v) => setForm((f) => ({ ...f, track: v as LevelTrack | '' }))}
+          options={[
+            { value: '', label: t('admin.levels.track.none') },
+            { value: 'younger', label: t('admin.levels.track.younger') },
+            { value: 'older', label: t('admin.levels.track.older') },
+          ]}
+          hint={t('admin.levels.trackHint')}
+        />
+        <CheckboxField
+          label={t('admin.levels.acceptsNewcomers')}
+          checked={form.acceptsNewcomers}
+          onChange={(v) => setForm((f) => ({ ...f, acceptsNewcomers: v }))}
+          hint={t('admin.levels.acceptsNewcomersHint')}
         />
 
         {/* **No branch (Revision 66).** It was here because creating a Level

@@ -9,6 +9,9 @@
  */
 export const TRANSLATIONS: Record<string, Record<string, string>> = {
  "en": {
+  "اليافعين": "Teen boys",
+  "{level} صغار": "{level} (younger)",
+  "{level} كبار": "{level} (older)",
   "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, part one (first and second hizbs)",
   "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, part two (third, fourth and fifth hizbs)",
   "word:التوقيت الإداري العادي": "Regular office hours",
@@ -443,6 +446,9 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "fr": {
+  "اليافعين": "Adolescents",
+  "{level} صغار": "{level} (cadets)",
+  "{level} كبار": "{level} (aînés)",
   "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, première partie (premier et deuxième hizbs)",
   "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, deuxième partie (troisième, quatrième et cinquième hizbs)",
   "word:التوقيت الإداري العادي": "Horaires administratifs habituels",
@@ -877,6 +883,9 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Younous"
  },
  "es": {
+  "اليافعين": "Adolescentes (chicos)",
+  "{level} صغار": "{level} (menores)",
+  "{level} كبار": "{level} (mayores)",
   "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, primera parte (primer y segundo hizb)",
   "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, segunda parte (tercer, cuarto y quinto hizb)",
   "word:التوقيت الإداري العادي": "Horario administrativo habitual",
@@ -1311,6 +1320,9 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "de": {
+  "اليافعين": "Jugendliche (Jungen)",
+  "{level} صغار": "{level} (Jüngere)",
+  "{level} كبار": "{level} (Ältere)",
   "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, erster Teil (erster und zweiter Hizb)",
   "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, zweiter Teil (dritter, vierter und fünfter Hizb)",
   "word:التوقيت الإداري العادي": "Reguläre Bürozeiten",
@@ -1745,6 +1757,9 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "zgh": {
+  "اليافعين": "ⵉⵃⴷⴰⵢⵏ",
+  "{level} صغار": "{level} (ⵉⵎⵥⵥⴰⵢⵏ)",
+  "{level} كبار": "{level} (ⵉⵎⵇⵇⵔⴰⵏⵏ)",
   "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, ⴰⵃⵔⵉⴼ ⴰⵎⵣⵡⴰⵔⵓ (ⴰⵃⵣⴱ ⴰⵎⵣⵡⴰⵔⵓ ⴷ ⵡⵉⵙ ⵙⵉⵏ)",
   "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, ⴰⵃⵔⵉⴼ ⵡⵉⵙ ⵙⵉⵏ (ⴰⵃⵣⴱ ⵡⵉⵙ ⴽⵕⴰⴹ, ⵡⵉⵙ ⴽⴽⵓⵥ ⴷ ⵡⵉⵙ ⵙⵎⵎⵓⵙ)",
   "word:التوقيت الإداري العادي": "ⴰⴽⵓⴷ ⴰⵏⴱⴹⴰⵏ ⴰⵎⴰⴳⵏⵓ",
@@ -2179,6 +2194,9 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "ⵢⵓⵏⵓⵙ"
  },
  "shi-Latn": {
+  "اليافعين": "Iḥdayn",
+  "{level} صغار": "{level} (imẓẓayn)",
+  "{level} كبار": "{level} (imqqranen)",
   "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, aḥrif amzwaru (aḥzab amzwaru d wis sin)",
   "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, aḥrif wis sin (aḥzab wis kraḍ, wis kkuẓ d wis smmus)",
   "word:التوقيت الإداري العادي": "Akud anbḍan amagnu",

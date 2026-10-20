@@ -1,4 +1,5 @@
 import type { PublicProgramCategory, PublicProgramLevel } from '../../adapters/programs.js';
+import { t } from '../../i18n/index.js';
 import { ageRangeWords, counted } from '../../lib/arabic-years.js';
 
 /**
@@ -71,36 +72,78 @@ export interface Journey {
 export function journeyOrder(
   categories: readonly PublicProgramCategory[],
 ): PublicProgramCategory[] {
-  const walkable = categories.filter((category) => category.levels.length > 0);
-  const everyAged = walkable.length > 0 && walkable.every((category) => category.min_age !== null);
-  if (!everyAged) return walkable;
-  return walkable
-    .map((category, index) => ({ category, index }))
-    .sort((a, b) => a.category.min_age! - b.category.min_age! || a.index - b.index)
-    .map((row) => row.category);
+  return byAge(categories.filter((category) => category.levels.length > 0), (c) => c.min_age);
+}
+
+function byAge<T>(rows: readonly T[], age: (row: T) => number | null): T[] {
+  const everyAged = rows.length > 0 && rows.every((row) => age(row) !== null);
+  if (!everyAged) return [...rows];
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => age(a.row)! - age(b.row)! || a.index - b.index)
+    .map((entry) => entry.row);
+}
+
+/**
+ * **R233 — a Category's tracks are stages of their own.** «اليافعات» walks
+ * «صغار» and «كبار» apart, each from its own first step, so each is a stage
+ * («اليافعات — صغار»), with its ages derived the way the server derives a
+ * Category's (its first stated start, its last Level's end). A Category with
+ * one line stays one stage, under its own id.
+ */
+interface StageSource {
+  id: string;
+  name: string;
+  source: PublicProgramCategory;
+  levels: PublicProgramLevel[];
+  minAge: number | null;
+  maxAge: number | null;
+}
+
+function stagesOf(source: PublicProgramCategory): StageSource[] {
+  const tracks = [...new Set(source.levels.map((level) => level.track ?? null))];
+  if (tracks.length <= 1) {
+    return [{ id: source.id, name: source.name, source, levels: source.levels, minAge: source.min_age, maxAge: source.max_age }];
+  }
+  return tracks.map((track) => {
+    const levels = source.levels.filter((level) => (level.track ?? null) === track);
+    return {
+      id: `${source.id}:${track ?? 'none'}`,
+      name: track
+        ? t('programs.journey.trackTitle').replace('{category}', source.name).replace('{track}', t(`programs.journey.track.${track}`))
+        : source.name,
+      source,
+      levels,
+      minAge: levels.find((level) => level.min_age !== null)?.min_age ?? null,
+      maxAge: levels.at(-1)?.max_age ?? null,
+    };
+  });
 }
 
 export function buildJourney(categories: readonly PublicProgramCategory[]): Journey {
-  const ordered = journeyOrder(categories);
+  const walkable = categories.filter((category) => category.levels.length > 0);
+  const ordered = byAge(walkable.flatMap(stagesOf), (stage) => stage.minAge);
   const out: JourneyCategory[] = [];
   const steps: JourneyStep[] = [];
-  ordered.forEach((source, index) => {
+  ordered.forEach((stage, index) => {
+    const { source } = stage;
+    const ordinary = stage.levels.filter((level) => level.journey_role !== 'preparatory');
     const category: JourneyCategory = {
-      id: source.id,
-      name: source.name,
+      id: stage.id,
+      name: stage.name,
       description: source.description,
-      minAge: source.min_age,
-      maxAge: source.max_age,
+      minAge: stage.minAge,
+      maxAge: stage.maxAge,
       sharedSubjects: programmeSubjects(source.subjects),
       seasonalSubjects: seasonalSubjects(source.subjects),
       adult: source.holds_own_login === true,
       steps: [],
-      preparatory: source.levels.filter((level) => level.journey_role === 'preparatory'),
+      preparatory: stage.levels.filter((level) => level.journey_role === 'preparatory'),
       position: index + 1,
-      directEntry: index > 0,
+      // R233 — a way in where the first step takes newcomers.
+      directEntry: index > 0 && ordinary[0]?.accepts_newcomers !== false,
       last: index === ordered.length - 1,
     };
-    const ordinary = source.levels.filter((level) => level.journey_role !== 'preparatory');
     category.steps = ordinary.map((level, at) => ({
       kind: 'step',
       level,

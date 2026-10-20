@@ -228,7 +228,8 @@ function Stage({
   rise: number;
 }): ReactNode {
   const ages = ageWords(category, t);
-  const entrances = !first || category.preparatory.length > 0;
+  // R233 — a direct entry only where the stage's first step takes newcomers.
+  const entrances = category.directEntry || category.preparatory.length > 0;
   return (
     <section className="stage" aria-labelledby={`stage-${category.id}-title`}>
       {/* The Category's name ABOVE its Levels (R181 §3), and it stays in view
@@ -284,7 +285,7 @@ function Stage({
         ) : null}
         {entrances ? (
           <li className="stage__cell stage__cell--entrances" style={{ ['--step' as string]: 0 }}>
-            <Entrances category={category} first={first} rise={rise} />
+            <Entrances category={category} rise={rise} />
           </li>
         ) : null}
         {category.steps.map((step, at) => (
@@ -357,11 +358,9 @@ function Walk({ rise }: { rise: number }): ReactNode {
  */
 function Entrances({
   category,
-  first,
   rise,
 }: {
   category: JourneyCategory;
-  first: boolean;
   rise: number;
 }): ReactNode {
   const firstStep = category.steps[0]?.level.name ?? category.name;
@@ -370,7 +369,7 @@ function Entrances({
       {/* R182 §2 — a note, not a panel: each way in is one or two lines,
           and one arrow from the note to the first step. */}
       <div className="entrances__words">
-        {!first ? (
+        {category.directEntry ? (
           <p className="entrances__item">
             <span className="entrances__lead">
               {t('programs.journey.directEntryShort').replace('{step}', firstStep)}

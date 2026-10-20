@@ -39,6 +39,8 @@ export function list(prisma: PrismaClient) {
           max_age: level.maxAge,
           // R180 §6 — what the Level is on the journey.
           journey_role: level.journeyRole,
+          track: level.track,
+          accepts_newcomers: level.acceptsNewcomers,
           // R181 §6 — «مقرر الحفظ» in Hizb. R184 §2 — no `gender_restriction`
           // any more: the page composes no audience words (the Category's
           // description, the Super Admin's, says who it is for).

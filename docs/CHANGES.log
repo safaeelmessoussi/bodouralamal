@@ -406,3 +406,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Migration `r232_level_surah_part` (`level_surah.part` + CHECK); `policies/surah-parts.ts` (ranges 1–140 / 141–285, names, `coverageWithin`); `forPart` in `quran.service` feeds «حفظي», per-Level completion, the mark verdict.
 - Names the part in `listLevelSurahs`, the Levels list (`surah_parts`), `/quran-students`, certificates, calendar, public programme; `PUT …/surahs/{surahId}` body `{ part }`, OpenAPI regenerated.
 - «مقرر الحفظ» dialog: a «سورة البقرة» choice (whole / part 1 / part 2). Translation patterns for six languages.
+
+## 2026-10-20 — SRS Revision 233: tracks («صغار»/«كبار»), entry Levels, «اليافعين»
+- Migration `r233_level_track_entry` (`level_track` enum, `track`, `accepts_newcomers` + backfill); Levels API/validators/DTOs, `/programs` carry both; certificate position within (Category, track).
+- `journey-model.ts`: a stage per track, ordered by age; direct entry from `accepts_newcomers`. «المستويات»: track select + entry checkbox. Approvals: `suggestedLevel` + «notEntryLevel» warning.
+- `ops:apply-programmes` (`services/programmes-r233.service.ts`, DRY_RUN, idempotent by names); integration test runs it twice in a rolled-back transaction.

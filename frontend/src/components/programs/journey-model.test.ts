@@ -189,3 +189,34 @@ describe('memorisationWords', () => {
     expect(memorisationWords(level('x'), t)).toBeNull();
   });
 });
+
+describe('R233 — tracks walk apart, and the ways in follow the entry Levels', () => {
+  const child = category('child', [level('k', { min_age: 5, accepts_newcomers: true }), level('b')], { min_age: 5 });
+  const teens = category(
+    'teens',
+    [
+      level('n-old', { track: 'older', min_age: 11, accepts_newcomers: true }),
+      level('n-young', { track: 'younger', min_age: 8, accepts_newcomers: true }),
+      level('a-young', { track: 'younger', max_age: 13 }),
+      level('a-old', { track: 'older' }),
+    ],
+    { min_age: 8 },
+  );
+
+  it('makes each track a stage of its own, named «الفئة — صغار», ordered by its own start age', () => {
+    const journey = buildJourney([teens, child]);
+    expect(journey.categories.map((c) => c.id)).toEqual(['child', 'teens:younger', 'teens:older']);
+    expect(journey.categories[1]!.name).toBe(`فئة teens — ${t('programs.journey.track.younger')}`);
+    expect(journey.categories[1]!.steps.map((s) => [s.level.id, s.position])).toEqual([
+      ['n-young', 1],
+      ['a-young', 2],
+    ]);
+    expect(journey.categories[1]!.maxAge).toBe(13);
+  });
+
+  it('opens a direct entry only where the first step takes newcomers', () => {
+    const closed = category('women', [level('w', { min_age: 18, accepts_newcomers: false })], { min_age: 18 });
+    const journey = buildJourney([child, teens, closed]);
+    expect(journey.categories.map((c) => c.directEntry)).toEqual([false, true, true, false]);
+  });
+});

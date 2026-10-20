@@ -479,7 +479,7 @@ export async function certificatesOf(
   const [levels, syllabus, tafsir] = await Promise.all([
     prisma.level.findMany({
       where: { id: { in: levelIds }, deletedAt: null },
-      select: { id: true, categoryId: true, journeyRole: true },
+      select: { id: true, categoryId: true, journeyRole: true, track: true },
     }),
     prisma.levelSurah.findMany({
       where: { levelId: { in: levelIds }, deletedAt: null },
@@ -490,13 +490,18 @@ export async function certificatesOf(
   ]);
   const steps = await prisma.level.findMany({
     where: { categoryId: { in: [...new Set(levels.map((l) => l.categoryId))] }, deletedAt: null, journeyRole: 'step' },
-    select: { id: true, categoryId: true },
+    select: { id: true, categoryId: true, track: true },
     orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
   });
+  // R233 — «المستوى الثاني» within its own track («صغار»/«كبار»).
   const positionOf = (levelId: string): number => {
     const level = levels.find((l) => l.id === levelId);
     if (!level || level.journeyRole !== 'step') return 0;
-    return steps.filter((s) => s.categoryId === level.categoryId).findIndex((s) => s.id === levelId) + 1;
+    return (
+      steps
+        .filter((s) => s.categoryId === level.categoryId && s.track === level.track)
+        .findIndex((s) => s.id === levelId) + 1
+    );
   };
   const yearOf = async (day: Date): Promise<string | null> =>
     (

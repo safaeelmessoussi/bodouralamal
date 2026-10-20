@@ -81,6 +81,14 @@ enum LevelJourneyRole {
   @@map("level_journey_role")
 }
 
+/// R233 — a Category's parallel line of Levels: «صغار» (younger) or «كبار» (older).
+enum LevelTrack {
+  younger
+  older
+
+  @@map("level_track")
+}
+
 enum GenderRestriction {
   any
   girls_only
@@ -1254,6 +1262,14 @@ model Level {
   /// memorisation curriculum (0–60; `level_memorisation_hizb_check`).
   /// Informational: the Surah list stays what the platform reads.
   memorisationHizb Int?             @map("memorisation_hizb") @db.SmallInt
+  /// **R233 — the line of Levels this one belongs to** within its Category
+  /// («صغار» / «كبار»), `null` where the Category has one line. Steps are
+  /// ordered, positioned and walked within (Category, track).
+  track            LevelTrack?      @map("track")
+  /// **R233 — a newcomer may join here** (an entry Level: كتاكيت, براعم; نسيم
+  /// صغار/كبار; براعم صغار/كبار; فرصة أمل, وميض). Placement suggests these
+  /// and warns elsewhere; it gates nothing.
+  acceptsNewcomers Boolean          @default(false) @map("accepts_newcomers")
 
   // NOTE: the per-level passing grade is NOT a column here — §7 defines Level
   // as carrying only `name`, `gender_restriction`, and `display_order`, and

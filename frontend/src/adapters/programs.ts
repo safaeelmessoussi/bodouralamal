@@ -33,6 +33,10 @@ export interface PublicProgramLevel {
   /** R180 §6 — `step` (the next rung) or `preparatory` (leads into the
    *  Category's first step; not required of those who enter there). */
   journey_role: 'step' | 'preparatory';
+  /** R233 — the line of Levels within the Category; `null` its one line. */
+  track?: 'younger' | 'older' | null;
+  /** R233 — a newcomer may join here (a way in on the journey). */
+  accepts_newcomers?: boolean;
   /** R181 §6 — «مقرر الحفظ» in Hizb, the Owner's measure; `null` is «not stated». */
   memorisation_hizb: number | null;
   subjects: PublicSubject[];
