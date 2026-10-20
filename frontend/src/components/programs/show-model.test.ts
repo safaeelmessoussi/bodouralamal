@@ -33,7 +33,7 @@ const journey = buildJourney([
 ]);
 
 describe('the show walks one tap at a time (R186)', () => {
-  it('from a Category: its steps, a milestone when another Category follows, on to the last, then the graduation, the question, and back', () => {
+  it('from a Category: its steps, its milestone, then back to the Categories — never on into the next (R234)', () => {
     const slides = walkSequence(journey, 'c');
     expect(
       slides.map((s) => (s.kind === 'level' ? s.level.id : `milestone:${s.category.id}`)),
@@ -52,26 +52,21 @@ describe('the show walks one tap at a time (R186)', () => {
       state = advance(journey, state);
       expect(state).toEqual({ kind: 'walk', start: 'c', at });
     }
-    state = advance(journey, state);
-    expect(state).toEqual({ kind: 'graduation' });
-    state = advance(journey, state);
-    expect(state).toEqual({ kind: 'question' });
+    // R234 — after «إتمام فئة c», the list of Categories.
     expect(advance(journey, state)).toEqual(SHOW_START);
   });
 
-  it('the last Category gets no milestone slide: its end IS the graduation', () => {
+  it('the last Category gets no milestone slide: its end IS the graduation, then the question', () => {
     const two = buildJourney([
       category('a', [level('a1')]),
       category('b', [level('b1'), level('b2')]),
     ]);
-    expect(walkSequence(two, 'a').map((s) => s.kind)).toEqual([
-      'level',
-      'milestone',
-      'level',
-      'level',
-    ]);
+    expect(walkSequence(two, 'a').map((s) => s.kind)).toEqual(['level', 'milestone']);
     expect(walkSequence(two, 'b').map((s) => s.kind)).toEqual(['level', 'level']);
+    expect(advance(two, { kind: 'walk', start: 'a', at: 1 })).toEqual(SHOW_START);
     expect(advance(two, { kind: 'walk', start: 'b', at: 1 })).toEqual({ kind: 'graduation' });
+    expect(advance(two, { kind: 'graduation' })).toEqual({ kind: 'question' });
+    expect(advance(two, { kind: 'question' })).toEqual(SHOW_START);
   });
 
   it('steps back one screen at a time, to the Categories (R188 §5)', () => {

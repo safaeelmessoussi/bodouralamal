@@ -412,3 +412,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `journey-model.ts`: a stage per track, ordered by age; direct entry from `accepts_newcomers`. «المستويات»: track select + entry checkbox. Approvals: `suggestedLevel` + «notEntryLevel» warning.
 - `ops:apply-programmes` (`services/programmes-r233.service.ts`, DRY_RUN, idempotent by names); integration test runs it twice in a rolled-back transaction.
 - Localhost dry run (28 changes, nothing saved) found «المستوى 5» and كتاكيت-as-step: the pass now tracks any other teen Level «كبار» and marks the named child/women entries; «صغار» stage before «كبار».
+
+## 2026-10-20 — SRS Revision 234: the show walks one Category
+- `show-model.ts`: `walkSequence` = the chosen Category's steps + its milestone (none for the last); `advance` after a milestone → the Categories, after the last Category → graduation as before.
+- `verify-programs-show.mjs`: a non-last Category ends at its milestone with no arrow on, then the Categories. Checked in Chrome on the built page with a simulated four-stage road.

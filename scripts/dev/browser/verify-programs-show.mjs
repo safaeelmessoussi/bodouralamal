@@ -40,7 +40,7 @@ r.check("…then shows its first Level as the strip's first card", await until(`
 await wait(500);
 const first = await evaluate(`document.querySelector('.show__card .journey__cardTitle').textContent`);
 const slides = await evaluate("document.querySelectorAll('.show__dot').length");
-r.check("the first card is وميض الأمل, one dot per slide to the end of the road", first === 'وميض الأمل' && slides >= 7 && (await evaluate("document.querySelectorAll('.show__dot.is-current').length")) === 1, `${first} ${slides}`);
+r.check("the first card is وميض الأمل, one dot per slide to its end", first === 'وميض الأمل' && slides >= 7 && (await evaluate("document.querySelectorAll('.show__dot.is-current').length")) === 1, `${first} ${slides}`);
 await shot('show-2-level');
 // R186 — a tap appends the next card with an arrow between and moves the strip along.
 await click('.show__next');
@@ -51,8 +51,8 @@ await shot('show-2b-strip');
 // tap on to the graduation, counting the taps against the dots
 let taps = 1;
 while ((await evaluate("document.querySelector('.show--walk') !== null")) && taps < 60) { await click('.show__screen--walk'); await wait(350); taps += 1; }
-r.check("a tap per slide walks to the end of the road (one per dot)", taps === slides && (await evaluate("document.querySelector('.show--graduation') !== null")), `${taps} taps, ${slides} dots`);
-r.check("the strip held every card of the way, milestones between Categories", await evaluate("document.querySelector('.show--graduation') !== null"));
+r.check("a tap per slide walks the last Category to its graduation (one per dot)", taps === slides && (await evaluate("document.querySelector('.show--graduation') !== null")), `${taps} taps, ${slides} dots`);
+r.check("the strip held every card of the way", await evaluate("document.querySelector('.show--graduation') !== null"));
 r.check("the graduation: confetti over the whole screen, the LAST Category's words without «وتتواصل الرحلة», the attire", await evaluate(`(() => { const s = document.querySelector('.show__screen--graduation'); const c = s.querySelector('.show__confetti').getBoundingClientRect(); const lastName = [...document.querySelectorAll('[data-journey-category] .stage__title')].at(-1).textContent; return s.querySelectorAll('.show__piece').length === 64 && c.width >= window.innerWidth - 2 && s.textContent.includes('يكتمل برنامج') && s.textContent.includes(lastName.replace('فئة ', '') + '.') && !s.textContent.includes('وتتواصل') && !!s.querySelector('.journey__attire img'); })()`));
 await wait(800);
 await shot('show-3-graduation');
@@ -62,6 +62,20 @@ r.check("…large, over a blurred background", await evaluate(`(() => { const q 
 await shot('show-4-question');
 await click('.show__next');
 r.check("one more tap returns to the Categories", await until(`document.querySelector('.show--categories') !== null`, 8));
+// R234 — another Category's walk ends at its «إتمام فئة …» with no arrow on, and the next tap lists the Categories.
+const other = cats.findIndex((c) => c !== 'فئة المرأة');
+if (other >= 0) {
+  await wait(600);
+  await click(`.show__grid li:nth-child(${other + 1}) .show__category`);
+  await until(`document.querySelector('.show--walk .show__card') !== null`);
+  await wait(500);
+  const dots = await evaluate("document.querySelectorAll('.show__dot').length");
+  for (let i = 1; i < dots; i += 1) { await click('.show__screen--walk'); await wait(350); }
+  const end = JSON.parse(await evaluate(`JSON.stringify((() => { const s = document.querySelector('.show__strip'); const cards = [...s.querySelectorAll('.show__slide')]; return { lastIsMilestone: cards.at(-1).classList.contains('show__slide--milestone'), links: s.querySelectorAll('.show__link').length, cards: cards.length, oneCategory: new Set(cards.filter((c) => c.querySelector('.show__slideCategory')).map((c) => c.textContent)).size === 1 }; })())`));
+  r.check("another Category's walk ends at its «إتمام فئة …», no arrow on to the next Category (R234)", end.lastIsMilestone && end.links === end.cards - 1 && end.oneCategory, JSON.stringify(end));
+  await click('.show__screen--walk');
+  r.check("…and the next tap returns to the Categories", await until(`document.querySelector('.show--categories') !== null`, 8));
+}
 await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
 await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
 r.check("Escape closes the show and frees the page", await until(`document.querySelector('.show') === null && document.body.style.overflow === ''`, 8));

@@ -4,10 +4,10 @@ import type { Journey, JourneyCategory } from './journey-model.js';
 /**
  * **The full-screen show** (SRS Revision 185 §5, reshaped by Revision 186) —
  * the journey told a tap at a time: the Categories to choose from; then,
- * from the chosen one, a strip of cards that grows by one per tap — each
- * Level, a milestone at the end of each Category, on into the next Category
- * — to the end of the LAST Category, where the attire and the one question
- * stand over everything.
+ * from the chosen one, a strip of cards that grows by one per tap — each of
+ * its Levels, then «إتمام فئة X» — and the next tap goes back to the
+ * Categories (R234: no arrow on into the next Category). The LAST Category
+ * keeps its ending: the attire and the one question over everything.
  *
  * The walk is a pure state machine on the same `Journey` the road reads, so
  * what the show says about a Category is what the road says.
@@ -36,25 +36,27 @@ export function showCategory(journey: Journey, id: string): JourneyCategory | un
 }
 
 /**
- * The slides from a Category to the end of the road: its steps, then — when a
- * Category follows — its milestone, then the next Category's steps, and so
- * on. The last Category has no milestone slide: the graduation screen is it.
+ * **R234 — one Category's slides**: its steps, then its milestone. The road
+ * goes no further (the Owner, 2026-10-20: «remove the arrow to the next
+ * category's first level and after إتمام فئة … go back to the page listing
+ * the categories»). The last Category has no milestone slide: the graduation
+ * screen is its ending, as before.
  */
 export function walkSequence(journey: Journey, start: string): ShowSlide[] {
-  const from = journey.categories.findIndex((category) => category.id === start);
-  if (from < 0) return [];
-  const slides: ShowSlide[] = [];
-  journey.categories.slice(from).forEach((category, offset, rest) => {
-    category.steps.forEach((step, at) => {
-      slides.push({ kind: 'level', level: step.level, category, firstOfCategory: at === 0 });
-    });
-    if (offset < rest.length - 1) slides.push({ kind: 'milestone', category });
-  });
+  const category = showCategory(journey, start);
+  if (!category) return [];
+  const slides: ShowSlide[] = category.steps.map((step, at) => ({
+    kind: 'level',
+    level: step.level,
+    category,
+    firstOfCategory: at === 0,
+  }));
+  if (!category.last) slides.push({ kind: 'milestone', category });
   return slides;
 }
 
 /** Choosing a Category: its first slide, or straight to the graduation when
- *  the road from it holds no step at all. */
+ *  the last Category holds no step at all. */
 export function enterCategory(journey: Journey, categoryId: string): ShowState {
   if (!showCategory(journey, categoryId)) return SHOW_START;
   return walkSequence(journey, categoryId).length > 0
@@ -78,8 +80,9 @@ export function retreat(journey: Journey, state: ShowState): ShowState {
   }
 }
 
-/** One tap forward: the next slide, then the graduation, then the question,
- *  then back to the Categories. */
+/** One tap forward: the next slide; after a Category's milestone, back to
+ *  the Categories (R234); after the last Category, the graduation, the
+ *  question, then the Categories. */
 export function advance(journey: Journey, state: ShowState): ShowState {
   switch (state.kind) {
     case 'categories':
@@ -87,9 +90,8 @@ export function advance(journey: Journey, state: ShowState): ShowState {
     case 'walk': {
       const length = walkSequence(journey, state.start).length;
       if (length === 0) return SHOW_START;
-      return state.at + 1 < length
-        ? { kind: 'walk', start: state.start, at: state.at + 1 }
-        : { kind: 'graduation' };
+      if (state.at + 1 < length) return { kind: 'walk', start: state.start, at: state.at + 1 };
+      return showCategory(journey, state.start)?.last ? { kind: 'graduation' } : SHOW_START;
     }
     case 'graduation':
       return { kind: 'question' };
