@@ -60,6 +60,8 @@ const ITEM_KEYS = [
   "author_id",
   "author_name",
   "author_role",
+  // R235 — «الأستاذة …» for a teaching author.
+  "author_title",
   "branch_id",
   "branch_name",
   "category_id",
