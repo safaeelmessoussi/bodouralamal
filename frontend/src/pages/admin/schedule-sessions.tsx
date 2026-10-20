@@ -305,8 +305,16 @@ export function ScheduleSessionsPage({
       // The list endpoint is the only place this screen can learn its schedule's
       // scope: there is no single-schedule read in TD-3.12, and inventing one
       // for four fields would be a new endpoint (§20 rule 16).
-      const page = await listCourseSchedules(accessToken);
-      const mine = page.data.find((row) => row.id === scheduleId);
+      // R236 (Owner-reported, 2026-10-21 — «i don't see «إرفاق محتوى» on a
+      // session row») — every page until this class is found. Only the first
+      // 25 were read, so a class further down the list had no scope here and
+      // «إرفاق محتوى» (and a recording's name) never appeared.
+      let mine: Awaited<ReturnType<typeof listCourseSchedules>>['data'][number] | undefined;
+      for (let pageNo = 1; pageNo <= 50 && !mine; pageNo += 1) {
+        const page = await listCourseSchedules(accessToken, pageNo, {}, 100);
+        mine = page.data.find((row) => row.id === scheduleId);
+        if (page.data.length === 0 || pageNo * page.meta.page_size >= page.meta.total) break;
+      }
       if (mine) {
         setScope({
           /**
