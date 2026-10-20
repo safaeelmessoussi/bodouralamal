@@ -508,6 +508,9 @@ export interface CourseScheduleInput {
     levelIds?: string[];
     administrativeGroupIds?: string[];
     teachingGroupIds?: string[];
+    /** R238 — «المسار»: with no Level, group or circle named, the class
+     *  reaches the tracks' Levels (that teach its Subject). */
+    tracks?: ("younger" | "older")[];
   };
   branchId: string;
   roomId?: string | null;
@@ -610,6 +613,8 @@ async function resolveTarget(
     levelIds: string[];
     administrativeGroupIds: string[];
     teachingGroupIds: string[];
+    /** R238 — «المسار». */
+    tracks: ("younger" | "older")[];
   };
 }> {
   switch (mode) {
@@ -679,6 +684,7 @@ async function resolveTarget(
       const levelIds = [...new Set(dimensions?.levelIds ?? [])];
       const administrativeGroupIds = [...new Set(dimensions?.administrativeGroupIds ?? [])];
       const teachingGroupIds = [...new Set(dimensions?.teachingGroupIds ?? [])];
+      const tracks = [...new Set(dimensions?.tracks ?? [])];
 
       /**
        * **«الكل» on Level, group AND circle = every Level that teaches this
@@ -715,7 +721,17 @@ async function resolveTarget(
         }
         // R172 §1 — through the curriculum policy, so a Subject taught to a
         // WHOLE Category (every Level of «المرأة») reaches every one of them.
-        const teaching = await levelsTeaching(tx, subjectId, categoryIds);
+        // R238 — and only the chosen tracks' Levels, when «المسار» is named.
+        const taught = await levelsTeaching(tx, subjectId, categoryIds);
+        const teaching =
+          tracks.length === 0
+            ? taught
+            : (
+                await tx.level.findMany({
+                  where: { id: { in: taught }, deletedAt: null, track: { in: tracks } },
+                  select: { id: true },
+                })
+              ).map((l) => l.id);
         if (teaching.length === 0) {
           throw new AppError(
             "VALIDATION_FAILED",
@@ -774,7 +790,7 @@ async function resolveTarget(
         administrativeGroupId: null,
         teachingGroupId: null,
         effectiveLevelIds,
-        scopeRows: { branchIds, categoryIds, levelIds, administrativeGroupIds, teachingGroupIds },
+        scopeRows: { branchIds, categoryIds, levelIds, administrativeGroupIds, teachingGroupIds, tracks },
       };
     }
   }
@@ -1204,6 +1220,10 @@ export async function createCourseSchedule(
     // (`course_schedule_multi_dimension_nonempty`) fires at commit, once
     // every row below has landed.
     if (scopeRows) {
+      // R238 — the tracks it is addressed to, for its chips and dialogs.
+      if (scopeRows.tracks.length > 0) {
+        await tx.recurringCourseSchedule.update({ where: { id: schedule.id }, data: { audienceTracks: scopeRows.tracks } });
+      }
       await Promise.all([
         scopeRows.branchIds.length === 0
           ? Promise.resolve()
@@ -1721,6 +1741,8 @@ export async function updateCourseSchedule(
         }
       }
       const rows = target.scopeRows!;
+      // R238 — the tracks are part of the audience this edit restates.
+      await tx.recurringCourseSchedule.update({ where: { id }, data: { audienceTracks: rows.tracks } });
       await Promise.all([
         tx.courseScheduleBranch.deleteMany({ where: { scheduleId: id } }),
         tx.courseScheduleCategory.deleteMany({ where: { scheduleId: id } }),
@@ -2127,6 +2149,8 @@ async function splitCourseSchedule(
         levelIds: string[];
         administrativeGroupIds: string[];
         teachingGroupIds: string[];
+        /** R238 — «المسار». */
+        tracks: ("younger" | "older")[];
       };
     } = {
       levelId: existing.levelId,
@@ -2208,7 +2232,7 @@ async function splitCourseSchedule(
         levelId: null,
         administrativeGroupId: null,
         teachingGroupId: null,
-        ...(existingDimensions ? { scopeRows: existingDimensions } : {}),
+        ...(existingDimensions ? { scopeRows: { ...existingDimensions, tracks: existingDimensions.tracks ?? [] } } : {}),
       };
     }
     /**
@@ -2416,6 +2440,9 @@ async function splitCourseSchedule(
     // schedule row, so the deferred DB trigger sees a consistent commit.
     if (target.scopeRows) {
       const scopeRows = target.scopeRows;
+      if (scopeRows.tracks.length > 0) {
+        await tx.recurringCourseSchedule.update({ where: { id: successor.id }, data: { audienceTracks: scopeRows.tracks } });
+      }
       await Promise.all([
         scopeRows.branchIds.length === 0
           ? Promise.resolve()
@@ -3039,6 +3066,7 @@ export async function listCourseSchedules(
                 (r) => r.administrativeGroupId,
               ),
               teachingGroupIds: row.teachingGroupScopes.map((r) => r.teachingGroupId),
+              tracks: row.audienceTracks,
             }
           : null,
     })),

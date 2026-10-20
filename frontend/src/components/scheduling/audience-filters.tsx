@@ -7,7 +7,7 @@ import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import { t } from '../../i18n/index.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { fetchAllPages } from './session-audience-dialog.js';
-import { TrackFilter } from './track-filter.js';
+import { TrackFilter, withinTracks, type Track } from './track-filter.js';
 
 export { TrackFilter };
 
@@ -32,6 +32,8 @@ export interface AudienceSelection {
   levelIds: readonly string[];
   groupIds: readonly string[];
   teachingGroupIds: readonly string[];
+  /** R238 — «المسار»; absent where a picker does not offer it. */
+  tracks?: readonly Track[];
 }
 
 export interface AudienceSetters {
@@ -40,6 +42,8 @@ export interface AudienceSetters {
   setLevelIds: (next: string[]) => void;
   setGroupIds: (next: string[]) => void;
   setTeachingGroupIds: (next: string[]) => void;
+  /** R238 — offered only where it is given. */
+  setTracks?: (next: Track[]) => void;
 }
 
 /** A group is a roster at a premises (§4.4c); a circle is a Subject's split at
@@ -141,22 +145,25 @@ export function useAudienceFilters({
    * nothing here is authorization, and the server resolves the audience
    * whatever was offered.
    */
+  // R238 — and the chosen tracks narrow them too.
+  const tracks = useMemo(() => selection.tracks ?? [], [selection.tracks]);
   const levelChoices = useMemo(
     () =>
       scope.options.levelId.filter(
         (o) =>
-          categoryIds.length === 0 || categoryIds.includes(scope.levelCategoryIds[o.value] ?? ''),
+          (categoryIds.length === 0 || categoryIds.includes(scope.levelCategoryIds[o.value] ?? '')) &&
+          withinTracks(scope.levelTracks, tracks, o.value),
       ),
-    [scope.options.levelId, scope.levelCategoryIds, categoryIds],
+    [scope.options.levelId, scope.levelCategoryIds, scope.levelTracks, categoryIds, tracks],
   );
   const levelsInPlay = useMemo(
     () =>
       levelIds.length > 0
         ? new Set(levelIds)
-        : categoryIds.length > 0
+        : categoryIds.length > 0 || tracks.length > 0
           ? new Set(levelChoices.map((o) => o.value))
           : null,
-    [levelIds, categoryIds, levelChoices],
+    [levelIds, categoryIds, tracks, levelChoices],
   );
   const withinFilters = useCallback(
     (row: Roster) =>
@@ -310,6 +317,7 @@ export function audienceDimensions(selection: AudienceSelection): {
   levelIds?: string[];
   administrativeGroupIds?: string[];
   teachingGroupIds?: string[];
+  tracks?: Track[];
 } {
   return {
     ...(selection.branchIds.length > 0 ? { branchIds: [...selection.branchIds] } : {}),
@@ -319,6 +327,7 @@ export function audienceDimensions(selection: AudienceSelection): {
     ...(selection.teachingGroupIds.length > 0
       ? { teachingGroupIds: [...selection.teachingGroupIds] }
       : {}),
+    ...((selection.tracks?.length ?? 0) > 0 ? { tracks: [...selection.tracks!] } : {}),
   };
 }
 
@@ -368,12 +377,14 @@ export function AudienceFilters({
         options={scope.options.categoryId}
         emptyLabel={t('common.all')}
       />
-      <TrackFilter
-        scope={scope}
-        categoryIds={selection.categoryIds}
-        levelIds={selection.levelIds}
-        setLevelIds={setters.setLevelIds}
-      />
+      {setters.setTracks ? (
+        <TrackFilter
+          scope={scope}
+          categoryIds={selection.categoryIds}
+          tracks={selection.tracks ?? []}
+          setTracks={setters.setTracks}
+        />
+      ) : null}
       <MultiSelectField
         label={t('admin.calendar.scopeLevel')}
         selected={selection.levelIds}

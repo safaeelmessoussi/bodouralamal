@@ -428,3 +428,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Measured: the new code fed Production's public answers and the dictionary in Chrome (Fetch override), scanned for Arabic; plus a static list of keys the public pages' components use (54 missing → 0).
 - `common.listSeparator`/`andJoin` replace «، »/« و» in 18 joins; dictionary + addresses, descriptions, «المستوى {n}», recording-title patterns (six languages).
 - `widenYoungHolidays` (NULL-safe non-adult filter) in `ops:apply-holidays` and `createCategory`; integration test in a rolled-back transaction.
+
+## 2026-10-21 — SRS Revision 238: «المسار» as an audience choice
+- Migration `r238_audience_tracks`; class `dimensions.tracks` (filters R169 §7's Level expansion; written on create/edit/split), event `tracks` (expanded to `EventLevel` when no Level); returned on lists, `dimensions`, calendar occurrences.
+- `TrackFilter` narrows Levels, never selects (hint removed); `AudienceSelection.tracks`; event Levels narrowed by tracks; chip part `track`, dialog «المسار» row; six-language words.
+- Integration: class and event with a track and no Level; pinned shapes gain `tracks`. Chrome: «صغار» keeps «مستويات: الكل» and narrows its list.

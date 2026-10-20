@@ -118,6 +118,8 @@ export interface AudienceSpec {
     levelIds: string[];
     administrativeGroupIds: string[];
     teachingGroupIds: string[];
+    /** R238 — «المسار», for display: the Levels above already hold its effect. */
+    tracks?: ('younger' | 'older')[];
   };
 
   /**
@@ -381,7 +383,7 @@ export async function scheduleDimensions(
   teachingMode: TeachingMode,
 ): Promise<AudienceSpec['dimensions'] | null> {
   if (teachingMode !== 'multi_dimension') return null;
-  const [branches, categories, levels, groups, circles] = await Promise.all([
+  const [branches, categories, levels, groups, circles, own] = await Promise.all([
     prisma.courseScheduleBranch.findMany({ where: { scheduleId }, select: { branchId: true } }),
     prisma.courseScheduleCategory.findMany({ where: { scheduleId }, select: { categoryId: true } }),
     prisma.courseScheduleLevel.findMany({ where: { scheduleId }, select: { levelId: true } }),
@@ -393,8 +395,10 @@ export async function scheduleDimensions(
       where: { scheduleId },
       select: { teachingGroupId: true },
     }),
+    prisma.recurringCourseSchedule.findUnique({ where: { id: scheduleId }, select: { audienceTracks: true } }),
   ]);
   return {
+    tracks: own?.audienceTracks ?? [],
     branchIds: branches.map((r) => r.branchId),
     categoryIds: categories.map((r) => r.categoryId),
     levelIds: levels.map((r) => r.levelId),

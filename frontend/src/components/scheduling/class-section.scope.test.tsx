@@ -199,7 +199,8 @@ describe('the submitted scope carries every dimension the reader chose, combined
 
   it('an unchosen scope is still `undefined`, never an empty object sent as a real choice', () => {
     expect(source).toMatch(
-      /branchIds\.length === 0 &&\s*\n\s*categoryIds\.length === 0 &&\s*\n\s*levelIds\.length === 0 &&\s*\n\s*groupIds\.length === 0\s*\n\s*\? undefined/,
+      // R238 — «المسار» is a choice too.
+      /branchIds\.length === 0 &&\s*\n\s*categoryIds\.length === 0 &&\s*\n\s*levelIds\.length === 0 &&\s*\n\s*groupIds\.length === 0 &&\s*\n\s*tracks\.length === 0\s*\n\s*\? undefined/,
     );
   });
 

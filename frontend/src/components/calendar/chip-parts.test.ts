@@ -151,3 +151,12 @@ describe('chipText — the words, in reading order', () => {
     expect(texts(chipText(session({ level_ids: [], level_names: [], branch_names: [] }), new Set()).details)).toContain('مقر أمرشيش');
   });
 });
+
+describe('R238 — «المسار» on the chip', () => {
+  it('names the track, before the Level, and nothing where none was named', () => {
+    const withTrack = chipText(session({ tracks: ['younger'] }), new Set());
+    expect(parts(withTrack.details).indexOf('track')).toBeLessThan(parts(withTrack.details).indexOf('level'));
+    expect(texts(withTrack.details)).toContain('المسار: صغار');
+    expect(parts(chipText(session(), new Set()).details)).not.toContain('track');
+  });
+});

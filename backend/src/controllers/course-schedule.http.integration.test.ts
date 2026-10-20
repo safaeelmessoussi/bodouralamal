@@ -1150,6 +1150,8 @@ describe("Revision 155 — a multi_dimension schedule", () => {
       level_ids: [levelId],
       administrative_group_ids: [],
       teaching_group_ids: [],
+      // R238 — «المسار», none named here.
+      tracks: [],
     });
 
     // Revision 156 — the audit trail: the row records who created it.
@@ -1529,6 +1531,8 @@ describe("Revision 157 — this_and_future splits a multi_dimension schedule", (
       level_ids: [levelId],
       administrative_group_ids: [],
       teaching_group_ids: [],
+      // R238 — «المسار», none named here.
+      tracks: [],
     });
 
     const successor = await prisma.recurringCourseSchedule.findUniqueOrThrow({
@@ -1581,6 +1585,8 @@ describe("Revision 157 — this_and_future splits a multi_dimension schedule", (
       level_ids: [],
       administrative_group_ids: [groupA],
       teaching_group_ids: [],
+      // R238 — «المسار», none named here.
+      tracks: [],
     });
   });
 
@@ -1665,6 +1671,8 @@ describe("R176 §2 — a multi_dimension class is re-addressed IN PLACE", () => 
       level_ids: [],
       administrative_group_ids: [groupA],
       teaching_group_ids: [],
+      // R238 — «المسار», none named here.
+      tracks: [],
     });
     // The Level was NOT carried over: the submitted dimensions are the whole answer.
     expect(await prisma.courseScheduleLevel.count({ where: { scheduleId: id } })).toBe(0);

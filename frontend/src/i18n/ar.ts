@@ -650,6 +650,8 @@ export const ar = {
     chipSurah: 'سورة {surah}',
     // القرار 208 — أكثر من سورة في جزء واحد؛ أكثر من أربع: الأولى … الأخيرة.
     chipSurahs: 'السور: {surahs}',
+    // المراجعة 238 — المسار الذي وُجِّه إليه العنصر.
+    chipTrack: 'المسار: {tracks}',
     kindEvent: 'نشاط',
     hijriUnavailable: 'لم يُسجَّل التاريخ الهجري لهذا الشهر بعد.',
     detailsTitle: 'تفاصيل النشاط',
@@ -662,6 +664,7 @@ export const ar = {
     detailsBranch: 'الفرع',
     detailsRoom: 'القاعة',
     detailsCategory: 'الفئة',
+    detailsTrack: 'المسار',
     detailsLevel: 'المستوى',
     // R176 §3 — the two dimensions the dialog could not name before.
     detailsGroup: 'المجموعة',
@@ -3698,11 +3701,9 @@ export const ar = {
     level: 'المستوى',
     // R172 §1 — يُعرض في خانة المستوى: «الفئة — كل مستويات الفئة».
     wholeCategory: 'كل مستويات الفئة',
-    // المراجعة 235 — المسار داخل الفئة («صغار» / «كبار»).
+    // المراجعة 238 — المسار داخل الفئة («صغار» / «كبار»): يضيّق قائمة المستويات، ولا يختار منها شيئًا.
     trackLabel: 'المسار',
     track: { younger: 'صغار', older: 'كبار' },
-    trackHint: 'اختيار مسار يختار كل مستوياته في الفئات المختارة.',
-    trackAll: 'كل المسارات',
     subject: 'المادة',
     branch: 'الفرع',
     academicYear: 'السنة الدراسية',

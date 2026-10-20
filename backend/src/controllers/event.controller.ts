@@ -85,6 +85,8 @@ const createSchema = z
     category_ids: z.array(z.uuid()).max(50).optional(),
     level_ids: z.array(z.uuid()).max(100).optional(),
     group_ids: z.array(z.uuid()).max(200).optional(),
+    // R238 — «المسار».
+    tracks: z.array(z.enum(['younger', 'older'])).max(2).optional(),
   })
   .strict();
 
@@ -107,6 +109,8 @@ const patchSchema = z
     category_ids: z.array(z.uuid()).max(50).optional(),
     level_ids: z.array(z.uuid()).max(100).optional(),
     group_ids: z.array(z.uuid()).max(200).optional(),
+    // R238 — «المسار».
+    tracks: z.array(z.enum(['younger', 'older'])).max(2).optional(),
     title: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(2000).nullable().optional(),
     /** R110 — editable. Absent leaves the type alone; it is never cleared by
@@ -177,6 +181,7 @@ export function create(prisma: PrismaClient) {
       ...(b.category_ids ? { categoryIds: b.category_ids } : {}),
       ...(b.level_ids ? { levelIds: b.level_ids } : {}),
       ...(b.group_ids ? { groupIds: b.group_ids } : {}),
+      ...(b.tracks ? { tracks: b.tracks } : {}),
     });
 
     res.status(201).json({
@@ -203,7 +208,8 @@ export function update(prisma: PrismaClient) {
       b.branch_ids !== undefined ||
       b.category_ids !== undefined ||
       b.level_ids !== undefined ||
-      b.group_ids !== undefined;
+      b.group_ids !== undefined ||
+      b.tracks !== undefined;
 
     const event = await updateEvent(prisma, actorOf(req), id, version, {
       ...(scopeGiven
@@ -214,6 +220,7 @@ export function update(prisma: PrismaClient) {
               categoryIds: b.category_ids ?? [],
               levelIds: b.level_ids ?? [],
               groupIds: b.group_ids ?? [],
+              tracks: b.tracks ?? [],
             },
           }
         : {}),

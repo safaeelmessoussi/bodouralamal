@@ -53,6 +53,7 @@ import {
   TrackFilter,
   useAudienceFilters,
 } from '../../components/scheduling/audience-filters.js';
+import { withinTracks, type Track } from '../../components/scheduling/track-filter.js';
 import {
   SurahField,
   SurahsField,
@@ -1456,6 +1457,8 @@ export function SchedulingDialog({
   const [categoryIds, setCategoryIds] = useState<string[]>(() => item?.ids.scope.categoryIds ?? []);
   const [levelIds, setLevelIds] = useState<string[]>(() => item?.ids.scope.levelIds ?? []);
   const [groupIds, setGroupIds] = useState<string[]>(() => item?.ids.scope.groupIds ?? []);
+  // R238 — «المسار», an audience choice of its own (narrows the Levels, picks none).
+  const [tracks, setTracks] = useState<Track[]>(() => [...(item?.ids.scope.tracks ?? [])]);
   /**
    * **Owner-reported, 2026-09-16 — SRS Revision 155's fifth dimension, a
    * Teaching Circle, which `الجدولة`'s event scope never needed** (an Event
@@ -1545,6 +1548,7 @@ export function SchedulingDialog({
     levelIds: [...(item?.ids.scope.levelIds ?? [])].sort(),
     groupIds: [...(item?.ids.scope.groupIds ?? [])].sort(),
     teachingGroupIds: [...(item?.ids.scope.circleIds ?? [])].sort(),
+    tracks: [...(item?.ids.scope.tracks ?? [])].sort(),
     // Mirrors the initialiser above — a pristine baseline that disagreed with
     // it is what kept `dirty` false while the value was wrong (§A).
     attendanceMarking: item?.attendanceMarking ?? 'staff_only',
@@ -1580,6 +1584,7 @@ export function SchedulingDialog({
       levelIds: [...levelIds].sort(),
       groupIds: [...groupIds].sort(),
       teachingGroupIds: [...teachingGroupIds].sort(),
+      tracks: [...tracks].sort(),
       attendanceMarking,
     },
     pristine,
@@ -1597,7 +1602,8 @@ export function SchedulingDialog({
     !sameIds(categoryIds, pristine.categoryIds) ||
     !sameIds(levelIds, pristine.levelIds) ||
     !sameIds(groupIds, pristine.groupIds) ||
-    !sameIds(teachingGroupIds, pristine.teachingGroupIds);
+    !sameIds(teachingGroupIds, pristine.teachingGroupIds) ||
+    !sameIds(tracks, pristine.tracks);
 
   /**
    * **SRS §2 — a مؤطِّرة's own declared-capability scope for a CLASS, never the
@@ -1873,7 +1879,7 @@ export function SchedulingDialog({
   // R176 §2 — on edit too: the five pickers are seeded from the class's own
   // `dimensions` and sent back only when the reader changed them.
   const filtering = type === 'class' && mode === 'multi_dimension';
-  const audienceSelection = { branchIds, categoryIds, levelIds, groupIds, teachingGroupIds };
+  const audienceSelection = { branchIds, categoryIds, levelIds, groupIds, teachingGroupIds, tracks };
   /**
    * **R195 — «كل المواد».** A class addressed to a whole Level or to an
    * Administrative Group may be about all the Level's Subjects at once (a
@@ -2233,7 +2239,8 @@ export function SchedulingDialog({
         branchIds.length === 0 &&
         categoryIds.length === 0 &&
         levelIds.length === 0 &&
-        groupIds.length === 0
+        groupIds.length === 0 &&
+        tracks.length === 0
       ) {
         return scopeOptionsEmpty
           ? t('scheduling.invalid.noScopeForYou')
@@ -2357,13 +2364,15 @@ export function SchedulingDialog({
                 : branchIds.length === 0 &&
                     categoryIds.length === 0 &&
                     levelIds.length === 0 &&
-                    groupIds.length === 0
+                    groupIds.length === 0 &&
+                    tracks.length === 0
                   ? undefined
                   : {
                       ...(branchIds.length > 0 ? { branchIds } : {}),
                       ...(categoryIds.length > 0 ? { categoryIds } : {}),
                       ...(levelIds.length > 0 ? { levelIds } : {}),
                       ...(groupIds.length > 0 ? { groupIds } : {}),
+                      ...(tracks.length > 0 ? { tracks } : {}),
                     },
           // R195 — `null` says «كل المواد»; the server refuses it where the
           // audience is a circle or «الكل».
@@ -2709,6 +2718,7 @@ export function SchedulingDialog({
                       setLevelIds,
                       setGroupIds,
                       setTeachingGroupIds,
+                      setTracks,
                     },
                     choices: audienceChoices,
                   },
@@ -2801,7 +2811,7 @@ export function SchedulingDialog({
             // R235 — «المسار»: every «صغار» or «كبار» Level at once.
             trackFilter={
               type !== 'holiday' && canAssignStaff ? (
-                <TrackFilter scope={scope} categoryIds={categoryIds} levelIds={levelIds} setLevelIds={setLevelIds} />
+                <TrackFilter scope={scope} categoryIds={categoryIds} tracks={tracks} setTracks={setTracks} />
               ) : null
             }
             global={global}
@@ -2823,6 +2833,8 @@ export function SchedulingDialog({
                 // R235 — the Categories chosen narrow the Levels (R198), as on a class.
                 options: scope.options.levelId
                   .filter((o) => categoryIds.length === 0 || categoryIds.includes(scope.levelCategoryIds[o.value] ?? ''))
+                  // R238 — and the chosen tracks.
+                  .filter((o) => withinTracks(scope.levelTracks, tracks, o.value))
                   .map((o) => ({ id: o.value, name: o.label })),
               },
               /**

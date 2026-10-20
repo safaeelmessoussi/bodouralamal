@@ -57,6 +57,8 @@ export interface EventInput {
   category_ids?: string[];
   level_ids?: string[];
   group_ids?: string[];
+  /** R238 — «المسار». */
+  tracks?: ('younger' | 'older')[];
 }
 
 export interface EventRow {
@@ -86,7 +88,7 @@ export async function updateEvent(
    * is what makes editing possible at all.
    */
   version: number,
-  input: Omit<EventInput, 'global' | 'branch_ids' | 'category_ids' | 'level_ids' | 'group_ids'> & {
+  input: Omit<EventInput, 'global' | 'branch_ids' | 'category_ids' | 'level_ids' | 'group_ids' | 'tracks'> & {
     visibility?: EventVisibility;
     recurrence_type?: EventRecurrence;
     start_date?: string;

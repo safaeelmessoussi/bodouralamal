@@ -476,6 +476,8 @@ const OCCURRENCE_KEYS = [
   "teaching_group_names",
   "teaching_mode",
   "title",
+  // R238 — «المسار» the class or activity is addressed to.
+  "tracks",
   // SRS Revision 163 §3 — advisory: may THIS reader open the attendance sheet.
   // `assertMayMark` stays the authority on every read and write.
   "viewer_may_mark_attendance",

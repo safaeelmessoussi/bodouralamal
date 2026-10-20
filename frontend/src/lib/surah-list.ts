@@ -1,4 +1,5 @@
 import type { Occurrence } from '../adapters/calendar.js';
+import { t } from '../i18n/index.js';
 
 /**
  * **SRS Revision 208 — the Surahs an occurrence is about, and how a short
@@ -24,6 +25,7 @@ export const SURAH_LIST_MAX = 4;
  * the whole list instead and does not call this.
  */
 export function shortSurahList(names: readonly string[], max = SURAH_LIST_MAX): string {
-  if (names.length <= max) return names.join('، ');
+  // R237 — the reader's own list comma.
+  if (names.length <= max) return names.join(t('common.listSeparator'));
   return `${names[0]!} … ${names[names.length - 1]!}`;
 }

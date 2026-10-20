@@ -100,6 +100,7 @@ export function create(prisma: PrismaClient) {
                 ...(body.dimensions.administrative_group_ids !== undefined
                   ? { administrativeGroupIds: body.dimensions.administrative_group_ids }
                   : {}),
+                ...(body.dimensions.tracks !== undefined ? { tracks: body.dimensions.tracks } : {}),
                 ...(body.dimensions.teaching_group_ids !== undefined
                   ? { teachingGroupIds: body.dimensions.teaching_group_ids }
                   : {}),
@@ -255,6 +256,7 @@ export function update(prisma: PrismaClient) {
                 ...(body.dimensions.administrative_group_ids !== undefined
                   ? { administrativeGroupIds: body.dimensions.administrative_group_ids }
                   : {}),
+                ...(body.dimensions.tracks !== undefined ? { tracks: body.dimensions.tracks } : {}),
                 ...(body.dimensions.teaching_group_ids !== undefined
                   ? { teachingGroupIds: body.dimensions.teaching_group_ids }
                   : {}),

@@ -2772,3 +2772,33 @@ describe("R195 — a class with no Subject teaches all the Level's Subjects", ()
     await prisma.teachingGroup.delete({ where: { id: circle.id } });
   });
 });
+
+describe("R238 — a class addressed to «المسار»", () => {
+  it("with no Level named, reaches the track's Levels that teach its Subject, and keeps the track", async () => {
+    const younger = await prisma.level.create({
+      data: { name: `${TAG} مستوى صغار`, categoryId, genderRestriction: "any", track: "younger" },
+    });
+    const older = await prisma.level.create({
+      data: { name: `${TAG} مستوى كبار`, categoryId, genderRestriction: "any", track: "older" },
+    });
+    await prisma.levelSubject.createMany({
+      data: [
+        { levelId: younger.id, subjectId },
+        { levelId: older.id, subjectId },
+      ],
+    });
+    const { targetId: _target, ...rest } = baseInput({ roomId: null, weekdays: ["thursday"] });
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      { ...rest, teachingMode: "multi_dimension", dimensions: { categoryIds: [categoryId], tracks: ["younger"] } },
+      NOW,
+    );
+    const levels = await prisma.courseScheduleLevel.findMany({ where: { scheduleId: id }, select: { levelId: true } });
+    expect(levels.map((l) => l.levelId)).toEqual([younger.id]);
+    const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id }, select: { audienceTracks: true } });
+    expect(row.audienceTracks).toEqual(["younger"]);
+    const listed = (await listCourseSchedules(prisma, superAdmin(), {})).data.find((s) => s.id === id);
+    expect(listed?.dimensions?.tracks).toEqual(["younger"]);
+  });
+});

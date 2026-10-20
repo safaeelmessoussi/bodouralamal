@@ -233,6 +233,8 @@ export interface Occurrence {
   branchNames: string[];
   categoryIds: string[];
   categoryNames: string[];
+  /** R238 — «المسار» the class or activity is addressed to (`younger`/`older`). */
+  tracks: string[];
   levelIds: string[];
   levelNames: string[];
   /**
@@ -523,6 +525,8 @@ const SESSION_OCCURRENCE_INCLUDE = {
       schedulingType: { select: { id: true, name: true, structuralKind: true, attendanceMode: true } },
       /** R123 — who may mark at this class's occurrences. */
       attendanceMarking: true,
+      /** R238 — «المسار». */
+      audienceTracks: true,
 
       branch: { select: { name: true } },
       subject: { select: { id: true, name: true, requiresSurahs: true } },
@@ -782,6 +786,7 @@ function sessionOccurrence(
     branchNames: [sch.branch.name],
     categoryIds: audience.categories.map((c) => c.id),
     categoryNames: audience.categories.map((c) => c.name),
+    tracks: sch.audienceTracks ?? [],
     levelIds: audience.levels.map((l) => l.id),
     levelNames: audience.levels.map((l) => l.name),
     administrativeGroupIds: audience.groups.map((g) => g.id),
@@ -1758,6 +1763,7 @@ export async function readCalendar(
         branchNames: event.branchScopes.map((s) => s.branch.name),
         categoryIds: event.categoryScopes.map((s) => s.category.id),
         categoryNames: event.categoryScopes.map((s) => s.category.name),
+        tracks: event.audienceTracks ?? [],
         levelIds: event.levelScopes.map((s) => s.level.id),
         levelNames: event.levelScopes.map((s) => s.level.name),
         administrativeGroupIds: event.administrativeGroupScopes.map((s) => s.administrativeGroup.id),
@@ -1939,6 +1945,7 @@ export async function readCalendar(
       branchNames: exam.branch ? [exam.branch.name] : [],
       categoryIds: [exam.level.category.id],
       categoryNames: [exam.level.category.name],
+      tracks: [],
       levelIds: [exam.levelId],
       levelNames: [exam.level.name],
       // R176 §3 — R58: a sitting names at most one group, and NULL is the whole

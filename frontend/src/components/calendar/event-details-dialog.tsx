@@ -225,6 +225,14 @@ export function EventDetailsDialog({
               </div>
             ) : null}
 
+            {/* R238 — the track(s) the item is addressed to. */}
+            {occurrence?.tracks?.length ? (
+              <div className="details__item">
+                <dt>{t('calendar.detailsTrack')}</dt>
+                <dd>{occurrence.tracks.map((track) => t(`programs.journey.track.${track}`)).join(t('common.listSeparator'))}</dd>
+              </div>
+            ) : null}
+
             {levels ? (
               <div className="details__item">
                 <dt>{t('calendar.detailsLevel')}</dt>

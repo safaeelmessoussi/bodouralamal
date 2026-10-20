@@ -37,6 +37,8 @@ export const courseScheduleDimensions = z
     level_ids: z.array(uuid).max(50).optional(),
     administrative_group_ids: z.array(uuid).max(50).optional(),
     teaching_group_ids: z.array(uuid).max(50).optional(),
+    // R238 — «المسار»: `younger` «صغار», `older` «كبار».
+    tracks: z.array(z.enum(["younger", "older"])).max(2).optional(),
   })
   .strict();
 

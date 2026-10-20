@@ -1001,3 +1001,26 @@ describe("TD-15 / §4.4 — editing an event", () => {
     expect(detail["visibility_to"]).toBe("public");
   });
 });
+
+describe("R238 — an activity addressed to «المسار»", () => {
+  it("with no Level named, is written to the track's Levels of its Categories, and keeps the track", async () => {
+    // Its own Category, so no other suite meets these Levels.
+    const own = await prisma.category.create({ data: { name: `${TAG} فئة المسارات` } });
+    const younger = await prisma.level.create({
+      data: { name: `${TAG} مستوى صغار`, categoryId: own.id, genderRestriction: "any", track: "younger" },
+    });
+    await prisma.level.create({
+      data: { name: `${TAG} مستوى كبار`, categoryId: own.id, genderRestriction: "any", track: "older" },
+    });
+    const created = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ categoryIds: [own.id], tracks: ["younger"] }),
+      TODAY,
+    );
+    const levels = await prisma.eventLevel.findMany({ where: { eventId: created.event.id }, select: { levelId: true } });
+    expect(levels.map((l) => l.levelId)).toEqual([younger.id]);
+    const row = await prisma.event.findUniqueOrThrow({ where: { id: created.event.id }, select: { audienceTracks: true } });
+    expect(row.audienceTracks).toEqual(["younger"]);
+  });
+});

@@ -74,6 +74,8 @@ export interface CourseSchedule {
     level_ids: string[];
     administrative_group_ids: string[];
     teaching_group_ids: string[];
+    /** R238 — «المسار». Optional for older answers. */
+    tracks?: ('younger' | 'older')[];
   } | null;
   /** SRS Revision 165 §2 — the Surahs this class is about (numbers and names,
    *  Mushaf order). Optional: a narrower projection reads as "none". */
@@ -265,6 +267,7 @@ export interface CourseScheduleInput {
     level_ids?: string[];
     administrative_group_ids?: string[];
     teaching_group_ids?: string[];
+    tracks?: ('younger' | 'older')[];
   };
   /** SRS Revision 165 §2 — required (one or more) when the Subject works by
    *  Surah, refused otherwise; the server holds each to the Levels' «مقرر الحفظ». */

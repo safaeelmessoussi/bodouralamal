@@ -86,6 +86,9 @@ export interface EventScopes {
   levelIds?: string[];
   groupIds?: string[];
   global?: boolean;
+  /** R238 — «المسار»: with no Level named, the event reaches the tracks'
+   *  Levels (within the Categories named), written as Levels on save (§4.4). */
+  tracks?: ('younger' | 'older')[];
 }
 
 export interface EventInput extends EventScopes {
@@ -196,6 +199,8 @@ interface ResolvedEventScope {
   categoryIds: string[];
   levelIds: string[];
   groupIds: string[];
+  /** R238 — the tracks named, kept for display. */
+  tracks: ('younger' | 'older')[];
 }
 
 /**
@@ -253,11 +258,31 @@ async function resolveEventScope(
   if (isAdmin(actor) && reachable !== null && branchIds.length === 0 && groups.length === 0) {
     throw new AppError('FORBIDDEN', 'an explicit permitted branch scope is required');
   }
+  const tracks = [...new Set(input.tracks ?? [])];
+  const categoryIds = [...new Set(input.categoryIds ?? [])];
+  let levelIds = [...new Set(input.levelIds ?? [])];
+  // R238 — «المسار» with no Level named: the tracks' Levels, in the Categories named.
+  if (tracks.length > 0 && levelIds.length === 0) {
+    levelIds = (
+      await tx.level.findMany({
+        where: {
+          deletedAt: null,
+          track: { in: tracks },
+          ...(categoryIds.length > 0 ? { categoryId: { in: categoryIds } } : {}),
+        },
+        select: { id: true },
+      })
+    ).map((l) => l.id);
+    if (levelIds.length === 0) {
+      throw new AppError('VALIDATION_FAILED', 'no level of these tracks in these categories', { reason: 'NO_LEVEL_IN_TRACK' });
+    }
+  }
   return {
     branchIds,
-    categoryIds: [...new Set(input.categoryIds ?? [])],
-    levelIds: [...new Set(input.levelIds ?? [])],
+    categoryIds,
+    levelIds,
     groupIds: [...new Set(input.groupIds ?? [])],
+    tracks,
   };
 }
 
@@ -299,7 +324,7 @@ export async function createEvent(
   assertValidDates(input);
 
   return prisma.$transaction(async (tx) => {
-    const { branchIds, categoryIds, levelIds, groupIds } = await resolveEventScope(tx, actor, input, today);
+    const { branchIds, categoryIds, levelIds, groupIds, tracks } = await resolveEventScope(tx, actor, input, today);
 
     // R110 — checked before the row is written, so a bad type is a coded
     // refusal rather than a foreign-key violation surfacing as a 500.
@@ -330,13 +355,15 @@ export async function createEvent(
         endTime: input.endTime ?? null,
         recurrenceType: input.recurrenceType as never,
         recurrenceEndDate: input.recurrenceEndDate ?? null,
+        // R238 — «المسار», for its chips and dialogs.
+        audienceTracks: tracks,
         // Revision 156.
         createdById: actor.userId,
       },
     });
 
     // §4.4: written HERE, at creation. Never a wildcard resolved at read time.
-    await writeEventScope(tx, event.id, { branchIds, categoryIds, levelIds, groupIds });
+    await writeEventScope(tx, event.id, { branchIds, categoryIds, levelIds, groupIds, tracks });
     // R199 §5 — a عطلة cancels the classes it covers (a no-op for any other kind).
     const holiday = await applyHoliday(tx, event.id);
     // R224 §2 — and an activity's dates on a holiday are born cancelled.
@@ -581,6 +608,7 @@ export async function updateEvent(
       await tx.eventLevel.deleteMany({ where: { eventId: id } });
       await tx.eventAdministrativeGroup.deleteMany({ where: { eventId: id } });
       await writeEventScope(tx, id, replacement);
+      await tx.event.update({ where: { id }, data: { audienceTracks: replacement.tracks } });
     }
 
     await reconcileEventNotificationVisibility(

@@ -1782,6 +1782,10 @@ model RecurringCourseSchedule {
   subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: Restrict)
 
   teachingMode TeachingMode @map("teaching_mode")
+  /// R238 — «المسار»: the tracks this class is addressed to («صغار»/«كبار»),
+  /// shown on its chips and dialogs. With no Level named, the class reaches
+  /// the tracks' Levels (resolved on save, as R169 §7's «الكل» is).
+  audienceTracks LevelTrack[] @default([]) @map("audience_tracks")
 
   /// Exactly ONE of the three is non-null, matching `teachingMode` (CHECK).
   levelId               String?              @map("level_id") @db.Uuid
@@ -3169,6 +3173,9 @@ model Event {
   /// they hold** — a default governs inserts, and rewriting stored tiers would
   /// have published things somebody deliberately hid.
   visibility  Visibility @default(public)
+  /// R238 — «المسار»: the tracks this activity is addressed to; with no Level
+  /// named, its Levels are the tracks' (written as `EventLevel` on save, §4.4).
+  audienceTracks LevelTrack[] @default([]) @map("audience_tracks")
 
   /// Local wall-clock date/time fields (TD-11) — never UTC instants.
   startDate DateTime  @map("start_date") @db.Date

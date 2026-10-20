@@ -16,7 +16,7 @@ import { FormDialog } from '../ui/form-dialog.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { useScopeOptions, type ScopeOptions } from '../../hooks/use-scope-options.js';
-import { TrackFilter } from './track-filter.js';
+import { TrackFilter, withinTracks, type Track } from './track-filter.js';
 import { t } from '../../i18n/index.js';
 import { counted } from '../../lib/arabic-years.js';
 
@@ -217,6 +217,12 @@ export function SessionAudienceFields({
   branches: { id: string; name: string }[];
 }): ReactNode {
   const { roster, chosen, set, options } = audience;
+  // R238 — «المسار» narrows the Levels on offer here; this occurrence's own
+  // audience names its Levels, so the track itself is not stored.
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const levels = options.levels.filter(
+    (o) => chosen.levelIds.includes(o.value) || withinTracks(audience.scope.levelTracks, tracks, o.value),
+  );
   return (
     <>
       <MultiSelectField
@@ -232,15 +238,10 @@ export function SessionAudienceFields({
         selected={chosen.categoryIds}
         onChange={(next) => set('categoryIds', next)}
       />
-      <TrackFilter
-        scope={audience.scope}
-        categoryIds={chosen.categoryIds}
-        levelIds={chosen.levelIds}
-        setLevelIds={(next) => set('levelIds', next)}
-      />
+      <TrackFilter scope={audience.scope} categoryIds={chosen.categoryIds} tracks={tracks} setTracks={setTracks} />
       <MultiSelectField
         label={t('admin.calendar.scopeLevel')}
-        options={options.levels}
+        options={levels}
         selected={chosen.levelIds}
         onChange={(next) => set('levelIds', next)}
       />

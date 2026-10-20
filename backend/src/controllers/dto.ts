@@ -626,6 +626,8 @@ export interface CourseScheduleDto {
     level_ids: string[];
     administrative_group_ids: string[];
     teaching_group_ids: string[];
+    /** R238 — «المسار»: `younger` | `older`; empty when none was named. */
+    tracks: string[];
   } | null;
 }
 
@@ -726,6 +728,7 @@ export function courseScheduleDto(row: {
     levelIds: string[];
     administrativeGroupIds: string[];
     teachingGroupIds: string[];
+    tracks?: string[];
   } | null;
 }): CourseScheduleDto {
   return {
@@ -792,6 +795,7 @@ export function courseScheduleDto(row: {
           level_ids: row.dimensions.levelIds,
           administrative_group_ids: row.dimensions.administrativeGroupIds,
           teaching_group_ids: row.dimensions.teachingGroupIds,
+          tracks: row.dimensions.tracks ?? [],
         }
       : null,
   };
@@ -2407,6 +2411,8 @@ export interface EventDefinitionDto {
    *  rather than to none, which is why it is a list and not a nullable id. */
   branch_ids: string[];
   category_ids: string[];
+  /** R238 — «المسار» (`younger`/`older`); empty when none was named. */
+  tracks: string[];
   level_ids: string[];
   group_ids: string[];
   /** R71 — who answers for it. Empty for every event created before R71 and for
@@ -2436,6 +2442,7 @@ export function eventDefinitionDto(row: {
   branchScopes: { branchId: string }[];
   categoryScopes: { categoryId: string }[];
   levelScopes: { levelId: string }[];
+  audienceTracks?: string[];
   administrativeGroupScopes: { administrativeGroupId: string }[];
   staff: { userId: string; position: string; name?: string }[];
   version: number;
@@ -2459,6 +2466,7 @@ export function eventDefinitionDto(row: {
     // R176 §2 — the whole scope, so an edit can start from it.
     category_ids: row.categoryScopes.map((c) => c.categoryId),
     level_ids: row.levelScopes.map((l) => l.levelId),
+    tracks: row.audienceTracks ?? [],
     group_ids: row.administrativeGroupScopes.map((g) => g.administrativeGroupId),
     staff: row.staff.map((x) => ({
       user_id: x.userId,

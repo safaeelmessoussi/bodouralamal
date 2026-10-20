@@ -209,6 +209,8 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     branch_names: o.branchNames,
     category_ids: o.categoryIds,
     category_names: o.categoryNames,
+    // R238 — «المسار» (`younger`/`older`); empty when none was named.
+    tracks: o.tracks,
     level_ids: o.levelIds,
     level_names: o.levelNames,
     // R176 §3 — the group and circle dimensions, beside the three above.

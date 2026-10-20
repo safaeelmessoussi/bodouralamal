@@ -116,6 +116,8 @@ export interface Occurrence {
   branch_names: string[];
   category_ids: string[];
   category_names: string[];
+  /** R238 — «المسار» (`younger`/`older`); absent or empty when none was named. */
+  tracks?: string[];
   level_ids: string[];
   level_names: string[];
   /**

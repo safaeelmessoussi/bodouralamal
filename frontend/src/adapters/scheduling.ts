@@ -214,6 +214,8 @@ export interface SchedulingIds {
     levelIds: string[];
     groupIds: string[];
     circleIds: string[];
+    /** R238 — «المسار» the item is addressed to. */
+    tracks: ('younger' | 'older')[];
   };
   /** R91 — each assignment with its inclusive effective period; `null` at
    *  either end is open-ended there. */
@@ -246,6 +248,8 @@ interface EventDefinitionWire {
   /** R176 §2 — the other three dimensions, so an edit can start from them. */
   category_ids?: string[];
   level_ids?: string[];
+  /** R238 — «المسار». */
+  tracks?: ('younger' | 'older')[];
   group_ids?: string[];
   /** R71 — who answers for it. Empty for events created before R71. */
   /** R91 — each assignment with its inclusive effective period; `null` at
@@ -270,7 +274,7 @@ const EMPTY_IDS: SchedulingIds = {
   groupId: null,
   teachingMode: null,
   surahIds: [],
-  scope: { branchIds: [], categoryIds: [], levelIds: [], groupIds: [], circleIds: [] },
+  scope: { branchIds: [], categoryIds: [], levelIds: [], groupIds: [], circleIds: [], tracks: [] },
   subjectId: null,
   academicYearId: null,
   staff: [],
@@ -351,6 +355,7 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
         levelIds: row.dimensions?.level_ids ?? [],
         groupIds: row.dimensions?.administrative_group_ids ?? [],
         circleIds: row.dimensions?.teaching_group_ids ?? [],
+        tracks: row.dimensions?.tracks ?? [],
       },
       subjectId: row.subject_id,
       academicYearId: row.academic_year_id,
@@ -427,6 +432,7 @@ export function fromEvent(
         levelIds: row.level_ids ?? [],
         groupIds: row.group_ids ?? [],
         circleIds: [],
+        tracks: row.tracks ?? [],
       },
       staff: row.staff.map((x) => ({
         user_id: x.user_id,
@@ -667,6 +673,8 @@ export interface SchedulingInput {
     categoryIds?: string[];
     levelIds?: string[];
     groupIds?: string[];
+    /** R238 — «المسار». */
+    tracks?: ('younger' | 'older')[];
   };
   /** Exam only (§4.6, R58) — the Level it examines, and who sits it. */
   levelId?: string;
@@ -708,6 +716,8 @@ export interface SchedulingInput {
     levelIds?: string[];
     administrativeGroupIds?: string[];
     teachingGroupIds?: string[];
+    /** R238 — «المسار». */
+    tracks?: ('younger' | 'older')[];
   };
   /** SRS Revision 165 §2 — a class's Surahs (one or more), or an exam's one.
    *  Sent only when the form asked for them. */
@@ -860,6 +870,7 @@ export async function saveSchedulingItem(
                   level_ids: input.dimensions.levelIds ?? [],
                   administrative_group_ids: input.dimensions.administrativeGroupIds ?? [],
                   teaching_group_ids: input.dimensions.teachingGroupIds ?? [],
+                  tracks: input.dimensions.tracks ?? [],
                 },
               }
             : {}),
@@ -896,6 +907,7 @@ export async function saveSchedulingItem(
                 ...(input.dimensions.administrativeGroupIds !== undefined
                   ? { administrative_group_ids: input.dimensions.administrativeGroupIds }
                   : {}),
+                ...(input.dimensions.tracks !== undefined ? { tracks: input.dimensions.tracks } : {}),
                 ...(input.dimensions.teachingGroupIds !== undefined
                   ? { teaching_group_ids: input.dimensions.teachingGroupIds }
                   : {}),
@@ -1140,6 +1152,7 @@ export async function saveSchedulingItem(
             category_ids: input.scope.categoryIds ?? [],
             level_ids: input.scope.levelIds ?? [],
             group_ids: input.scope.groupIds ?? [],
+            tracks: input.scope.tracks ?? [],
           }
         : {
             ...(input.scope.global ? { global: true } : {}),
@@ -1147,6 +1160,7 @@ export async function saveSchedulingItem(
             ...(input.scope.categoryIds ? { category_ids: input.scope.categoryIds } : {}),
             ...(input.scope.levelIds ? { level_ids: input.scope.levelIds } : {}),
             ...(input.scope.groupIds ? { group_ids: input.scope.groupIds } : {}),
+            ...(input.scope.tracks?.length ? { tracks: input.scope.tracks } : {}),
           }),
   };
   // **Two calls, and deliberately so.** R71 made assigning staff its own

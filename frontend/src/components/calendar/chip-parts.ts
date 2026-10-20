@@ -24,6 +24,7 @@ export type ChipPart =
   | 'surah'
   | 'audience'
   | 'category'
+  | 'track'
   | 'level'
   | 'lead'
   | 'branch';
@@ -76,6 +77,14 @@ export function hiddenChipParts(values: ChipFilterValues): ReadonlySet<ChipPart>
   if (values.groupId || values.circleId) hidden.add('audience');
   if (values.type) hidden.add('kind');
   return hidden;
+}
+
+/** R238 — «المسار: صغار» / «المسار: صغار، كبار». */
+export function trackWords(tracks: readonly string[]): string {
+  return t('calendar.chipTrack').replace(
+    '{tracks}',
+    tracks.map((track) => t(`programs.journey.track.${track}`)).join(t('common.listSeparator')),
+  );
 }
 
 export interface ChipDetail {
@@ -153,6 +162,8 @@ export function chipText(
   const audience = audienceByLevel(occurrence, taxonomy);
   const byLevel: ChipDetail[] = [
     ...audience.categories.map((text) => ({ part: 'category' as const, text })),
+    // R238 — «المسار: صغار» where the item was addressed to a track.
+    ...(occurrence.tracks?.length ? [{ part: 'track' as const, text: trackWords(occurrence.tracks) }] : []),
     ...audience.levels.map((text) => ({ part: 'level' as const, text })),
   ];
   const branches = occurrence.branch_names?.length
