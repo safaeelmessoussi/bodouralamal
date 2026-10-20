@@ -17,6 +17,8 @@ const DICTIONARY = {
   'word:شتنبر': 'September',
   'word:السبت': 'Saturday',
   'word:التوقيت الإداري العادي': 'Regular office hours',
+  'surah:البقرة': 'Al-Baqara',
+  '{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)': '{surah}, part two (third, fourth and fifth hizbs)',
 };
 
 afterEach(() => setDataDictionary(null));
@@ -54,6 +56,13 @@ describe('R224 §4 — stored texts translated, names never', () => {
     );
     // Only at a word's edge: a longer word that holds the phrase stays.
     expect(translateText('بالتوقيت الإداري العادي')).toBe('بالتوقيت الإداري العادي');
+  });
+
+  it('names a part of Al-Baqara by its pattern, the Surah by its own key (R232)', () => {
+    setDataDictionary(DICTIONARY);
+    expect(translateDeep({ name: 'البقرة الجزء الثاني (الحزب الثالث و الرابع و الخامس)' })).toEqual({
+      name: 'Al-Baqara, part two (third, fourth and fifth hizbs)',
+    });
   });
 
   it('changes nothing without a dictionary (Arabic)', () => {

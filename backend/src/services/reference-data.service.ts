@@ -6,6 +6,7 @@ import { assertNoBlockingReferences, updateWithVersion } from '../repositories/o
 import * as trash from '../repositories/trash.repository.js';
 import type { SubjectRef } from './taxonomy.service.js';
 import type { Actor } from '../policies/actor.js';
+import { partRange, surahSplits, syllabusName, type SurahPart } from '../policies/surah-parts.js';
 
 /**
  * Reference-data selectors — Academic Years, and which Subjects a Level teaches
@@ -623,6 +624,16 @@ export interface LevelSurahRef {
   total_ayahs: number;
 }
 
+/** R232 — a syllabus row: the Surah, and the part of it the Level teaches. */
+export interface LevelSyllabusRef extends LevelSurahRef {
+  /** `null` = the whole Surah; 1 or 2 only for البقرة. */
+  part: SurahPart | null;
+  /** «البقرة الجزء الثاني (الحزب الثالث و الرابع و الخامس)», or the Surah's name. */
+  syllabus_name: string;
+  from_ayah: number;
+  to_ayah: number;
+}
+
 /**
  * `GET /admin/quran-surahs` — the seeded lookup of all 114 (§4.5).
  *
@@ -654,12 +665,13 @@ export async function listLevelSurahs(
   prisma: PrismaClient,
   actor: Actor,
   levelId: string,
-): Promise<LevelSurahRef[]> {
+): Promise<LevelSyllabusRef[]> {
   assertCanReadReferenceData(actor);
 
   const rows = await prisma.levelSurah.findMany({
     where: { levelId, deletedAt: null },
     select: {
+      part: true,
       surah: {
         select: { surahId: true, nameArabic: true, nameTransliterated: true, totalAyahs: true },
       },
@@ -667,12 +679,20 @@ export async function listLevelSurahs(
     // The mushaf's own order, which is the order anybody reciting expects.
     orderBy: { surahId: 'asc' },
   });
-  return rows.map((r) => ({
-    surah_id: r.surah.surahId,
-    name_arabic: r.surah.nameArabic,
-    name_transliterated: r.surah.nameTransliterated,
-    total_ayahs: r.surah.totalAyahs,
-  }));
+  return rows.map((r) => {
+    const part = r.part as SurahPart | null;
+    const range = partRange(r.surah.surahId, part, r.surah.totalAyahs);
+    return {
+      surah_id: r.surah.surahId,
+      name_arabic: r.surah.nameArabic,
+      name_transliterated: r.surah.nameTransliterated,
+      total_ayahs: r.surah.totalAyahs,
+      part,
+      syllabus_name: syllabusName(r.surah.nameArabic, r.surah.surahId, part),
+      from_ayah: range.start,
+      to_ayah: range.end,
+    };
+  });
 }
 
 /** Adds a Surah to a Level's حفظ القرآن curriculum. Idempotent by revival, because
@@ -682,8 +702,15 @@ export async function assignSurahToLevel(
   actor: Actor,
   levelId: string,
   surahId: number,
+  /** R232 — `undefined` keeps the row's part; `null` is the whole Surah. */
+  part?: SurahPart | null,
 ): Promise<void> {
   assertCanWriteCurriculum(actor);
+  if (part != null && !surahSplits(surahId)) {
+    throw new AppError('VALIDATION_FAILED', 'only سورة البقرة is taught in parts', {
+      reason: 'SURAH_DOES_NOT_SPLIT',
+    });
+  }
 
   await prisma.$transaction(async (tx) => {
     const [level, surah] = await Promise.all([
@@ -695,6 +722,19 @@ export async function assignSurahToLevel(
 
     const existing = await tx.levelSurah.findFirst({ where: { levelId, surahId } });
     if (existing) {
+      if (existing.deletedAt === null && part !== undefined && part !== existing.part) {
+        // R232 — the same Surah, another part: the end state the PUT states.
+        await tx.levelSurah.update({ where: { id: existing.id }, data: { part } });
+        await audit.write(tx, {
+          actorUserId: actor.userId,
+          activeRole: actor.activeRole,
+          actionType: 'levelsurah.part',
+          targetEntity: 'Level',
+          targetId: levelId,
+          detail: { surah_id: surahId, before: existing.part, after: part },
+        });
+        return;
+      }
       if (existing.deletedAt === null) {
         // **R177 §5 (Owner-reported, 2026-09-29) — a PUT states an end state,
         // and this one already holds.** It answered `409 DUPLICATE`, which the
@@ -708,11 +748,11 @@ export async function assignSurahToLevel(
       // so an insert would be refused — the reconciliation `ExamStaff` uses.
       await tx.levelSurah.update({
         where: { id: existing.id },
-        data: { deletedAt: null, deletedById: null },
+        data: { deletedAt: null, deletedById: null, part: part ?? null },
       });
       await trash.removeForRevivedTarget(tx, 'LevelSurah', existing.id);
     } else {
-      await tx.levelSurah.create({ data: { levelId, surahId, createdById: actor.userId } });
+      await tx.levelSurah.create({ data: { levelId, surahId, part: part ?? null, createdById: actor.userId } });
     }
 
     await audit.write(tx, {
@@ -721,7 +761,7 @@ export async function assignSurahToLevel(
       actionType: 'levelsurah.assign',
       targetEntity: 'Level',
       targetId: levelId,
-      detail: { surah_id: surahId },
+      detail: { surah_id: surahId, part: part ?? null },
     });
   });
 }

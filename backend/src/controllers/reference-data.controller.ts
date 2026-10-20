@@ -26,6 +26,7 @@ import { sortParamsFrom } from '../lib/sorting.js';
 import { reorderSchema } from '../validators/reorder.validators.js';
 import { academicYearRefDto, subjectRefDto, subjectWithLevelsDto } from './dto.js';
 import { idParam, parse } from './parse.js';
+import { assignLevelSurahSchema } from '../validators/taxonomy.validators.js';
 
 /**
  * Reference-data selectors (TD-3 extension, Document Owner decision 2026-08-05).
@@ -197,11 +198,13 @@ export function levelSurahs(prisma: PrismaClient) {
 /** `PUT /admin/levels/{id}/surahs/{surahId}` — Super Admin (R26 curriculum). */
 export function assignSurah(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(assignLevelSurahSchema, req.body ?? {});
     await assignSurahToLevel(
       prisma,
       requireActor(req),
       idParam(req, 'levelId'),
       Number(req.params['surahId']),
+      body.part,
     );
     res.status(204).end();
   };

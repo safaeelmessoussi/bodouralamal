@@ -3,6 +3,7 @@ import type {
   Prisma,
   PrismaClient,
 } from "../generated/prisma/client.js";
+import { syllabusName, type SurahPart } from '../policies/surah-parts.js';
 import { AppError } from "../lib/errors.js";
 import { subjectsTaughtAt } from "../policies/curriculum.js";
 import { inProgressEnrolmentWhere } from "../policies/level-completion.js";
@@ -2175,13 +2176,17 @@ async function attachLevelSurahs(prisma: PrismaClient, occurrences: Occurrence[]
   const levelIds = [...new Set(wanting.flatMap((o) => o.levelIds))];
   const rows = await prisma.levelSurah.findMany({
     where: { levelId: { in: levelIds }, deletedAt: null },
-    select: { levelId: true, surah: { select: { surahId: true, nameArabic: true } } },
+    select: { levelId: true, part: true, surah: { select: { surahId: true, nameArabic: true } } },
     orderBy: { surahId: 'asc' },
   });
   const byLevel = new Map<string, { surahId: number; nameArabic: string }[]>();
   for (const row of rows) {
     const list = byLevel.get(row.levelId) ?? [];
-    list.push(row.surah);
+    // R232 — the part the Level teaches, by its name.
+    list.push({
+      surahId: row.surah.surahId,
+      nameArabic: syllabusName(row.surah.nameArabic, row.surah.surahId, row.part as SurahPart | null),
+    });
     byLevel.set(row.levelId, list);
   }
   for (const occurrence of wanting) {

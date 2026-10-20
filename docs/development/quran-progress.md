@@ -2,16 +2,16 @@
 
 # Quran progress — one engine, three surfaces
 
-Cites [`docs/SRS.md`](../SRS.md) §4.5, BR-11, BR-13 and Revisions 43, 73, 88, 91, 92, 95, 107; the SRS wins.
+Cites [`docs/SRS.md`](../SRS.md) §4.5, BR-11, BR-13 and Revisions 43, 73, 88, 91, 92, 95, 107, 230, 232; the SRS wins.
 
 ## The model
 
 | Entity | What it is | Source of truth? |
 |---|---|---|
-| `QuranSurah` | 114 seeded rows; `total_ayahs` is the definitive denominator (§4.5) | reference |
+| `QuranSurah` | 114 seeded rows; `total_ayahs` is the definitive denominator (§4.5), in Warsh's count (6214, R230) | reference |
 | `QuranProgressLog` | discrete closed ayah ranges, tagged `category` | yes |
 | `StudentSurahProgress` | self-healing coverage cache, O(1) reads | never (§4.5) |
-| `LevelSurah` | the Surahs a Level's حفظ القرآن syllabus teaches; تفسير القرآن follows the same selection without entering the engine | reference |
+| `LevelSurah` | the Surahs a Level's حفظ القرآن syllabus teaches; تفسير القرآن follows the same selection without entering the engine; `part` (R232) — البقرة only: 1 = 1–140, 2 = 141–285 | reference |
 
 - Section C added no table, column or migration: only reach, a curriculum-aware form and one category rule.
 - The marker identifies حفظ القرآن, not the Quran domain: القرآن الكريم is a domain, not a Subject row (R107–R108); initial Subjects are أحكام القرآن, حفظ القرآن, ترتيل وتجويد القرآن, تفسير القرآن (may grow). `tracks_quran_progress` belongs only to حفظ القرآن: a current staffing assignment for that Subject authorises memorisation entry for its resolved audience; it classifies nothing else, configures no coverage, is no FK on the log.
@@ -38,6 +38,11 @@ Cites [`docs/SRS.md`](../SRS.md) §4.5, BR-11, BR-13 and Revisions 43, 73, 88, 9
 | `null` | `null` | «لم يُضبط «مقرر الحفظ» لهذا المستوى بعد» |
 
 - Conditions stay on screen beside a recorded completion; the administration may knowingly record a Level whose conditions the platform cannot see met (R167 §3).
+
+## A part of البقرة (R232)
+
+- `policies/surah-parts.ts` holds the ranges and names; `forPart` (`quran.service`) turns a Surah's coverage into the part's — its name, the runs clipped to the part, the count and percentage of the part's verses — for «حفظي», per-Level completion and the mark verdict. The log, the cache and `GET /students/{id}/quran`'s per-Surah rows stay whole-Surah.
+- A log against a Level teaching a part may cover any verse of the Surah (bounded by `total_ayahs`); only the part's verses count towards that Level.
 
 ## `LevelSurah` is normative for ENTRY
 
@@ -70,7 +75,7 @@ Authority is [`teaching-authority.md`](teaching-authority.md)'s: `studentsTaught
 | Guard | Pins |
 |---|---|
 | [`policies/quran-coverage.test.ts`](../../backend/src/policies/quran-coverage.test.ts) | BR-13's worked example · adjacency · re-logging never inflating |
-| [`services/quran.integration.test.ts`](../../backend/src/services/quran.integration.test.ts) | the engine, R73 subject narrowing, self-heal guard, BR-11 completion |
+| [`services/quran.integration.test.ts`](../../backend/src/services/quran.integration.test.ts) | the engine, R73 subject narrowing, self-heal guard, BR-11 completion, R232 parts (named, read and completed against the part; only البقرة splits) |
 | [`services/quran-entry.integration.test.ts`](../../backend/src/services/quran-entry.integration.test.ts) | whole-Level · Group · Circle · assistant parity · unrelated Subject · R88 grants nothing · R91 dated authority and one-off cover · R92 combined, not widened · beneficiaries not Users · multi-Level · `LevelSurah` refusals · ayah bounds · revision never inflating · audit actor and level |
 | [`services/production-seed.integration.test.ts`](../../backend/src/services/production-seed.integration.test.ts) | fresh Production seed twice · R108 eight-Subject baseline · additive custom/historical preservation · exactly one حفظ marker · marked-vs-unmarked authorization |
 | [`components/quran/quran-entry.test.ts`](../../frontend/src/components/quran/quran-entry.test.ts) | one workspace, one writer · curriculum drives the Surah list · no 114 · no `level_ids[0]` · error ≠ empty · ARIA meter contract · no second meter · Level grouping |

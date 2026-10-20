@@ -401,3 +401,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-20 — SRS Revision 231: programmes wording, a translated hours label
 - «وتتواصل الرحلة» gone from every «إتمام الفئة» (one key `graduationText`, `graduationTextLast` removed, six locales); the «مداخل أخرى إلى هذه الفئة» heading and key removed (`.entrances__title` rule dropped).
 - `data-translation.ts`: a multi-word `word:` key matches as one phrase; «التوقيت الإداري العادي» added for six languages in `ops/data/translations-r224.ts` (Owner runs `ops:import-translations`).
+
+## 2026-10-20 — SRS Revision 232: سورة البقرة in two parts
+- Migration `r232_level_surah_part` (`level_surah.part` + CHECK); `policies/surah-parts.ts` (ranges 1–140 / 141–285, names, `coverageWithin`); `forPart` in `quran.service` feeds «حفظي», per-Level completion, the mark verdict.
+- Names the part in `listLevelSurahs`, the Levels list (`surah_parts`), `/quran-students`, certificates, calendar, public programme; `PUT …/surahs/{surahId}` body `{ part }`, OpenAPI regenerated.
+- «مقرر الحفظ» dialog: a «سورة البقرة» choice (whole / part 1 / part 2). Translation patterns for six languages.

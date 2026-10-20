@@ -1,5 +1,6 @@
 import type { Level, Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { assertAgeRange } from '../policies/age-range.js';
+import { syllabusName, type SurahPart } from '../policies/surah-parts.js';
 import { AppError } from '../lib/errors.js';
 import { applyOrder } from '../lib/reorder.js';
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
@@ -123,6 +124,8 @@ export interface LevelSummary {
    * administrator did (Owner-reported on Production, 2026-09-30).
    */
   surahIds: number[];
+  /** R232 — the rows of `surahIds` taught in part (only البقرة). */
+  surahParts: { surahId: number; part: number; syllabusName: string }[];
   enrollmentCount: number;
   /**
    * §4.9's default content visibility for this Level, resolved through its
@@ -259,7 +262,7 @@ export async function listLevels(
       category: { select: { name: true } },
       subjects: { where: { deletedAt: null, subject: { deletedAt: null } }, select: { subjectId: true } },
       // R183 §6 — Mushaf order, the order «مقرر الحفظ» already showed.
-      surahs: { where: { deletedAt: null }, select: { surahId: true }, orderBy: { surahId: 'asc' } },
+      surahs: { where: { deletedAt: null }, select: { surahId: true, part: true, surah: { select: { nameArabic: true } } }, orderBy: { surahId: 'asc' } },
       _count: {
         select: {
           administrativeGroups: { where: { deletedAt: null } },
@@ -297,6 +300,11 @@ export async function listLevels(
     subjectCount: row._count.subjects,
     subjectIds: row.subjects.map((link) => link.subjectId),
     surahIds: row.surahs.map((link) => link.surahId),
+    surahParts: row.surahs.flatMap((link) =>
+      link.part === null
+        ? []
+        : [{ surahId: link.surahId, part: link.part, syllabusName: syllabusName(link.surah.nameArabic, link.surahId, link.part as SurahPart) }],
+    ),
     enrollmentCount: row._count.enrollments,
     defaultVisibility: readDefaultVisibility(byCategory.get(row.categoryId)),
     version: row.version,

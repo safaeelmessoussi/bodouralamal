@@ -202,6 +202,9 @@ export interface Level {
   subject_ids: string[];
   /** R183 §6 — its «مقرر الحفظ», Mushaf order — one read for that page. */
   surah_ids: number[];
+  /** R232 — the Surahs of `surah_ids` taught in part (only البقرة), with the
+   *  server's name for the part; a Surah absent here is taught whole. */
+  surah_parts?: { surah_id: number; part: SurahPart; syllabus_name: string }[];
   /** Live enrolments. Non-zero means deletion will be refused, and the screen
    *  can say so before the administrator tries. */
   enrollment_count: number;
@@ -406,12 +409,22 @@ export async function listLevelSurahs(
   return (await api<{ data: LevelSurahRef[] }>(`/admin/levels/${levelId}/surahs`, { token })).data;
 }
 
+/** R232 — the part of البقرة a Level teaches: 1 = verses 1–140, 2 = 141–285. */
+export type SurahPart = 1 | 2;
+
+/** Assigns a Surah; `part` (R232, البقرة only) — `null` the whole Surah,
+ *  `undefined` keeps what the row holds. */
 export async function assignSurah(
   levelId: string,
   surahId: number,
   token: string | null,
+  part?: SurahPart | null,
 ): Promise<void> {
-  await api<void>(`/admin/levels/${levelId}/surahs/${surahId}`, { method: 'PUT', token });
+  await api<void>(`/admin/levels/${levelId}/surahs/${surahId}`, {
+    method: 'PUT',
+    token,
+    ...(part !== undefined ? { body: { part } } : {}),
+  });
 }
 
 export async function unassignSurah(

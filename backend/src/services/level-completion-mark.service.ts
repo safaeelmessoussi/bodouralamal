@@ -10,7 +10,8 @@ import {
   type CompletionVerdict,
 } from '../policies/level-completion.js';
 import * as audit from '../repositories/audit.repository.js';
-import { recalculateFor } from './quran.service.js';
+import { forPart, recalculateFor } from './quran.service.js';
+import { syllabusName, type SurahPart } from '../policies/surah-parts.js';
 
 /**
  * **«إتمام المستوى» — the administration's attestation, and its certificate**
@@ -54,14 +55,19 @@ export async function completionVerdictFor(
 ): Promise<CompletionVerdict> {
   const configured = await prisma.levelSurah.findMany({
     where: { levelId, deletedAt: null },
-    select: { surahId: true },
+    select: { surahId: true, part: true },
     orderBy: { surahId: 'asc' },
   });
   const surahIds = configured.map((row) => row.surahId);
   const [requiring, examined, coverage] = await Promise.all([
     levelsRequiringSurahExams(prisma, [levelId]),
     examinedSurahs(prisma, [studentId], surahIds),
-    Promise.all(surahIds.map((surahId) => recalculateFor(prisma, studentId, surahId))),
+    // R232 — each read against the part the Level teaches.
+    Promise.all(
+      configured.map(async (row) =>
+        forPart(await recalculateFor(prisma, studentId, row.surahId), row.part as SurahPart | null),
+      ),
+    ),
   ]);
   return decideCompletion({
     configuredSurahIds: surahIds,
@@ -477,7 +483,7 @@ export async function certificatesOf(
     }),
     prisma.levelSurah.findMany({
       where: { levelId: { in: levelIds }, deletedAt: null },
-      select: { levelId: true, surah: { select: { nameArabic: true } } },
+      select: { levelId: true, surahId: true, part: true, surah: { select: { nameArabic: true } } },
       orderBy: { surahId: 'asc' },
     }),
     levelsRequiringSurahExams(prisma, levelIds),
@@ -510,7 +516,10 @@ export async function certificatesOf(
     completed_on: moroccoDateIso(mark.completedAt),
     issued_on: moroccoDateIso(mark.certificateIssuedAt!),
     level_position: positionOf(mark.levelId),
-    syllabus_surahs: syllabus.filter((r) => r.levelId === mark.levelId).map((r) => r.surah.nameArabic),
+    // R232 — «البقرة الجزء الثاني (…)» where the Level teaches a part.
+    syllabus_surahs: syllabus
+      .filter((r) => r.levelId === mark.levelId)
+      .map((r) => syllabusName(r.surah.nameArabic, r.surahId, r.part as SurahPart | null)),
     teaches_tafsir: tafsir.has(mark.levelId),
     academic_year_label: await yearOf(new Date(`${moroccoDateIso(mark.completedAt)}T00:00:00.000Z`)),
   })));

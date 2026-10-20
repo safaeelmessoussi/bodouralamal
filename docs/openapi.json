@@ -8883,7 +8883,7 @@
     "/admin/levels/{levelId}/surahs": {
       "get": {
         "summary": "Which surahs a Level covers",
-        "description": "§4.5, BR-11 — the Level's memorization curriculum, and therefore the denominator of *completion*. Read by Admin and Super Admin (TD-2 R26).",
+        "description": "§4.5, BR-11 — the Level's memorization curriculum, and therefore the denominator of *completion*. Each row carries `part` (R232: `null`, or 1/2 for البقرة), `syllabus_name` («البقرة الجزء الثاني (…)») and the part's `from_ayah`/`to_ayah`. Read by Admin and Super Admin (TD-2 R26).",
         "responses": {
           "200": {
             "description": "The surahs assigned to this Level."
@@ -8934,13 +8934,13 @@
     "/admin/levels/{levelId}/surahs/{surahId}": {
       "put": {
         "summary": "Assign a surah to a Level",
-        "description": "§4.5, BR-11. **Super Admin only** — curriculum is reference data (TD-2 R26). **Idempotent in effect**: assigning one already assigned is a no-op rather than an error, so a retried request cannot duplicate the pairing. surahId is the surah's 1–114 number, not a uuid.",
+        "description": "§4.5, BR-11. **Super Admin only** — curriculum is reference data (TD-2 R26). **Idempotent in effect**: assigning one already assigned is a no-op rather than an error, so a retried request cannot duplicate the pairing. surahId is the surah's 1–114 number, not a uuid. **R232 — an optional JSON body `{ \"part\": 1 | 2 | null }`** names the part of the Surah the Level teaches: only سورة البقرة splits (1 = verses 1–140, the first and second hizbs; 2 = 141–285, Warsh); `null` is the whole Surah; an absent key keeps the row's part. Changing the part of an assigned Surah is audited (`levelsurah.part`). Completion (BR-11), coverage, the certificate and every syllabus list then read the part.",
         "responses": {
           "204": {
             "description": "Assigned; no body."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a surah number outside 1–114.",
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a surah number outside 1–114, a part other than 1, 2 or null, or SURAH_DOES_NOT_SPLIT (a part for a Surah other than البقرة).",
             "content": {
               "application/json": {
                 "schema": {

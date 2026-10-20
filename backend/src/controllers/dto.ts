@@ -1463,6 +1463,9 @@ export interface LevelDto extends LevelCoreDto {
   subject_ids: string[];
   /** R183 §6 — its «مقرر الحفظ» (`LevelSurah`), Mushaf order; one read for that page. */
   surah_ids: number[];
+  /** R232 — the Surahs of `surah_ids` the Level teaches in part (only البقرة):
+   *  `{ surah_id: 2, part: 1 | 2 }`; a Surah absent here is taught whole. */
+  surah_parts: { surah_id: number; part: number; syllabus_name: string }[];
   enrollment_count: number;
   /** §4.9's default content visibility for this Level, through its Category
    *  (§15.1). §14.1's upload screen preselects it. */
@@ -1488,6 +1491,7 @@ export function levelDto(row: {
   subjectCount: number;
   subjectIds: string[];
   surahIds: number[];
+  surahParts: { surahId: number; part: number; syllabusName: string }[];
   enrollmentCount: number;
   defaultVisibility: string;
   version: number;
@@ -1508,6 +1512,7 @@ export function levelDto(row: {
     subject_count: row.subjectCount,
     subject_ids: row.subjectIds,
     surah_ids: row.surahIds,
+    surah_parts: row.surahParts.map((p) => ({ surah_id: p.surahId, part: p.part, syllabus_name: p.syllabusName })),
     enrollment_count: row.enrollmentCount,
     default_visibility: row.defaultVisibility,
     version: row.version,

@@ -9,6 +9,7 @@ import { moroccoDateIso } from '../lib/morocco-clock.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { computeCoverage, type AyahInterval } from '../policies/quran-coverage.js';
+import { coverageWithin, partRange, syllabusName, type SurahPart } from '../policies/surah-parts.js';
 import {
   assertCanManageQuranProgress,
   quranSubjectId,
@@ -183,7 +184,7 @@ export interface LevelCoverage {
   level_name: string;
   category_name: string;
   /** Each Surah of the syllabus, with `exam_taken` — R166 §1's second half. */
-  surahs: (SurahCoverage & { exam_taken: boolean })[];
+  surahs: (SyllabusCoverage & { exam_taken: boolean })[];
   /**
    * **R166 §1 — has she COMPLETED this Level?** BR-11, by the one rule in
    * `policies/level-completion.ts`: every Surah memorised and, where the Level
@@ -223,6 +224,32 @@ export interface QuranLogRow {
   category: string;
   logged_at: string;
   logged_by_name: string | null;
+}
+
+/** R232 — a syllabus row: the Surah's coverage read against the part the Level teaches. */
+export type SyllabusCoverage = SurahCoverage & { part: SurahPart | null; from_ayah: number; to_ayah: number };
+
+/**
+ * **R232 — what a Level asks of a Surah it teaches in part.** The name becomes
+ * the part's («البقرة الجزء الثاني (…)»), and the count, the percentage and the
+ * runs are those inside the part's verses, so BR-11 reads «memorised» against
+ * the part alone. The whole Surah passes through with its own figures.
+ */
+export function forPart(coverage: SurahCoverage, part: SurahPart | null): SyllabusCoverage {
+  const range = partRange(coverage.surah_id, part, coverage.total_ayahs);
+  if (part === null) return { ...coverage, part, from_ayah: range.start, to_ayah: range.end };
+  const within = coverageWithin(coverage.merged_intervals, range);
+  return {
+    ...coverage,
+    name_arabic: syllabusName(coverage.name_arabic, coverage.surah_id, part),
+    total_ayahs: within.totalAyahs,
+    merged_ayah_count: within.mergedAyahCount,
+    coverage_percent: within.coveragePercent,
+    merged_intervals: within.merged,
+    part,
+    from_ayah: range.start,
+    to_ayah: range.end,
+  };
 }
 
 /**
@@ -417,6 +444,7 @@ async function coverageFor(
           surahs: {
             where: { deletedAt: null },
             select: {
+              part: true,
               surah: { select: { surahId: true, nameArabic: true, totalAyahs: true } },
             },
             // The mushaf's own order, which is the order anybody reciting
@@ -524,7 +552,7 @@ async function coverageFor(
     const rows: LevelCoverage['surahs'] = [];
     for (const entry of level.surahs) {
       rows.push({
-        ...(await coverageOf(entry.surah.surahId, entry.surah)),
+        ...forPart(await coverageOf(entry.surah.surahId, entry.surah), entry.part as SurahPart | null),
         exam_taken: examined.has(entry.surah.surahId),
       });
     }
@@ -599,7 +627,10 @@ export interface QuranScopeLevel {
   level_id: string;
   level_name: string;
   category_name: string;
-  surahs: { surah_id: number; name_arabic: string; total_ayahs: number }[];
+  /** `name_arabic` is the syllabus name (R232: «البقرة الجزء الثاني (…)»);
+   *  `total_ayahs` the Surah's own, which bounds a log; `from_ayah`/`to_ayah`
+   *  the part's verses. */
+  surahs: { surah_id: number; name_arabic: string; total_ayahs: number; part: number | null; from_ayah: number; to_ayah: number }[];
 }
 
 export interface QuranScopeStudent {
@@ -703,7 +734,7 @@ export async function listQuranStudents(
       category: { select: { name: true } },
       surahs: {
         where: { deletedAt: null },
-        select: { surah: { select: { surahId: true, nameArabic: true, totalAyahs: true } } },
+        select: { part: true, surah: { select: { surahId: true, nameArabic: true, totalAyahs: true } } },
         orderBy: { surahId: 'asc' },
       },
     },
@@ -720,11 +751,18 @@ export async function listQuranStudents(
       level_id: l.id,
       level_name: l.name,
       category_name: l.category.name,
-      surahs: l.surahs.map((x) => ({
-        surah_id: x.surah.surahId,
-        name_arabic: x.surah.nameArabic,
-        total_ayahs: x.surah.totalAyahs,
-      })),
+      surahs: l.surahs.map((x) => {
+        const part = x.part as SurahPart | null;
+        const range = partRange(x.surah.surahId, part, x.surah.totalAyahs);
+        return {
+          surah_id: x.surah.surahId,
+          name_arabic: syllabusName(x.surah.nameArabic, x.surah.surahId, part),
+          total_ayahs: x.surah.totalAyahs,
+          part,
+          from_ayah: range.start,
+          to_ayah: range.end,
+        };
+      }),
     })),
   };
 }
@@ -963,7 +1001,7 @@ export async function levelCompletion(
   const [configured, enrolments] = await Promise.all([
     prisma.levelSurah.findMany({
       where: { levelId, deletedAt: null },
-      select: { surah: { select: { surahId: true, nameArabic: true } } },
+      select: { part: true, surah: { select: { surahId: true, nameArabic: true } } },
       orderBy: { surahId: 'asc' },
     }),
     prisma.enrollment.findMany({
@@ -1002,7 +1040,11 @@ export async function levelCompletion(
         surahIds.map(async (surahId) => {
           // The same routine every read and write uses, so completion and the
           // dashboard cannot disagree — and the R10 self-heal comes with it.
-          const coverage = await recalculateFor(prisma, e.studentId, surahId);
+          // R232 — read against the part the Level teaches.
+          const coverage = forPart(
+            await recalculateFor(prisma, e.studentId, surahId),
+            (configured.find((c) => c.surah.surahId === surahId)?.part ?? null) as SurahPart | null,
+          );
           return {
             surah_id: surahId,
             name_arabic: coverage.name_arabic,

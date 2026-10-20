@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { derivedCategoryAgeRange } from '../policies/age-range.js';
+import { syllabusName, type SurahPart } from '../policies/surah-parts.js';
 
 /**
  * The public programme overview — the homepage's "what does the institute
@@ -149,7 +150,7 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
     }),
     prisma.levelSurah.findMany({
       where: { deletedAt: null, levelId: { in: levelIds } },
-      select: { levelId: true, surah: { select: { surahId: true, nameArabic: true } } },
+      select: { levelId: true, part: true, surah: { select: { surahId: true, nameArabic: true } } },
     }),
   ]);
 
@@ -173,7 +174,8 @@ export async function listPublicPrograms(prisma: PrismaClient): Promise<PublicPr
   const surahsByLevel = new Map<string, PublicSurahRef[]>();
   for (const row of levelSurahs) {
     const list = surahsByLevel.get(row.levelId) ?? [];
-    list.push({ id: row.surah.surahId, name: row.surah.nameArabic });
+    // R232 — «البقرة الجزء الأول (…)» where the Level teaches a part.
+    list.push({ id: row.surah.surahId, name: syllabusName(row.surah.nameArabic, row.surah.surahId, row.part as SurahPart | null) });
     surahsByLevel.set(row.levelId, list);
   }
   // The Mushaf's own order — the sequence a reader of «مقرر الحفظ» expects,

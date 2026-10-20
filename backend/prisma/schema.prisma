@@ -1415,6 +1415,9 @@ model LevelSurah {
   level   Level      @relation(fields: [levelId], references: [id], onDelete: Restrict)
   surahId Int        @map("surah_id")
   surah   QuranSurah @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
+  /// R232 — the part of the Surah this Level teaches: NULL = the whole Surah;
+  /// 1 or 2 only for البقرة (1–140 / 141–285, Warsh). CHECK in the migration.
+  part    Int?       @db.SmallInt
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)

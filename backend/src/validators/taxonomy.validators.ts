@@ -132,3 +132,12 @@ export const updateLevelSchema = z
     memorisation_hizb: z.number().int().min(0).max(60).nullable().optional(),
   })
   .strict();
+
+/**
+ * R232 — `PUT /admin/levels/{id}/surahs/{surahId}` may name the part of the
+ * Surah the Level teaches (only البقرة splits: 1 = verses 1–140, 2 = 141–285);
+ * `null` is the whole Surah, and an absent key keeps what the row holds.
+ */
+export const assignLevelSurahSchema = z.object({
+  part: z.union([z.literal(1), z.literal(2)]).nullable().optional(),
+});

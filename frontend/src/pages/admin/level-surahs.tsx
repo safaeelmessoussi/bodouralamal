@@ -8,6 +8,7 @@ import {
   unassignSurah,
   type Level,
   type LevelSurahRef,
+  type SurahPart,
 } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { levelLabel } from '../../components/scope/level-select.js';
@@ -155,7 +156,8 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
           // Named in the cell rather than counted there: the question a reader
           // brings to this page is *which surahs*, and a number would send them
           // to a second screen for the answer they came for.
-          r.surahs.map((s) => s.name_arabic).join(' · ')
+          // R232 — a part of البقرة by the server's name for it.
+          r.surahs.map((s) => partOf(r.level, s.surah_id)?.syllabus_name ?? s.name_arabic).join(' · ')
         ),
     },
     /* **No «العدد» column** (Owner decision, 2026-08-17). The cell beside it
@@ -238,6 +240,7 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
         <SyllabusDialog
           level={editing.level}
           current={editing.surahs}
+          currentPart={partOf(editing.level, BAQARA)?.part ?? null}
           token={accessToken}
           onCancel={() => setEditing(null)}
           onDone={(message) => {
@@ -265,6 +268,13 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
  * their integration tests. A presentation was removed; no engine was.
  */
 
+/** R232 — the one Surah a Level may teach in part. */
+const BAQARA = 2;
+
+function partOf(level: Level, surahId: number): { part: SurahPart; syllabus_name: string } | null {
+  return level.surah_parts?.find((p) => p.surah_id === surahId) ?? null;
+}
+
 /**
  * Choosing the Level's Surahs.
  *
@@ -275,17 +285,22 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
 function SyllabusDialog({
   level,
   current,
+  currentPart,
   token,
   onCancel,
   onDone,
 }: {
   level: Level;
   current: LevelSurahRef[];
+  /** R232 — the part of البقرة the Level teaches now, `null` the whole. */
+  currentPart: SurahPart | null;
   token: string | null;
   onCancel: () => void;
   onDone: (message: string) => void;
 }): ReactNode {
   const [selected, setSelected] = useState<string[]>(current.map((s) => String(s.surah_id)));
+  const [part, setPart] = useState<string>(currentPart === null ? '' : String(currentPart));
+  const teachesBaqara = selected.includes(String(BAQARA));
   const [all, setAll] = useState<LevelSurahRef[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -305,7 +320,9 @@ function SyllabusDialog({
 
   // Sorted on both sides: a Surah set is unordered, so a different ORDER of the
   // same ids is not a change — comparing the raw arrays would report one.
-  const dirty = isDirty([...selected].sort(), current.map((s) => String(s.surah_id)).sort());
+  const dirty =
+    isDirty([...selected].sort(), current.map((s) => String(s.surah_id)).sort()) ||
+    (teachesBaqara && part !== (currentPart === null ? '' : String(currentPart)));
 
   return (
     <FormDialog
@@ -324,7 +341,15 @@ function SyllabusDialog({
             // Only the difference is written: re-asserting an existing row would
             // be refused as a duplicate, and re-writing every one would make an
             // audit trail of changes nobody made.
-            for (const id of after) if (!before.has(id)) await assignSurah(level.id, id, token);
+            const chosenPart = part === '' ? null : (Number(part) as SurahPart);
+            for (const id of after) {
+              if (id === BAQARA) {
+                // R232 — added with its part, or its part changed in place.
+                if (!before.has(id) || chosenPart !== currentPart) await assignSurah(level.id, id, token, chosenPart);
+              } else if (!before.has(id)) {
+                await assignSurah(level.id, id, token);
+              }
+            }
             for (const id of before) if (!after.has(id)) await unassignSurah(level.id, id, token);
             onDone(t('admin.levelSurahs.saved'));
           } catch (error) {
@@ -351,6 +376,19 @@ function SyllabusDialog({
         onChange={setSelected}
         hint={t('admin.levelSurahs.configureHint')}
       />
+      {teachesBaqara ? (
+        <SelectField
+          label={t('admin.levelSurahs.baqaraPart')}
+          value={part}
+          onChange={setPart}
+          options={[
+            { value: '', label: t('admin.levelSurahs.baqaraWhole') },
+            { value: '1', label: t('admin.levelSurahs.baqaraPart1') },
+            { value: '2', label: t('admin.levelSurahs.baqaraPart2') },
+          ]}
+          hint={t('admin.levelSurahs.baqaraHint')}
+        />
+      ) : null}
     </FormDialog>
   );
 }

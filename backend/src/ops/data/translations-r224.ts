@@ -9,6 +9,8 @@
  */
 export const TRANSLATIONS: Record<string, Record<string, string>> = {
  "en": {
+  "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, part one (first and second hizbs)",
+  "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, part two (third, fourth and fifth hizbs)",
   "word:التوقيت الإداري العادي": "Regular office hours",
   "ذكرى المسيرة الخضراء": "Anniversary of the Green March",
   "ذكرى تقديم وثيقة الاستقلال": "Anniversary of the Proclamation of Independence",
@@ -441,6 +443,8 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "fr": {
+  "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, première partie (premier et deuxième hizbs)",
+  "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, deuxième partie (troisième, quatrième et cinquième hizbs)",
   "word:التوقيت الإداري العادي": "Horaires administratifs habituels",
   "ذكرى المسيرة الخضراء": "Anniversaire de la Marche verte",
   "ذكرى تقديم وثيقة الاستقلال": "Anniversaire de la présentation du Manifeste de l'indépendance",
@@ -873,6 +877,8 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Younous"
  },
  "es": {
+  "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, primera parte (primer y segundo hizb)",
+  "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, segunda parte (tercer, cuarto y quinto hizb)",
   "word:التوقيت الإداري العادي": "Horario administrativo habitual",
   "ذكرى المسيرة الخضراء": "Aniversario de la Marcha Verde",
   "ذكرى تقديم وثيقة الاستقلال": "Aniversario de la presentación del Manifiesto de la Independencia",
@@ -1305,6 +1311,8 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "de": {
+  "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, erster Teil (erster und zweiter Hizb)",
+  "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, zweiter Teil (dritter, vierter und fünfter Hizb)",
   "word:التوقيت الإداري العادي": "Reguläre Bürozeiten",
   "ذكرى المسيرة الخضراء": "Jahrestag des Grünen Marsches",
   "ذكرى تقديم وثيقة الاستقلال": "Jahrestag der Vorlage des Unabhängigkeitsmanifests",
@@ -1737,6 +1745,8 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "zgh": {
+  "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, ⴰⵃⵔⵉⴼ ⴰⵎⵣⵡⴰⵔⵓ (ⴰⵃⵣⴱ ⴰⵎⵣⵡⴰⵔⵓ ⴷ ⵡⵉⵙ ⵙⵉⵏ)",
+  "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, ⴰⵃⵔⵉⴼ ⵡⵉⵙ ⵙⵉⵏ (ⴰⵃⵣⴱ ⵡⵉⵙ ⴽⵕⴰⴹ, ⵡⵉⵙ ⴽⴽⵓⵥ ⴷ ⵡⵉⵙ ⵙⵎⵎⵓⵙ)",
   "word:التوقيت الإداري العادي": "ⴰⴽⵓⴷ ⴰⵏⴱⴹⴰⵏ ⴰⵎⴰⴳⵏⵓ",
   "ذكرى المسيرة الخضراء": "ⴰⵙⵙⵎⵜⵜⵉ ⵏ ⵓⵎⵓⴷⴷⵓ ⴰⵣⴳⵣⴰⵡ",
   "ذكرى تقديم وثيقة الاستقلال": "ⴰⵙⵙⵎⵜⵜⵉ ⵏ ⵓⵙⵙⵉⵡⴹ ⵏ ⵓⵙⵎⵎⵍ ⵏ ⵓⵙⵉⵎⴰⵏ",
@@ -2169,6 +2179,8 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "ⵢⵓⵏⵓⵙ"
  },
  "shi-Latn": {
+  "{surah} الجزء الأول (الحزب الأول و الثاني)": "{surah}, aḥrif amzwaru (aḥzab amzwaru d wis sin)",
+  "{surah} الجزء الثاني (الحزب الثالث و الرابع و الخامس)": "{surah}, aḥrif wis sin (aḥzab wis kraḍ, wis kkuẓ d wis smmus)",
   "word:التوقيت الإداري العادي": "Akud anbḍan amagnu",
   "ذكرى المسيرة الخضراء": "Asmktay n Lmasira Lxaḍra",
   "ذكرى تقديم وثيقة الاستقلال": "Asmktay n ufka n tirra n Listiqlal",

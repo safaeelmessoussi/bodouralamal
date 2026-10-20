@@ -556,6 +556,59 @@ describe("M4c — LevelSurah is Super Admin curriculum", () => {
   });
 });
 
+describe("SRS Revision 232 — سورة البقرة in two parts (Warsh: 1–140 / 141–285)", () => {
+  withOwnCurriculum();
+  const baqara = (start: number, end: number) => ({ ...range(start, end), surahId: 2 });
+
+  it("names the part, and reads coverage and BR-11 against the part alone", async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 2, 2);
+    expect(await listLevelSurahs(prisma, superAdmin(), levelId)).toMatchObject([
+      {
+        surah_id: 2,
+        part: 2,
+        syllabus_name: "البقرة الجزء الثاني (الحزب الثالث و الرابع و الخامس)",
+        from_ayah: 141,
+        to_ayah: 285,
+      },
+    ]);
+
+    await logProgress(prisma, teacher(quranTeacher), baqara(141, 285));
+    let [row] = await levelCompletion(prisma, superAdmin(), levelId);
+    expect(row!.complete).toBe(true);
+    expect(row!.surahs[0]).toMatchObject({
+      coverage_percent: 100,
+      name_arabic: "البقرة الجزء الثاني (الحزب الثالث و الرابع و الخامس)",
+    });
+    const own = await readOwnCoverage(prisma, student);
+    expect(own.levels[0]!.surahs[0]).toMatchObject({ part: 2, total_ayahs: 145, merged_ayah_count: 145 });
+
+    // The whole Surah asks for all 285: the same logs are half of it.
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 2, null);
+    [row] = await levelCompletion(prisma, superAdmin(), levelId);
+    expect(row!.complete).toBe(false);
+    expect(row!.surahs[0]!.coverage_percent).toBe(50.88);
+
+    // Part 1 has none of them; an absent part keeps the row's.
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 2, 1);
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 2);
+    [row] = await levelCompletion(prisma, superAdmin(), levelId);
+    expect(row!.surahs[0]).toMatchObject({
+      coverage_percent: 0,
+      name_arabic: "البقرة الجزء الأول (الحزب الأول و الثاني)",
+    });
+    expect(
+      await prisma.auditLog.count({ where: { actorUserId: adminId, actionType: "levelsurah.part" } }),
+    ).toBe(2);
+  });
+
+  it("only البقرة splits — the service and the database both refuse another", async () => {
+    expect((await failure(() => assignSurahToLevel(prisma, superAdmin(), levelId, 3, 1))).code).toBe(
+      "VALIDATION_FAILED",
+    );
+    await expect(prisma.levelSurah.create({ data: { levelId, surahId: 3, part: 1 } })).rejects.toThrow();
+  });
+});
+
 describe("SRS Revision 167 §3 — «إتمام المستوى»: the administration's attestation and its certificate", () => {
   withOwnCurriculum();
 
