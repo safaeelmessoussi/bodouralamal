@@ -6,7 +6,7 @@ import type { Actor } from '../policies/actor.js';
 import { clearTeachingContext, createTeachingContext, materializeRange, type TeachingFixture } from '../test-support/educational-fixture.js';
 import { readCalendar } from './calendar.service.js';
 import { createEvent, deleteEvent, listCancelledDates, restoreCancelledDate, updateEvent } from './event.service.js';
-import { applyHolidaysToSessions } from './holiday-cancellation.service.js';
+import { applyHolidaysToSessions, widenYoungHolidays } from './holiday-cancellation.service.js';
 import { restoreSession } from './session.service.js';
 import { restoreEntry } from './trash.service.js';
 
@@ -271,3 +271,54 @@ describe('R224 §2 — a عطلة cancels its Category’s activity dates', () =
 
 // Saturdays referenced so a reader sees the calendar the cases assume.
 void SATURDAYS;
+
+describe('R237 — a school holiday covers every programme but the adult one', () => {
+  class Rollback extends Error {}
+
+  it('gains a non-adult programme it lacks; an official (no programme) or adult holiday is left as it is', async () => {
+    const school = await createEvent(prisma, superAdmin(), {
+      title: `${TAG} عطلة الفترة البينية`,
+      schedulingTypeId: holidayTypeId,
+      visibility: 'public',
+      startDate: day('2027-02-01'),
+      endDate: day('2027-02-07'),
+      recurrenceType: 'none',
+      branchIds: [branchId],
+      categoryIds: [children.categoryId],
+    });
+    const official = await createEvent(prisma, superAdmin(), {
+      title: `${TAG} عيد رسمي`,
+      schedulingTypeId: holidayTypeId,
+      visibility: 'public',
+      startDate: day('2027-02-10'),
+      recurrenceType: 'none',
+      branchIds: [branchId],
+    });
+    const adults = await createEvent(prisma, superAdmin(), {
+      title: `${TAG} عطلة النساء`,
+      schedulingTypeId: holidayTypeId,
+      visibility: 'public',
+      startDate: day('2027-02-12'),
+      recurrenceType: 'none',
+      branchIds: [branchId],
+      categoryIds: [women.categoryId],
+    });
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.category.update({ where: { id: women.categoryId }, data: { holdsOwnLogin: true } });
+        const boys = await tx.category.create({ data: { name: `${TAG} اليافعين` } });
+        const changed = await widenYoungHolidays(tx);
+        const scope = async (id: string) =>
+          (await tx.eventCategory.findMany({ where: { eventId: id }, select: { categoryId: true } })).map((r) => r.categoryId);
+        expect(changed).toContain(school.event.id);
+        expect(await scope(school.event.id)).toEqual(expect.arrayContaining([children.categoryId, boys.id]));
+        expect(await scope(school.event.id)).not.toContain(women.categoryId);
+        expect(await scope(official.event.id)).toEqual([]);
+        expect(await scope(adults.event.id)).toEqual([women.categoryId]);
+        // A second pass changes nothing.
+        expect(await widenYoungHolidays(tx)).not.toContain(school.event.id);
+        throw new Rollback();
+      }),
+    ).rejects.toBeInstanceOf(Rollback);
+  });
+});

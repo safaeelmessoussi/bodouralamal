@@ -414,3 +414,40 @@ export async function applyHolidaysToActivity(tx: Prisma.TransactionClient, acti
   }
   return cancelled;
 }
+
+/**
+ * **SRS Revision 237 — a children's and teens' holiday covers every programme
+ * that is not an adult one, including one created later** (the Owner,
+ * 2026-10-21: «i added some events for اليافعين but the sessions of those
+ * events in the vacations days were not canceled, include all categories
+ * except the women one to be canceled automatically in all vacations, for
+ * women category only the official ones that are concerning adults»).
+ *
+ * A holiday that names Categories, none of them adult (`holds_own_login` is
+ * the adult marker — the women's programme), is a school holiday: it gains
+ * every live non-adult Category it lacks. A holiday naming no Category (every
+ * one, the official days) or naming an adult one is left as it is. Returns the
+ * holidays that changed, for the caller to re-apply.
+ */
+export async function widenYoungHolidays(tx: Prisma.TransactionClient): Promise<string[]> {
+  const young = await tx.category.findMany({
+    // Not adult: `false`, or not stated — `NOT true` would drop the NULLs (SQL).
+    where: { deletedAt: null, OR: [{ holdsOwnLogin: false }, { holdsOwnLogin: null }] },
+    select: { id: true },
+  });
+  const youngIds = new Set(young.map((c) => c.id));
+  const holidays = await tx.event.findMany({
+    where: { deletedAt: null, schedulingType: { structuralKind: 'holiday' } },
+    select: { id: true, categoryScopes: { select: { categoryId: true } } },
+  });
+  const changed: string[] = [];
+  for (const holiday of holidays) {
+    const named = holiday.categoryScopes.map((r) => r.categoryId);
+    if (named.length === 0 || named.some((id) => !youngIds.has(id))) continue;
+    const missing = [...youngIds].filter((id) => !named.includes(id));
+    if (missing.length === 0) continue;
+    await tx.eventCategory.createMany({ data: missing.map((categoryId) => ({ eventId: holiday.id, categoryId })) });
+    changed.push(holiday.id);
+  }
+  return changed;
+}

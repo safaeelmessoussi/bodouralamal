@@ -3,12 +3,29 @@
  * 2026-10-16 (286 names and titles, the 114 Surah names, the server's title
  * patterns and words), one dictionary per language. Generated; imported by
  * `ops:import-translations`. `surah:` keys are a Surah's name where the same
- * text is also something else («النساء», «الجمعة»); `word:` keys are matched
+ * text is also something else («النساء», «الجمعة»). R237 added the public pages'
+ * texts entered since (addresses, Level and Category descriptions, recording
+ * titles). `word:` keys are matched
  * word by word — or, a key of several words, as one phrase inside a longer
  * text (R231: «التوقيت الإداري العادي:» in a branch's hours).
  */
 export const TRANSLATIONS: Record<string, Record<string, string>> = {
  "en": {
+  "تجزئة الزيتون رقم 5": "Al Zaytoun estate, no. 5",
+  "تجزئة صوفيا": "Sofia estate",
+  "حي الوردة 172": "172 Hay Al Warda",
+  "أمرشيش": "Amerchich",
+  "مراكش": "Marrakesh",
+  "المستوى {n}": "Level {n}",
+  "المستوى 0 = مستوى الروضة الثالثة (La Grande Section)": "Level 0 = the third year of kindergarten (La Grande Section)",
+  "المستوى 1 = مستوى الأولى إبتدائي": "Level 1 = first year of primary school",
+  "الاستدراكية": "Catch-up",
+  "محاربة الأمية": "Literacy",
+  "للبنات والبنين": "For girls and boys",
+  "للبنين فقط": "For boys only",
+  "للفتيات فقط": "For girls only",
+  "تسجيل تفسير سورة {surah}": "Tafsir recording — Surat {surah}",
+  "الحصة {n} الجزء {m}": "Class {n}, part {m}",
   "اليافعين": "Teen boys",
   "{level} صغار": "{level} (younger)",
   "{level} كبار": "{level} (older)",
@@ -446,6 +463,21 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "fr": {
+  "تجزئة الزيتون رقم 5": "Lotissement Zitoune n° 5",
+  "تجزئة صوفيا": "Lotissement Sofia",
+  "حي الوردة 172": "Hay Al Warda 172",
+  "أمرشيش": "Amerchich",
+  "مراكش": "Marrakech",
+  "المستوى {n}": "Niveau {n}",
+  "المستوى 0 = مستوى الروضة الثالثة (La Grande Section)": "Niveau 0 = troisième année de maternelle (La Grande Section)",
+  "المستوى 1 = مستوى الأولى إبتدائي": "Niveau 1 = première année du primaire",
+  "الاستدراكية": "Rattrapage",
+  "محاربة الأمية": "Alphabétisation",
+  "للبنات والبنين": "Pour les filles et les garçons",
+  "للبنين فقط": "Pour les garçons uniquement",
+  "للفتيات فقط": "Pour les filles uniquement",
+  "تسجيل تفسير سورة {surah}": "Enregistrement du tafsir — sourate {surah}",
+  "الحصة {n} الجزء {m}": "Séance {n}, partie {m}",
   "اليافعين": "Adolescents",
   "{level} صغار": "{level} (cadets)",
   "{level} كبار": "{level} (aînés)",
@@ -883,6 +915,21 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Younous"
  },
  "es": {
+  "تجزئة الزيتون رقم 5": "Urbanización Zitoune n.º 5",
+  "تجزئة صوفيا": "Urbanización Sofía",
+  "حي الوردة 172": "Hay Al Warda 172",
+  "أمرشيش": "Amerchich",
+  "مراكش": "Marrakech",
+  "المستوى {n}": "Nivel {n}",
+  "المستوى 0 = مستوى الروضة الثالثة (La Grande Section)": "Nivel 0 = tercer año de educación infantil (La Grande Section)",
+  "المستوى 1 = مستوى الأولى إبتدائي": "Nivel 1 = primer año de primaria",
+  "الاستدراكية": "De recuperación",
+  "محاربة الأمية": "Alfabetización",
+  "للبنات والبنين": "Para niñas y niños",
+  "للبنين فقط": "Solo para niños",
+  "للفتيات فقط": "Solo para niñas",
+  "تسجيل تفسير سورة {surah}": "Grabación de tafsir — sura {surah}",
+  "الحصة {n} الجزء {m}": "Clase {n}, parte {m}",
   "اليافعين": "Adolescentes (chicos)",
   "{level} صغار": "{level} (menores)",
   "{level} كبار": "{level} (mayores)",
@@ -1320,6 +1367,21 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "de": {
+  "تجزئة الزيتون رقم 5": "Siedlung Zitoune Nr. 5",
+  "تجزئة صوفيا": "Siedlung Sofia",
+  "حي الوردة 172": "Hay Al Warda 172",
+  "أمرشيش": "Amerchich",
+  "مراكش": "Marrakesch",
+  "المستوى {n}": "Stufe {n}",
+  "المستوى 0 = مستوى الروضة الثالثة (La Grande Section)": "Stufe 0 = drittes Kindergartenjahr (La Grande Section)",
+  "المستوى 1 = مستوى الأولى إبتدائي": "Stufe 1 = erstes Grundschuljahr",
+  "الاستدراكية": "Nachholkurs",
+  "محاربة الأمية": "Alphabetisierung",
+  "للبنات والبنين": "Für Mädchen und Jungen",
+  "للبنين فقط": "Nur für Jungen",
+  "للفتيات فقط": "Nur für Mädchen",
+  "تسجيل تفسير سورة {surah}": "Tafsir-Aufnahme — Sure {surah}",
+  "الحصة {n} الجزء {m}": "Unterricht {n}, Teil {m}",
   "اليافعين": "Jugendliche (Jungen)",
   "{level} صغار": "{level} (Jüngere)",
   "{level} كبار": "{level} (Ältere)",
@@ -1757,6 +1819,21 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "zgh": {
+  "تجزئة الزيتون رقم 5": "ⵜⴰⵙⴳⴰ ⵏ ⵣⵣⵉⵜⵓⵏ ⵓⵟⵟⵓⵏ 5",
+  "تجزئة صوفيا": "ⵜⴰⵙⴳⴰ ⵏ ⵚⵓⴼⵢⴰ",
+  "حي الوردة 172": "ⵃⴰⵢ ⵍⵡⴰⵔⴷⴰ 172",
+  "أمرشيش": "ⴰⵎⵔⵛⵉⵛ",
+  "مراكش": "ⵎⵕⵕⴰⴽⵛ",
+  "المستوى {n}": "ⴰⵙⵡⵉⵔ {n}",
+  "المستوى 0 = مستوى الروضة الثالثة (La Grande Section)": "ⴰⵙⵡⵉⵔ 0 = ⴰⵙⴳⴳⴰⵙ ⵡⵉⵙ ⴽⵕⴰⴹ ⵏ ⵜⵉⵏⵎⵍ ⵜⴰⵎⵥⵥⵢⴰⵏⵜ (La Grande Section)",
+  "المستوى 1 = مستوى الأولى إبتدائي": "ⴰⵙⵡⵉⵔ 1 = ⴰⵙⴳⴳⴰⵙ ⴰⵎⵣⵡⴰⵔⵓ ⵏ ⵓⵙⵍⵎⴷ ⴰⵎⵣⵡⴰⵔⵓ",
+  "الاستدراكية": "ⴰⵙⵙⵓⴼⵖ",
+  "محاربة الأمية": "ⴰⵙⵙⵖⵔ ⵏ ⵜⵖⵔⴰ",
+  "للبنات والبنين": "ⵉ ⵜⴼⵔⵅⵉⵏ ⴷ ⵉⴼⵔⵅⴰⵏ",
+  "للبنين فقط": "ⵉ ⵉⴼⵔⵅⴰⵏ ⴽⴰ",
+  "للفتيات فقط": "ⵉ ⵜⴼⵔⵅⵉⵏ ⴽⴰ",
+  "تسجيل تفسير سورة {surah}": "ⴰⵣⵎⵎⴻⵎ ⵏ ⵜⴼⵙⵉⵔ — ⵜⴰⵙⵓⵔⵜ {surah}",
+  "الحصة {n} الجزء {m}": "ⵜⴰⵎⵙⵙⵓⵔⵜ {n}, ⴰⵃⵔⵉⴼ {m}",
   "اليافعين": "ⵉⵃⴷⴰⵢⵏ",
   "{level} صغار": "{level} (ⵉⵎⵥⵥⴰⵢⵏ)",
   "{level} كبار": "{level} (ⵉⵎⵇⵇⵔⴰⵏⵏ)",
@@ -2194,6 +2271,21 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "ⵢⵓⵏⵓⵙ"
  },
  "shi-Latn": {
+  "تجزئة الزيتون رقم 5": "Tasga n Zzitun uṭṭun 5",
+  "تجزئة صوفيا": "Tasga n Ṣufya",
+  "حي الوردة 172": "Ḥay Lwarda 172",
+  "أمرشيش": "Amerchich",
+  "مراكش": "Mṛṛakc",
+  "المستوى {n}": "Aswir {n}",
+  "المستوى 0 = مستوى الروضة الثالثة (La Grande Section)": "Aswir 0 = asggʷas wis kraḍ n tinml tamẓẓyant (La Grande Section)",
+  "المستوى 1 = مستوى الأولى إبتدائي": "Aswir 1 = asggʷas amzwaru n uslmd amzwaru",
+  "الاستدراكية": "Assufɣ",
+  "محاربة الأمية": "Asɣr n tɣri",
+  "للبنات والبنين": "I tfrxin d ifrxan",
+  "للبنين فقط": "I ifrxan ka",
+  "للفتيات فقط": "I tfrxin ka",
+  "تسجيل تفسير سورة {surah}": "Azmmem n tfsir — tasurt {surah}",
+  "الحصة {n} الجزء {m}": "Tamssurt {n}, aḥrif {m}",
   "اليافعين": "Iḥdayn",
   "{level} صغار": "{level} (imẓẓayn)",
   "{level} كبار": "{level} (imqqranen)",

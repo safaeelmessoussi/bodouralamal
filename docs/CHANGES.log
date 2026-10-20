@@ -423,3 +423,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 
 ## 2026-10-21 — SRS Revision 236: «إرفاق محتوى» on every class's sessions
 - `schedule-sessions.tsx` read only page 1 (25) of the classes to find its own; past it, «إرفاق محتوى» was hidden. Now pages of 100 until found, by the server's `meta`. Checked in Chrome with pages forced to 5: found on page 2, the action shown.
+
+## 2026-10-21 — SRS Revision 237: the public pages whole in six languages; school holidays for every young programme
+- Measured: the new code fed Production's public answers and the dictionary in Chrome (Fetch override), scanned for Arabic; plus a static list of keys the public pages' components use (54 missing → 0).
+- `common.listSeparator`/`andJoin` replace «، »/« و» in 18 joins; dictionary + addresses, descriptions, «المستوى {n}», recording-title patterns (six languages).
+- `widenYoungHolidays` (NULL-safe non-adult filter) in `ops:apply-holidays` and `createCategory`; integration test in a rolled-back transaction.

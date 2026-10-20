@@ -11,6 +11,8 @@
  * the activity dates it covers are cancelled too (left off the calendar). A class a
  * person held or cancelled is untouched. Re-running it is harmless: what is
  * already applied stays as it is. One audit row per holiday that changed.
+ * R237 — before that, a holiday naming only non-adult programmes gains every
+ * non-adult programme it lacks («اليافعين», created after it).
  *
  *   docker compose exec -T -e DRY_RUN=1 api npm run --silent ops:apply-holidays </dev/null
  *   docker compose exec -T api npm run --silent ops:apply-holidays </dev/null
@@ -20,7 +22,7 @@
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient } from '../lib/prisma.js';
 import * as audit from '../repositories/audit.repository.js';
-import { applyHoliday } from '../services/holiday-cancellation.service.js';
+import { applyHoliday, widenYoungHolidays } from '../services/holiday-cancellation.service.js';
 
 const dry = process.env['DRY_RUN'] === '1';
 const prisma = createPrismaClient(loadConfig().DATABASE_URL, 2);
@@ -34,6 +36,19 @@ let activityDates = 0;
 try {
   await prisma.$transaction(
     async (tx) => {
+      // R237 — first, every school holiday covers every non-adult programme.
+      for (const holidayId of await widenYoungHolidays(tx)) {
+        console.log(`${dry ? 'would widen' : 'widened'} to every non-adult programme: ${holidayId}`);
+        if (!dry) {
+          await audit.write(tx, {
+            actorUserId: null,
+            actionType: 'event.holiday_categories_widened',
+            targetEntity: 'Event',
+            targetId: holidayId,
+            detail: { reason: 'SRS R237 — every programme but the adult one' },
+          });
+        }
+      }
       const holidays = await tx.event.findMany({
         where: { deletedAt: null, schedulingType: { structuralKind: 'holiday' } },
         select: { id: true, title: true, startDate: true, endDate: true },

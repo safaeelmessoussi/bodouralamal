@@ -325,13 +325,13 @@ function CategoryCard({
       {category.sharedSubjects.length > 0 ? (
         <span className="show__categoryRow">
           <b>{t('programs.journey.sharedSubjects')}</b>{' '}
-          {category.sharedSubjects.map((subject) => subject.name).join('، ')}
+          {category.sharedSubjects.map((subject) => subject.name).join(t('common.listSeparator'))}
         </span>
       ) : null}
       {category.seasonalSubjects.length > 0 ? (
         <span className="show__categoryRow show__categoryRow--seasonal">
           <b>{t('programs.seasonalLabel')}</b>{' '}
-          {category.seasonalSubjects.map((subject) => subject.name).join('، ')}
+          {category.seasonalSubjects.map((subject) => subject.name).join(t('common.listSeparator'))}
         </span>
       ) : null}
     </button>

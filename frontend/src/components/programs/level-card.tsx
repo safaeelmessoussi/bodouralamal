@@ -116,7 +116,7 @@ export function SurahList({
     return (
       <p className="journey__surahs is-expanded is-full">
         <span className="journey__surahsText">
-          {level.surahs.map((s) => s.name).join('، ')}
+          {level.surahs.map((s) => s.name).join(t('common.listSeparator'))}
         </span>
       </p>
     );
@@ -124,7 +124,7 @@ export function SurahList({
   return (
     <p className={`journey__surahs${expanded ? ' is-expanded' : ''}`}>
       <span className="journey__surahsText" ref={text}>
-        {level.surahs.map((s) => s.name).join('، ')}
+        {level.surahs.map((s) => s.name).join(t('common.listSeparator'))}
       </span>
       {!expanded && clipped ? (
         <button

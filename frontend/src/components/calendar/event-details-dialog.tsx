@@ -92,11 +92,11 @@ export function EventDetailsDialog({
    */
   const branches =
     occurrence && (occurrence.branch_names ?? []).length > 1
-      ? occurrence.branch_names.join('، ')
+      ? occurrence.branch_names.join(t('common.listSeparator'))
       : branch;
   const categories =
     occurrence && (occurrence.category_names ?? []).length > 1
-      ? occurrence.category_names.join('، ')
+      ? occurrence.category_names.join(t('common.listSeparator'))
       : occurrence?.category_name;
   const levels =
     occurrence && (occurrence.level_names ?? []).length > 1
@@ -108,7 +108,7 @@ export function EventDetailsDialog({
         // disambiguation rule is for naming ONE Level unambiguously, which
         // does not apply to a joined list a reader is already reading as a
         // set.
-        occurrence.level_names.join('، ')
+        occurrence.level_names.join(t('common.listSeparator'))
       : occurrence?.level_name
         ? levelLabel({
             id: occurrence.level_id ?? '',
@@ -119,8 +119,8 @@ export function EventDetailsDialog({
   // R176 §3 — the group and circle dimensions, named exactly like the two
   // above. An occurrence for «الكل» on a dimension carries nothing there and
   // gets no row: an empty row would read as a fact.
-  const groups = (occurrence?.administrative_group_names ?? []).join('، ') || undefined;
-  const circles = (occurrence?.teaching_group_names ?? []).join('، ') || undefined;
+  const groups = (occurrence?.administrative_group_names ?? []).join(t('common.listSeparator')) || undefined;
+  const circles = (occurrence?.teaching_group_names ?? []).join(t('common.listSeparator')) || undefined;
   // «المعنيون» was the ONE line that used to name who a class is for. Now
   // that each dimension has its own row, it is shown only when it says
   // something none of them does — an exam's «حصة محددة», for instance —
@@ -204,7 +204,7 @@ export function EventDetailsDialog({
             {occurrenceSurahs(occurrence).length > 0 ? (
               <div className="details__item details__item--wide">
                 <dt>{t('calendar.detailsSurahs')}</dt>
-                <dd>{occurrenceSurahs(occurrence).join('، ')}</dd>
+                <dd>{occurrenceSurahs(occurrence).join(t('common.listSeparator'))}</dd>
               </div>
             ) : null}
 
@@ -310,7 +310,7 @@ export function EventDetailsDialog({
                 <dt>{t('calendar.detailsInstructors')}</dt>
                 {/* Rendered exactly as returned — the backend already decided
                     which name is public (Revision 36.1, §20 rule 21). */}
-                <dd>{occurrence.instructors.map((i) => i.display_name).join('، ')}</dd>
+                <dd>{occurrence.instructors.map((i) => i.display_name).join(t('common.listSeparator'))}</dd>
               </div>
             ) : null}
 
@@ -319,7 +319,7 @@ export function EventDetailsDialog({
             {occurrence.supervisors.length > 0 ? (
               <div className="details__item">
                 <dt>{t('calendar.detailsSupervisors')}</dt>
-                <dd>{occurrence.supervisors.map((i) => i.display_name).join('، ')}</dd>
+                <dd>{occurrence.supervisors.map((i) => i.display_name).join(t('common.listSeparator'))}</dd>
               </div>
             ) : null}
 

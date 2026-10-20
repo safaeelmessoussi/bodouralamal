@@ -255,13 +255,13 @@ function Stage({
           {category.sharedSubjects.length > 0 ? (
             <p className="stage__shared">
               <span className="stage__sharedLabel">{t('programs.journey.sharedSubjects')}</span>{' '}
-              {category.sharedSubjects.map((subject) => subject.name).join('، ')}
+              {category.sharedSubjects.map((subject) => subject.name).join(t('common.listSeparator'))}
             </p>
           ) : null}
           {category.seasonalSubjects.length > 0 ? (
             <p className="stage__shared stage__shared--seasonal">
               <span className="stage__sharedLabel">{t('programs.seasonalLabel')}</span>{' '}
-              {category.seasonalSubjects.map((subject) => subject.name).join('، ')}
+              {category.seasonalSubjects.map((subject) => subject.name).join(t('common.listSeparator'))}
             </p>
           ) : null}
         </div>

@@ -138,8 +138,8 @@ function levelsOf(item: Occurrence): string | null {
     : item.level_name
       ? [item.level_name]
       : [];
-  if (levels.length > 0) return levels.join("، ");
-  return item.category_names?.join("، ") || item.category_name || null;
+  if (levels.length > 0) return levels.join(t("common.listSeparator"));
+  return item.category_names?.join(t("common.listSeparator")) || item.category_name || null;
 }
 
 /** R208 — «سورة X», or «السور: …» shortened past four. */

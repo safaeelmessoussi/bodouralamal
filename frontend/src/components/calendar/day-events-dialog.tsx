@@ -88,7 +88,7 @@ export function DayEventsDialog({
                           occurrence.level_name,
                           occurrence.branch_name,
                           occurrence.room_name,
-                          occurrence.instructors.map((i) => i.display_name).join('، ') || null,
+                          occurrence.instructors.map((i) => i.display_name).join(t('common.listSeparator')) || null,
                         ]
                           .filter(Boolean)
                           .join(' · ')}

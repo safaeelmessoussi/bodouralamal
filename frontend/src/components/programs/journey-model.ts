@@ -190,7 +190,7 @@ export function surahSubjectsLabel(level: PublicProgramLevel, t: (key: string) =
     .filter((subject) => subject.works_by_surah)
     .map((subject) => subject.name.replace(/\s*القرآن\s*/g, ' ').trim())
     .filter((word) => word !== '');
-  return words.length > 0 ? words.join(' و') : t('programs.journey.memorisationFallback');
+  return words.length > 0 ? words.join(t('common.andJoin')) : t('programs.journey.memorisationFallback');
 }
 
 /**

@@ -4,6 +4,7 @@ import { derivedCategoryAgeRange } from '../policies/age-range.js';
 import { applyOrder } from '../lib/reorder.js';
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import * as scope from '../policies/branch-scope.js';
+import { widenYoungHolidays } from './holiday-cancellation.service.js';
 import * as audit from '../repositories/audit.repository.js';
 import { assertNoBlockingReferences, updateWithVersion } from '../repositories/optimistic-lock.js';
 import * as trash from '../repositories/trash.repository.js';
@@ -461,6 +462,19 @@ export async function createCategory(
       targetId: category.id,
       detail: {},
     });
+    // R237 — a new children's or teens' programme joins every school holiday.
+    if (category.holdsOwnLogin !== true) {
+      for (const holidayId of await widenYoungHolidays(tx)) {
+        await audit.write(tx, {
+          actorUserId: actor.userId,
+          activeRole: actor.activeRole,
+          actionType: 'event.holiday_categories_widened',
+          targetEntity: 'Event',
+          targetId: holidayId,
+          detail: { category_id: category.id, reason: 'SRS R237' },
+        });
+      }
+    }
     return {
       id: category.id,
       name: category.name,

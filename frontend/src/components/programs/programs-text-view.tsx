@@ -181,7 +181,7 @@ function LevelRow({
       ) : null}
       {level.surahs.length > 0 ? (
         <p className="programs__row programs__row--text">
-          {level.surahs.map((s) => s.name).join('، ')}
+          {level.surahs.map((s) => s.name).join(t('common.listSeparator'))}
         </p>
       ) : null}
     </li>
