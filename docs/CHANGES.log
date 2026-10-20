@@ -397,3 +397,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Migration `r230_warsh_ayah_counts` (Warsh totals; logs past the Warsh end clamped; `student_surah_progress` recomputed); seed JSON + 6214 assertion.
 - 193 verse quotations → KFGQPC Warsh text (content, six locales, certificate); Maryam references Hafs→Warsh; font `styles/fonts/kfgqpc-warsh.woff2` (`--font-family-quran`), source note beside it.
 - Memory: Warsh is the default riwaya. Verified: quran/quran-entry/journey integration (134), backend 386, frontend 1686, Maryam numbers equal in every locale, verse rendered in the Warsh face.
+
+## 2026-10-20 — SRS Revision 231: programmes wording, a translated hours label
+- «وتتواصل الرحلة» gone from every «إتمام الفئة» (one key `graduationText`, `graduationTextLast` removed, six locales); the «مداخل أخرى إلى هذه الفئة» heading and key removed (`.entrances__title` rule dropped).
+- `data-translation.ts`: a multi-word `word:` key matches as one phrase; «التوقيت الإداري العادي» added for six languages in `ops/data/translations-r224.ts` (Owner runs `ops:import-translations`).

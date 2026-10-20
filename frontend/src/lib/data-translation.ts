@@ -9,7 +9,9 @@
  * 2. as a pattern («سورة {surah}», «الحلقة {n}»), its parts translated in turn;
  * 3. by its parts, at the separators the server composes titles with
  *    (« — », «، », « · »);
- * 4. word by word for the few listed words (weekdays, months).
+ * 4. word by word for the few listed words (weekdays, months) — a listed
+ *    phrase of several words first, as one («التوقيت الإداري العادي», R231),
+ *    so its words keep the reader's order.
  *
  * A Surah's name is looked up as `surah:<name>` first wherever the context is
  * a Surah (a `surah…` field, the `{surah}`/`{list}` of a pattern): «النساء» is
@@ -21,6 +23,7 @@
 let exact = new Map<string, string>();
 let patterns: { re: RegExp; slots: string[]; text: string }[] = [];
 let words = new Map<string, string>();
+let phrases: { re: RegExp; text: string }[] = [];
 
 const ARABIC = /[؀-ۿ]/;
 const SEPARATORS: [string, string][] = [
@@ -33,8 +36,12 @@ export function setDataDictionary(dictionary: Record<string, string> | null): vo
   exact = new Map();
   patterns = [];
   words = new Map();
+  phrases = [];
   for (const [source, text] of Object.entries(dictionary ?? {})) {
-    if (source.startsWith('word:')) {
+    if (source.startsWith('word:') && source.includes(' ')) {
+      const escaped = source.slice(5).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      phrases.push({ re: new RegExp(`(^|\\s)${escaped}(?=$|[\\s:،.؛])`, 'g'), text });
+    } else if (source.startsWith('word:')) {
       words.set(source.slice(5), text);
     } else if (source.includes('{')) {
       const slots: string[] = [];
@@ -52,7 +59,7 @@ export function setDataDictionary(dictionary: Record<string, string> | null): vo
 }
 
 export function hasDataDictionary(): boolean {
-  return exact.size > 0 || patterns.length > 0;
+  return exact.size > 0 || patterns.length > 0 || words.size > 0 || phrases.length > 0;
 }
 
 export function translateText(text: string, depth = 0, surah = false): string {
@@ -77,7 +84,9 @@ export function translateText(text: string, depth = 0, surah = false): string {
         .join(joined);
     }
   }
-  return trimmed
+  let phrased = trimmed;
+  for (const phrase of phrases) phrased = phrased.replace(phrase.re, (_m, lead: string) => `${lead}${phrase.text}`);
+  return phrased
     .split(/(\s+)/)
     .map((word) => words.get(word) ?? word)
     .join('');

@@ -4,10 +4,12 @@
  * patterns and words), one dictionary per language. Generated; imported by
  * `ops:import-translations`. `surah:` keys are a Surah's name where the same
  * text is also something else («النساء», «الجمعة»); `word:` keys are matched
- * word by word.
+ * word by word — or, a key of several words, as one phrase inside a longer
+ * text (R231: «التوقيت الإداري العادي:» in a branch's hours).
  */
 export const TRANSLATIONS: Record<string, Record<string, string>> = {
  "en": {
+  "word:التوقيت الإداري العادي": "Regular office hours",
   "ذكرى المسيرة الخضراء": "Anniversary of the Green March",
   "ذكرى تقديم وثيقة الاستقلال": "Anniversary of the Proclamation of Independence",
   "عطلة الفترة البينة الثانية": "Second mid-term break",
@@ -439,6 +441,7 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "fr": {
+  "word:التوقيت الإداري العادي": "Horaires administratifs habituels",
   "ذكرى المسيرة الخضراء": "Anniversaire de la Marche verte",
   "ذكرى تقديم وثيقة الاستقلال": "Anniversaire de la présentation du Manifeste de l'indépendance",
   "عطلة الفترة البينة الثانية": "Vacances de la deuxième période intermédiaire",
@@ -870,6 +873,7 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Younous"
  },
  "es": {
+  "word:التوقيت الإداري العادي": "Horario administrativo habitual",
   "ذكرى المسيرة الخضراء": "Aniversario de la Marcha Verde",
   "ذكرى تقديم وثيقة الاستقلال": "Aniversario de la presentación del Manifiesto de la Independencia",
   "عطلة الفترة البينة الثانية": "Vacaciones del segundo periodo intermedio",
@@ -1301,6 +1305,7 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "de": {
+  "word:التوقيت الإداري العادي": "Reguläre Bürozeiten",
   "ذكرى المسيرة الخضراء": "Jahrestag des Grünen Marsches",
   "ذكرى تقديم وثيقة الاستقلال": "Jahrestag der Vorlage des Unabhängigkeitsmanifests",
   "عطلة الفترة البينة الثانية": "Ferien der zweiten Zwischenphase",
@@ -1732,6 +1737,7 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "Yunus"
  },
  "zgh": {
+  "word:التوقيت الإداري العادي": "ⴰⴽⵓⴷ ⴰⵏⴱⴹⴰⵏ ⴰⵎⴰⴳⵏⵓ",
   "ذكرى المسيرة الخضراء": "ⴰⵙⵙⵎⵜⵜⵉ ⵏ ⵓⵎⵓⴷⴷⵓ ⴰⵣⴳⵣⴰⵡ",
   "ذكرى تقديم وثيقة الاستقلال": "ⴰⵙⵙⵎⵜⵜⵉ ⵏ ⵓⵙⵙⵉⵡⴹ ⵏ ⵓⵙⵎⵎⵍ ⵏ ⵓⵙⵉⵎⴰⵏ",
   "عطلة الفترة البينة الثانية": "ⴰⵙⵓⵏⴼⵓ ⵏ ⵜⵉⵣⵉ ⵜⴰⵏⴰⵎⵎⴰⵙⵜ ⵜⵉⵙⵙ ⵙⵏⴰⵜ",
@@ -2163,6 +2169,7 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
   "يونس": "ⵢⵓⵏⵓⵙ"
  },
  "shi-Latn": {
+  "word:التوقيت الإداري العادي": "Akud anbḍan amagnu",
   "ذكرى المسيرة الخضراء": "Asmktay n Lmasira Lxaḍra",
   "ذكرى تقديم وثيقة الاستقلال": "Asmktay n ufka n tirra n Listiqlal",
   "عطلة الفترة البينة الثانية": "Asgunfu n tsurft tammast tis snat",

@@ -15,6 +15,8 @@ const DICTIONARY = {
   'الأستاذة {name}': 'Ustadha {name}',
   'word:الجمعة': 'Friday',
   'word:شتنبر': 'September',
+  'word:السبت': 'Saturday',
+  'word:التوقيت الإداري العادي': 'Regular office hours',
 };
 
 afterEach(() => setDataDictionary(null));
@@ -43,6 +45,15 @@ describe('R224 §4 — stored texts translated, names never', () => {
     expect(translateText('الأستاذة منى حريكي')).toBe('Ustadha منى حريكي');
     const row = { id: 'وميض الأمل', stream_url: 'وميض الأمل', level_name: 'وميض الأمل', title: 'Lesson 1' };
     expect(translateDeep(row)).toEqual({ ...row, level_name: 'Glimmer of Hope' });
+  });
+
+  it('reads a listed phrase as one, inside a longer text, in the reader\'s order (R231)', () => {
+    setDataDictionary(DICTIONARY);
+    expect(translateText('التوقيت الإداري العادي:\nالجمعة - السبت\n09:00 - 12:30')).toBe(
+      'Regular office hours:\nFriday - Saturday\n09:00 - 12:30',
+    );
+    // Only at a word's edge: a longer word that holds the phrase stays.
+    expect(translateText('بالتوقيت الإداري العادي')).toBe('بالتوقيت الإداري العادي');
   });
 
   it('changes nothing without a dictionary (Arabic)', () => {

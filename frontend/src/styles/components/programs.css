@@ -524,12 +524,6 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-accent-soft) 45%, var(--color-surface-raised));
 }
-.entrances__title {
-  margin: 0;
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  color: var(--color-accent);
-}
 .entrances__item {
   display: grid;
   gap: 0.15rem;

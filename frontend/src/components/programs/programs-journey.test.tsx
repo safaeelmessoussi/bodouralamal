@@ -155,7 +155,7 @@ describe('ProgramsJourney', () => {
     expect(html.split('class="entrances journey__walk"').length - 1).toBe(1);
     const from = html.indexOf('class="entrances journey__walk"');
     const block = html.slice(from, html.indexOf('stage__cell stage__cell--stop', from));
-    expect(block).toContain('مداخل أخرى إلى هذه الفئة');
+    expect(html).not.toContain('مداخل أخرى'); // R231
     expect(block).toContain('التحاق مباشر بـ«وميض الأمل»');
     // R184 §2 — no audience words of the page's; the age stays.
     expect(block).not.toContain('للنساء');
@@ -246,7 +246,8 @@ describe('ProgramsJourney', () => {
     expect(html).not.toContain('في نهاية الرحلة');
     expect(html).not.toContain('>قمة الرحلة<');
     // The first Category's graduation continues the road; the last one's ends it.
-    expect(html).toContain('يكتمل برنامج الطفل وتتواصل الرحلة.');
+    expect(html).toContain('يكتمل برنامج الطفل.'); // R231 — no «وتتواصل الرحلة» anywhere
+    expect(html).not.toContain('وتتواصل الرحلة');
     expect(html).toContain('يكتمل برنامج المرأة.');
     expect(html).not.toContain('برنامج المرأة وتتواصل');
     // R189 — a card like a Level's, in the trophy's cell, on the last stage only:

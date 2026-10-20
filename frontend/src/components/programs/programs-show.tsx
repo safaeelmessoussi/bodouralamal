@@ -214,7 +214,7 @@ export function ProgramsShow({
           <div className="show__graduation">
             <p className="journey__milestoneTitle">{t('programs.journey.graduation')}</p>
             <p className="journey__milestoneText">
-              {t('programs.journey.graduationTextLast').replace('{category}', last.name)}
+              {t('programs.journey.graduationText').replace('{category}', last.name)}
             </p>
             <SummitFigure sizes="(max-width: 44rem) 14rem, 20rem" />
           </div>

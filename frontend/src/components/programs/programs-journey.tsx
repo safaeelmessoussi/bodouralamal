@@ -366,15 +366,10 @@ function Entrances({
 }): ReactNode {
   const firstStep = category.steps[0]?.level.name ?? category.name;
   return (
-    <div
-      className="entrances journey__walk"
-      role="group"
-      aria-label={t('programs.journey.entrancesLabel')}
-    >
+    <div className="entrances journey__walk">
       {/* R182 §2 — a note, not a panel: each way in is one or two lines,
           and one arrow from the note to the first step. */}
       <div className="entrances__words">
-        <p className="entrances__title">{t('programs.journey.entrancesLabel')}</p>
         {!first ? (
           <p className="entrances__item">
             <span className="entrances__lead">
@@ -452,7 +447,7 @@ function Prize({ category }: { category: JourneyCategory }): ReactNode {
       >
         <p className="journey__milestoneTitle">{t('programs.journey.graduation')}</p>
         <p className="journey__milestoneText">
-          {t('programs.journey.graduationTextLast').replace('{category}', category.name)}
+          {t('programs.journey.graduationText').replace('{category}', category.name)}
         </p>
         <SummitFigure bare sizes="(max-width: 44rem) 12rem, 14rem" />
       </div>
