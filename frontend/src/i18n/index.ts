@@ -19,6 +19,19 @@ export type FlatCatalog = Readonly<Record<string, string | readonly string[]>>;
 const translations: Partial<Record<Locale, FlatCatalog>> = {};
 let active: Locale = 'ar';
 
+/**
+ * R229 — the person a page speaks of, when it speaks of one person (the
+ * student portal's acting student). A text with `_female`/`_male` forms
+ * («لوحة المستفيدة» / «لوحة المستفيد») takes that person's; every other
+ * text, and every page that sets no subject, is unchanged.
+ */
+export type SubjectSex = 'female' | 'male';
+let subject: SubjectSex | null = null;
+
+export function setTextSubject(sex: SubjectSex | null): void {
+  subject = sex;
+}
+
 /** The language this page renders in. */
 export function activeLocale(): Locale {
   return active;
@@ -50,6 +63,10 @@ function lookup(path: string, locale: Locale): unknown {
 /** Dot-path getter — `t('auth.pendingTitle')`. Missing keys return the key
  *  itself, which is loud in the UI rather than silently blank. */
 export function t(path: string, locale: Locale = active): string {
+  if (subject !== null) {
+    const gendered = lookup(`${path}_${subject}`, locale);
+    if (typeof gendered === 'string') return gendered;
+  }
   const node = lookup(path, locale);
   return typeof node === 'string' ? node : path;
 }

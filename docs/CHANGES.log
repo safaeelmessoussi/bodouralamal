@@ -388,3 +388,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - E16: «الجدولة» circle filter fed (narrowed by branch/Category/Level/Subject, cleared when no longer offered); `branchTeachers` narrows staff pickers by the branch(es) in play; placeholders per R224 §3; `required` on exam room and «الحصة المعنية».
 - `reset.css` `p` and `.field__hint` lose their 64ch/52ch caps. Verified: 30-page sweep at 1848px, no narrow wrapped text; certificate rendered and compared with the photo.
 - Owner ran `ops:apply-holidays` and `ops:import-translations` on Production (E14 closed); class re-saved (R227).
+
+## 2026-10-20 — SRS Revision 229: the student portal in its subject's gender
+- `GET /students/me` adds `sex` (acting student); `i18n` `setTextSubject` — `t(path)` takes `path_female`/`path_male` when a subject is set; `lib/subject-sex.ts` (tab cache per account/child, `useSubjectSex`); `StudentLayout` primes/fetches it.
+- Variants: `student.nav.dashboard`, `studentDashboard.title/sections`, `student.grades.absent`, `quran.completion.complete`; pinned keys in `student.http` test gain `sex`.

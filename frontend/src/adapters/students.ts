@@ -27,6 +27,8 @@ export interface StudentIdentity {
   reference_code: string | null;
   /** R96 — this person's stable QR identity. Identifies; never authenticates. */
   qr: QrMatrix;
+  /** R229 — the acting student's; the portal speaks of her or him by it. */
+  sex?: 'female' | 'male';
   /** A list because a student may hold one enrolment per Level; the screen
    *  renders the first and stays honest when there are two. */
   enrollments: StudentEnrollment[];

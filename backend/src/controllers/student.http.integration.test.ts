@@ -208,12 +208,16 @@ describe("§4.3 case 1 — a parent acts for an approved child", () => {
     // enrolment or role. That claim is not taken on trust here either — the
     // shape is pinned below, and `qr-identity.test.ts` asserts the payload's
     // contents directly.
+    // R229 — a seventh key, admitted on purpose: `sex`, the ACTING student's
+    // own (or the verified child's), so her portal says «لوحة المستفيدة» and
+    // his «لوحة المستفيد». It is never on a list of other people.
     expect(Object.keys(res.body as object).sort()).toEqual([
       "enrollments",
       "id",
       "name_arabic",
       "qr",
       "reference_code",
+      "sex",
     ]);
     // The QR object carries a payload and a matrix and NOTHING else — the same
     // exact-key discipline, applied one level down so the sixth key cannot

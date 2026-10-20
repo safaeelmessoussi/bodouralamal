@@ -22,6 +22,7 @@ import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 import { sortRows } from '../../lib/sort-rows.js';
+import { useSubjectSex } from '../../lib/subject-sex.js';
 
 /**
  * **اختباراتي — the beneficiary's exams AND grades, one table** (Owner-reported,
@@ -60,6 +61,8 @@ import { sortRows } from '../../lib/sort-rows.js';
  * and asks for confirmation first. Nothing autosaves and nothing autosubmits.
  */
 export function StudentAssessmentsPage(): ReactNode {
+  // R229 — read again once the acting student's sex is known («لوحة المستفيدة»).
+  useSubjectSex();
   const { accessToken } = useSession();
   const { activeRole } = useActiveRole();
   const { activeChild, activeChildId } = useActiveChild();

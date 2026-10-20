@@ -38,6 +38,8 @@ export interface StudentIdentity {
    * belongs to the person and not to the surface it is read from.
    */
   qr: QrMatrix;
+  /** R229 — the acting student's sex: her portal names her «المستفيدة», him «المستفيد». */
+  sex: 'female' | 'male';
   enrollments: {
     category: { id: string; name: string };
     level: { id: string; name: string };
@@ -56,6 +58,7 @@ export async function getStudentIdentity(
       nameArabic: true,
       referenceCode: true,
       qrRef: true,
+      sex: true,
       // The relation is `levelEnrollments` on `User` (R43) — one row per
       // Level, not per group.
       levelEnrollments: {
@@ -92,6 +95,7 @@ export async function getStudentIdentity(
     nameArabic: student.nameArabic,
     referenceCode: student.referenceCode,
     qr: await qrMatrixFor(student.qrRef),
+    sex: student.sex,
     enrollments: student.levelEnrollments.map((enrollment) => ({
       category: enrollment.level.category,
       level: { id: enrollment.level.id, name: enrollment.level.name },

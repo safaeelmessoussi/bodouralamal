@@ -4,6 +4,7 @@ import type { LevelCoverage } from '../../adapters/quran.js';
 import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 import { Badge } from '../ui/badge.js';
+import { useSubjectSex } from '../../lib/subject-sex.js';
 
 /**
  * **Has she completed this Level?** — SRS Revision 166 §1, BR-11.
@@ -18,6 +19,8 @@ import { Badge } from '../ui/badge.js';
  * reason sends her to ask somebody what the screen already knows.
  */
 export function LevelCompletionSummary({ level }: { level: LevelCoverage }): ReactNode {
+  // R229 — read again once the acting student's sex is known («لوحة المستفيدة»).
+  useSubjectSex();
   const c = level.completion;
   // An older server does not send it; say nothing rather than guess.
   if (!c) return null;

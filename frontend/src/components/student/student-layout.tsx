@@ -1,4 +1,8 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
+
+import { fetchStudentIdentity } from '../../adapters/students.js';
+import { useSession } from '../../contexts/session.js';
+import { primeSubjectSex, setSubjectSex, useSubjectSex } from '../../lib/subject-sex.js';
 
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
@@ -59,6 +63,22 @@ export function StudentLayout({
    */
   const { activeChildId } = useActiveChild();
   const actingForChild = activeRole === 'parent' && activeChildId !== null;
+
+  /**
+   * **R229 — the portal speaks of its subject in her or his own gender**
+   * («لوحة المستفيدة» / «لوحة المستفيد»): the acting student's sex, remembered
+   * for the tab and asked once when it is not.
+   */
+  const { me, accessToken } = useSession();
+  const subjectChild = actingForChild ? activeChildId : null;
+  primeSubjectSex(me?.id ?? null, subjectChild);
+  const subjectSex = useSubjectSex();
+  useEffect(() => {
+    if (accessToken === null || subjectSex !== null) return;
+    void fetchStudentIdentity(accessToken, subjectChild)
+      .then((identity) => setSubjectSex(me?.id ?? null, subjectChild, identity.sex ?? null))
+      .catch(() => undefined);
+  }, [accessToken, subjectChild, me?.id, subjectSex]);
 
   const current = studentModuleForPath(window.location.pathname);
   const permitted = current ? canAccess(current, roles, { actingForChild }) : false;

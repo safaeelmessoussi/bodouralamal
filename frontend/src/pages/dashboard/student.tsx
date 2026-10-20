@@ -9,9 +9,12 @@ import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { useSubjectSex } from '../../lib/subject-sex.js';
 
 
 export function StudentDashboard(): ReactNode {
+  // R229 — read again once the acting student's sex is known («لوحة المستفيدة»).
+  useSubjectSex();
   const { accessToken, status } = useSession();
   const { activeRole } = useActiveRole();
   const { activeChild, activeChildId, children } = useActiveChild();

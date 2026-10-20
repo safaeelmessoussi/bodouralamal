@@ -190,6 +190,9 @@ export const ar = {
     nav: {
       label: 'أقسامي',
       dashboard: 'لوحة المستفيد(ة)',
+      // القرار 229 — بجنس المستفيد(ة) نفسه(ا).
+      dashboard_female: 'لوحة المستفيدة',
+      dashboard_male: 'لوحة المستفيد',
       calendar: 'تقويمي',
       content: 'مكتبة المحتوى',
       quran: 'حفظي',
@@ -262,6 +265,8 @@ export const ar = {
       subject: 'المادة',
       score: 'النقطة',
       absent: 'غائب(ة)',
+      absent_female: 'غائبة',
+      absent_male: 'غائب',
     },
   quran: {
       title: 'حفظي',
@@ -291,6 +296,8 @@ export const ar = {
     // R83.5 — تقويمها هي: حصص مستوياتها وأنشطة نطاقها، لا تقويم المنصّة كلّه.
     myCalendar: 'تقويمي',
     title: 'لوحة المستفيد(ة)',
+    title_female: 'لوحة المستفيدة',
+    title_male: 'لوحة المستفيد',
     viewingChild: 'البيانات المعروضة: {name}',
     chooseChild: 'يُرجى اختيار الطفل المراد متابعة بياناته من قائمة التبديل في الأعلى.',
     noChildren: 'لا يوجد أطفال معتمدون بعد.',
@@ -307,6 +314,8 @@ export const ar = {
     upcoming: 'حصص اليوم والقادمة',
     /** The accessible name of the dashboard's own sub-navigation. */
     sections: 'أقسام لوحة المستفيد(ة)',
+    sections_female: 'أقسام لوحة المستفيدة',
+    sections_male: 'أقسام لوحة المستفيد',
   },
   landing: {
     // **The association's own words, not a written-for-the-web paraphrase.**
@@ -1290,6 +1299,8 @@ export const ar = {
       heading: 'إتمام المستوى',
       // القرار 168 §3 — الإتمام تسجّله الإدارة؛ وما عداه شروطٌ تُعرَض كتقدّم.
       complete: 'أتمّ(ت) المستوى',
+      complete_female: 'أتمّت المستوى',
+      complete_male: 'أتمّ المستوى',
       conditionsMet: 'استُوفيت شروط الإتمام — بانتظار تسجيل الإدارة',
       incomplete: 'لم تُستوفَ شروط الإتمام بعد',
       notConfigured: 'لم يُضبط «مقرر الحفظ» لهذا المستوى بعد',

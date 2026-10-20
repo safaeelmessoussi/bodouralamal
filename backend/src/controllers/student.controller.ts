@@ -30,6 +30,8 @@ export function me(prisma: PrismaClient) {
       // R96 — the ACTING student's QR identity, so a parent acting for a child
       // sees the child's and never her own.
       qr: identity.qr,
+      // R229 — so her portal says «المستفيدة», his «المستفيد».
+      sex: identity.sex,
       enrollments: identity.enrollments.map((enrollment) => ({
         category: enrollment.category,
         level: enrollment.level,
