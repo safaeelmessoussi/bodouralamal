@@ -101,7 +101,9 @@ interface StageSource {
 }
 
 function stagesOf(source: PublicProgramCategory): StageSource[] {
-  const tracks = [...new Set(source.levels.map((level) => level.track ?? null))];
+  // «صغار» before «كبار» where no age orders them.
+  const rank = (track: string | null): number => (track === 'younger' ? 0 : track === null ? 1 : 2);
+  const tracks = [...new Set(source.levels.map((level) => level.track ?? null))].sort((a, b) => rank(a) - rank(b));
   if (tracks.length <= 1) {
     return [{ id: source.id, name: source.name, source, levels: source.levels, minAge: source.min_age, maxAge: source.max_age }];
   }

@@ -15,8 +15,8 @@ import * as audit from '../repositories/audit.repository.js';
  *   Owner gave where none is stated.
  *
  * Names are the keys: a Level that already carries its new name is left as it
- * is, so a second run changes nothing. A Level the Owner named differently is
- * reported, never guessed at. Curriculum («مواد المستوى», «مقرر الحفظ») is not
+ * is, so a second run changes nothing. A current «اليافعات» Level the Owner
+ * named differently joins «كبار» under its own name and is reported. Curriculum («مواد المستوى», «مقرر الحفظ») is not
  * copied — the new Levels start empty.
  */
 export const GIRLS = 'اليافعات';
@@ -33,6 +33,9 @@ const ENTRY_AGES: Record<string, [number, number]> = {
   'براعم الأمل صغار': [8, 9],
   'براعم الأمل كبار': [10, 11],
 };
+
+/** The other entry Levels the Owner named (الطفل, النساء). */
+export const OTHER_ENTRIES = ['كتاكيت الأمل', 'براعم الأمل', 'فرصة أمل', 'وميض الأمل'];
 
 export interface ProgrammesReport {
   lines: string[];
@@ -98,9 +101,22 @@ export async function applyProgrammesR233(tx: Tx): Promise<ProgrammesReport> {
       deletedAt: null,
       name: { notIn: GIRLS_LEVELS.flatMap((b) => [b, `${b} ${OLDER}`, `${b} ${YOUNGER}`]) },
     },
-    select: { name: true },
+    select: { id: true, name: true, track: true },
   });
-  for (const level of others) lines.push(`! «${level.name}» in «${GIRLS}» is not one of the six — left as it is`);
+  // A current Level the Owner named otherwise («المستوى 5») is still one of
+  // today's: it joins «كبار», keeps its name, and is reported for renaming.
+  for (const level of others) {
+    if (level.track === null) {
+      await tx.level.update({ where: { id: level.id }, data: { track: 'older', version: { increment: 1 } } });
+      await note(`~ «${level.name}»: track كبار — not one of the six names, left for the Owner to rename`, {
+        actorUserId: null,
+        actionType: 'level.update',
+        targetEntity: 'Level',
+        targetId: level.id,
+        detail: { track: 'older', reason: 'SRS R233' },
+      });
+    }
+  }
 
   await ensureTrack(tx, girls.id, GIRLS_LEVELS, YOUNGER, 'younger', 'girls_only', note);
   await ensureTrack(tx, boys.id, BOYS_LEVELS, YOUNGER, 'younger', 'boys_only', note);
@@ -124,6 +140,23 @@ export async function applyProgrammesR233(tx: Tx): Promise<ProgrammesReport> {
       targetEntity: 'Level',
       targetId: level.id,
       detail: { accepts_newcomers: true, ...(Object.keys(ages).length ? { min_age: min, max_age: max } : {}), reason: 'SRS R233' },
+    });
+  }
+
+  // The children's and the women's ways in, by the Owner's names (whatever the
+  // journey role): كتاكيت and براعم; فرصة أمل and وميض.
+  const otherEntries = await tx.level.findMany({
+    where: { name: { in: OTHER_ENTRIES }, deletedAt: null, acceptsNewcomers: false, categoryId: { notIn: [girls.id, boys.id] } },
+    select: { id: true, name: true },
+  });
+  for (const level of otherEntries) {
+    await tx.level.update({ where: { id: level.id }, data: { acceptsNewcomers: true, version: { increment: 1 } } });
+    await note(`~ «${level.name}»: entry Level`, {
+      actorUserId: null,
+      actionType: 'level.update',
+      targetEntity: 'Level',
+      targetId: level.id,
+      detail: { accepts_newcomers: true, reason: 'SRS R233' },
     });
   }
 
