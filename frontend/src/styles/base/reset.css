@@ -65,9 +65,15 @@ h6 {
  * the confirm body, the preview description, the mobile trigger). Each was a
  * correct local fix for a defect that was never local.
  */
+/* R228 (Owner, 2026-10-20 — «written in a column that is not logical with
+   the width of the page … fix that problem everywhere») — a paragraph takes
+   the width of what holds it and wraps only when its line is full, as R190 §2
+   decided for ledes and notes. The 64ch prose cap reached every <p> on the
+   platform (21 local `max-width: none` patches worked around it); it is gone
+   at its source. A component that wants a narrower box sets it on the box. */
 p {
   margin: 0;
-  max-width: var(--measure);
+  max-width: none;
 }
 
 /**

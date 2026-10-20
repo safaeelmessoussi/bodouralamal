@@ -535,6 +535,8 @@ export function ExamSection({
             value={roomId}
             onChange={onRoom}
             disabled={scope.value.branchId === ''}
+            // R228 (E16) — an in-person sitting meets in a room: marked `*`.
+            required
             options={[
               {
                 value: '',

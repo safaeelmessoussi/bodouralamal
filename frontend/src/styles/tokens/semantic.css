@@ -29,6 +29,11 @@
   /* The ground of a formal printed document — a certificate, never a screen. */
   --color-paper: var(--paper-ivory);
   --color-paper-accent: var(--brand-gold);
+  --color-certificate-ribbon-deep: var(--cert-purple-950);
+  --color-certificate-ribbon: var(--cert-purple-600);
+  --color-certificate-gold: var(--cert-gold-400);
+  --color-certificate-gold-soft: var(--cert-gold-200);
+  --color-certificate-ink: var(--cert-ink-blue);
 
   --color-background: var(--neutral-50);
   --color-surface: var(--neutral-0);

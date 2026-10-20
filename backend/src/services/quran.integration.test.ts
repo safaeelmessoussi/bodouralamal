@@ -628,6 +628,11 @@ describe("SRS Revision 167 §3 — «إتمام المستوى»: the administra
     });
     expect(certificate!.certificate_number).toBeGreaterThan(0);
     expect(certificate!.completed_on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // R228 — what the association's printed certificate states.
+    expect(certificate!.level_position).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray(certificate!.syllabus_surahs)).toBe(true);
+    expect(typeof certificate!.teaches_tafsir).toBe('boolean');
+    expect(certificate!.academic_year_label === null || /^\d{4}-\d{4}$/.test(certificate!.academic_year_label)).toBe(true);
 
     // What she can see and print cannot be unmade underneath her.
     expect(

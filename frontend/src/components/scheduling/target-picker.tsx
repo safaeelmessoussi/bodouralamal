@@ -87,7 +87,7 @@ export function TargetPicker({
             : t('assessments.targetHint')
         }
         options={[
-          { value: '', label: t('common.notSet') },
+          { value: '', label: t('common.choose') },
           ...options.map((o) => ({ value: o.id, label: o.label })),
         ]}
       />

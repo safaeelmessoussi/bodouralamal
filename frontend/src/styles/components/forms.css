@@ -91,7 +91,9 @@
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   line-height: 1.5;
-  max-width: 52ch;
+  /* R228 — a hint takes the width of what it explains (its 52ch cap left
+     «مواد المستوى»'s note in a third of the page). */
+  max-width: none;
 }
 /* The Arabic echo of a chosen date: the native control shows it in the
    browser's locale, which we cannot change, so the value is also written in the

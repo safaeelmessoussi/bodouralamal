@@ -1,23 +1,25 @@
 import type { ReactNode } from 'react';
 
 import type { LevelCertificate as Certificate } from '../../adapters/level-completions.js';
-import { t } from '../../i18n/index.js';
-import { formatDate } from '../../lib/format-date.js';
+import { t, tList } from '../../i18n/index.js';
 
 /**
- * **شهادة إتمام مستوى — the document itself** (SRS Revision 167 §3).
+ * **«شهادة تقديرية» — the document itself** (SRS Revision 167 §3; **R228**, the
+ * Owner, 2026-10-20: «look like the image attached, which is a real
+ * certificate delivered by the institute»).
  *
- * Presentational and pure: everything it states came from the server
+ * Drawn after the association's printed certificate: «شهادة تقديرية» and
+ * «﴿وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا﴾» at the head, the association's logo in
+ * the top corner, purple and gold ribbons across two corners, a thin gold
+ * frame, the attestation in the middle — her name in blue ink, the Level's
+ * place and name, what it covers, the school year — the association's blessing,
+ * «حُرّر في مراكش» with the month, and the gold seal «توقيع الجمعية».
+ *
+ * Presentational and pure: every fact came from the server
  * (`GET /students/me/certificates`), which sends only certificates the
- * administration has CONFIRMED. Nothing here decides anything.
- *
- * It is drawn in HTML and CSS rather than as an image or a generated file, so
- * the browser's own text engine shapes the Arabic (joined letters, diacritics,
- * right-to-left) and the PDF she saves holds real, selectable, sharp text at any
- * size. The proportions are A4 landscape (`aspect-ratio: 297 / 210`), and every
- * length inside is relative to the certificate's own width (container query
- * units), so the on-screen preview, a phone and the printed page are the same
- * drawing at different scales.
+ * administration CONFIRMED. Worded in its holder's gender (R221). HTML and CSS,
+ * so the browser shapes the Arabic and the saved PDF holds real text; A4
+ * landscape, every length relative to the certificate's own width.
  */
 export function LevelCertificate({
   certificate,
@@ -27,9 +29,9 @@ export function LevelCertificate({
   printing?: boolean;
 }): ReactNode {
   const number = String(certificate.certificate_number).padStart(5, '0');
-  // R221 — worded in the holder's own gender; «المستفيد(ة) … أتمّ(ت)» only
-  // when the account's sex is not recorded.
+  // R221 — worded in the holder's own gender; the bracket form only when unrecorded.
   const gender = certificate.student_sex ? `_${certificate.student_sex}` : '';
+  const covers = coverage(certificate);
   return (
     <article
       className={printing ? 'certificate certificate--printing' : 'certificate'}
@@ -38,49 +40,46 @@ export function LevelCertificate({
         .replace('{level}', certificate.level_name)
         .replace('{name}', certificate.student_name)}
     >
+      <Ribbon className="certificate__ribbon certificate__ribbon--top" />
+      <Ribbon className="certificate__ribbon certificate__ribbon--bottom" />
       <div className="certificate__frame">
-        <Corner className="certificate__corner certificate__corner--ts" />
-        <Corner className="certificate__corner certificate__corner--te" />
-        <Corner className="certificate__corner certificate__corner--bs" />
-        <Corner className="certificate__corner certificate__corner--be" />
+        <img className="certificate__logo" src="/logo-large.png" alt="" />
 
         <header className="certificate__head">
-          <img className="certificate__logo" src="/logo-large.png" alt="" />
-          <p className="certificate__association">{t('student.certificates.association')}</p>
+          <h2 className="certificate__title">{t('student.certificates.documentTitle')}</h2>
+          <p className="certificate__verse">
+            <span lang="ar">﴿{t('student.certificates.verse')}﴾</span>
+            <small className="certificate__verse-ref">{t('student.certificates.verseRef')}</small>
+          </p>
         </header>
 
-        <p className="certificate__basmala">{t('student.certificates.basmala')}</p>
-
-        <h2 className="certificate__title">{t('student.certificates.documentTitle')}</h2>
-        <Divider />
-
-        <p className="certificate__line">{t(`student.certificates.attests${gender}`)}</p>
-        <p className="certificate__name">{certificate.student_name}</p>
-        <p className="certificate__line">{t(`student.certificates.completed${gender}`)}</p>
-        <p className="certificate__level">
-          {certificate.level_name}
-          <span className="certificate__category"> — {certificate.category_name}</span>
-        </p>
-        <p className="certificate__line certificate__line--small">
-          {t('student.certificates.where')
-            .replace('{branch}', certificate.branch_name)
-            .replace('{date}', formatDate(certificate.completed_on))}
-        </p>
-
-        <p className="certificate__hadith">
-          «{t('student.certificates.hadith')}»
-          <span className="certificate__hadith-source">{t('student.certificates.hadithSource')}</span>
-        </p>
+        <div className="certificate__body">
+          <p className="certificate__line">
+            {t(`student.certificates.attests${gender}`)}{' '}
+            <span className="certificate__name">{certificate.student_name}</span>
+          </p>
+          <p className="certificate__line">
+            {t(`student.certificates.passed${gender}`).replace('{level}', levelOrdinal(certificate.level_position))}{' '}
+            <span className="certificate__level">{certificate.level_name}</span>
+          </p>
+          {covers ? <p className="certificate__line">{covers}</p> : null}
+          {certificate.academic_year_label ? (
+            <p className="certificate__line">
+              {t('student.certificates.year').replace('{year}', certificate.academic_year_label.replace('-', ' – '))}
+            </p>
+          ) : null}
+          <p className="certificate__line certificate__line--blessing">{t('student.certificates.blessing1')}</p>
+          <p className="certificate__line certificate__line--blessing">{t('student.certificates.blessing2')}</p>
+        </div>
 
         <footer className="certificate__foot">
-          <div className="certificate__meta">
-            <span>{t('student.certificates.number')}</span>
-            <strong dir="ltr">BA-{number}</strong>
-          </div>
-          <div className="certificate__meta certificate__meta--end">
-            <span>{t('student.certificates.issuedOn')}</span>
-            <strong>{formatDate(certificate.issued_on)}</strong>
-            <span className="certificate__signature">{t('student.certificates.signature')}</span>
+          <Seal />
+          <span className="certificate__number" dir="ltr">
+            BA-{number}
+          </span>
+          <div className="certificate__issued">
+            <span>{t('student.certificates.issuedIn')}</span>
+            <span>{monthYear(certificate.issued_on)}</span>
           </div>
         </footer>
       </div>
@@ -88,32 +87,71 @@ export function LevelCertificate({
   );
 }
 
-/** An eight-pointed star corner (the Moroccan «خاتم»), drawn once and mirrored
- *  by CSS for the other three corners. */
-function Corner({ className }: { className: string }): ReactNode {
+/** «المستوى الثاني»; a preparatory Level is «المستوى التحضيري». */
+export function levelOrdinal(position: number): string {
+  const words = tList('student.certificates.ordinals');
+  const word = words[position];
+  return word !== undefined
+    ? t('student.certificates.levelOrdinal').replace('{ordinal}', word)
+    : t('student.certificates.levelNumber').replace('{n}', String(position));
+}
+
+/**
+ * «والذي يشمل حفظ وتفسير سورتي آل عمران والنساء» — the Level's «مقرر الحفظ»,
+ * and «وتفسير» where a tafsir Subject is taught there. Nothing when the Level
+ * has no syllabus.
+ */
+export function coverage(certificate: Pick<Certificate, 'syllabus_surahs' | 'teaches_tafsir'>): string | null {
+  const surahs = certificate.syllabus_surahs;
+  if (surahs.length === 0) return null;
+  const and = t('student.certificates.and');
+  const list =
+    surahs.length === 1
+      ? t('student.certificates.surahOne').replace('{a}', surahs[0]!)
+      : surahs.length === 2
+        ? t('student.certificates.surahTwo').replace('{a}', surahs[0]!).replace('{b}', surahs[1]!)
+        : surahs.length <= 6
+          ? t('student.certificates.surahFew').replace(
+              '{list}',
+              `${surahs.slice(0, -1).join('، ')} ${and}${surahs.at(-1)!}`,
+            )
+          : t('student.certificates.surahRange').replace('{a}', surahs[0]!).replace('{b}', surahs.at(-1)!);
+  return t(certificate.teaches_tafsir ? 'student.certificates.coversTafsir' : 'student.certificates.covers').replace(
+    '{surahs}',
+    list,
+  );
+}
+
+/** `2026-10-03` → «10/2026», as the printed certificates are dated. */
+function monthYear(iso: string): string {
+  const [year, month] = iso.split('-');
+  return `${month ?? ''}/${year ?? ''}`;
+}
+
+/** The purple-and-gold ribbon that crosses a corner of the printed certificate. */
+function Ribbon({ className }: { className: string }): ReactNode {
   return (
-    <svg className={className} viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-      <path className="certificate__corner-line" d="M4 96V30Q4 4 30 4H96" />
-      <path className="certificate__corner-line" d="M12 96V34Q12 12 34 12H96" />
-      <g className="certificate__corner-star" transform="translate(30 30)">
-        <rect x="-11" y="-11" width="22" height="22" />
-        <rect x="-11" y="-11" width="22" height="22" transform="rotate(45)" />
-        <circle r="4.5" className="certificate__corner-dot" />
-      </g>
+    <svg className={className} viewBox="0 0 300 300" aria-hidden="true" focusable="false" preserveAspectRatio="none">
+      <path className="certificate__ribbon-deep" d="M0 0H210L0 210Z" />
+      <path className="certificate__ribbon-band" d="M0 150L150 0H185L0 185Z" />
+      <path className="certificate__ribbon-gold" d="M0 196L196 0H212L0 212Z" />
+      <path className="certificate__ribbon-gold certificate__ribbon-gold--thin" d="M0 236L236 0H242L0 242Z" />
     </svg>
   );
 }
 
-function Divider(): ReactNode {
+/** The gold seal «توقيع الجمعية», with its two ribbon tails. */
+function Seal(): ReactNode {
   return (
-    <svg className="certificate__divider" viewBox="0 0 240 16" aria-hidden="true" focusable="false">
-      <path d="M0 8H96M144 8H240" />
-      <g transform="translate(120 8)">
-        <rect x="-5.5" y="-5.5" width="11" height="11" />
-        <rect x="-5.5" y="-5.5" width="11" height="11" transform="rotate(45)" />
-      </g>
-      <circle cx="102" cy="8" r="1.6" />
-      <circle cx="138" cy="8" r="1.6" />
-    </svg>
+    <div className="certificate__seal" aria-hidden="true">
+      <svg viewBox="0 0 120 140" focusable="false">
+        <path className="certificate__seal-tail" d="M38 92L22 136L40 126L50 140L58 98Z" />
+        <path className="certificate__seal-tail" d="M82 92L98 136L80 126L70 140L62 98Z" />
+        <circle className="certificate__seal-rim" cx="60" cy="58" r="54" />
+        <circle className="certificate__seal-face" cx="60" cy="58" r="44" />
+        <path className="certificate__seal-sign" d="M40 62C48 40 56 72 62 50S74 44 78 58" />
+      </svg>
+      <span className="certificate__seal-text">{t('student.certificates.signature')}</span>
+    </div>
   );
 }

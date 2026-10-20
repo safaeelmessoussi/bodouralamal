@@ -37,6 +37,13 @@
   --brand-gold: #8f6720;
   /* The warm paper a printed document sits on (R167 §3 — شهادة إتمام مستوى). */
   --paper-ivory: #fffdf7;
+  /* R228 — the association's printed «شهادة تقديرية»: its ribbons, its
+     gold, and the blue ink its name is written in. */
+  --cert-purple-950: #1c0b4a;
+  --cert-purple-600: #5a2ec2;
+  --cert-gold-400: #e8b53c;
+  --cert-gold-200: #f7dc8c;
+  --cert-ink-blue: #1d4fc4;
 
   /* ── The association's two brand colours ─────────────────────────────────
      The OFFICIAL brand values, supplied by the Document Owner. The dual

@@ -1,9 +1,6 @@
 /*
- * شهادة إتمام مستوى (SRS Revision 167 §3).
- *
- * R173 — the certificate keeps BRASS (`--color-paper-accent`) while the screens
- * moved to saffron: a printed document is not a screen, and this one was
- * designed on brass.
+ * «شهادة تقديرية» (SRS Revision 167 §3; R228 — drawn after the certificate
+ * the association prints and delivers).
  *
  * One drawing at every size: the certificate is an A4-landscape box and every
  * length inside it is in `cqw` — a fraction of ITS OWN width — so the preview
@@ -11,10 +8,8 @@
  *
  * Printing: `html.print-certificate` is set for the duration of one
  * `window.print()`. Everything except the portal that holds the chosen
- * certificate is removed from the flow (not merely hidden — hidden boxes still
- * produce blank pages), and the named page asks for A4 landscape with no
- * margin. A browser that ignores `@page size` (Safari) prints the same box
- * scaled to the paper it has.
+ * certificate is removed from the flow, and the named page asks for A4
+ * landscape with no margin. Backgrounds are part of the document.
  */
 .certificate {
   container-type: inline-size;
@@ -23,57 +18,68 @@
   aspect-ratio: 297 / 210;
   overflow: hidden;
   border-radius: var(--radius-md);
+  /* The printed certificate's pale ground, with its faint star lattice. */
   background:
-    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-paper-accent) 9%, transparent) 0, transparent 55%),
-    radial-gradient(circle at 50% 100%, color-mix(in srgb, var(--color-primary-emphasis) 8%, transparent) 0, transparent 55%),
+    repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-paper-accent) 5%, transparent) 0 0.15cqw, transparent 0.15cqw 3.2cqw),
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--color-paper-accent) 5%, transparent) 0 0.15cqw, transparent 0.15cqw 3.2cqw),
     var(--color-paper);
-  color: var(--color-primary-strong);
+  color: var(--color-text);
   box-shadow: 0 0.6rem 2rem color-mix(in srgb, var(--color-primary-strong) 14%, transparent);
   font-family: var(--font-family-base, inherit);
-  /* Backgrounds are part of the document, not decoration to be dropped. */
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
 }
 
+/* The purple-and-gold ribbons across the top-left and bottom-right corners. */
+.certificate__ribbon {
+  position: absolute;
+  width: 24cqw;
+  height: 34cqw;
+  pointer-events: none;
+}
+.certificate__ribbon--top {
+  inset-block-start: 0;
+  left: 0;
+}
+.certificate__ribbon--bottom {
+  inset-block-end: 0;
+  right: 0;
+  transform: rotate(180deg);
+}
+.certificate__ribbon-deep {
+  fill: var(--color-certificate-ribbon-deep);
+}
+.certificate__ribbon-band {
+  fill: var(--color-certificate-ribbon);
+}
+.certificate__ribbon-gold {
+  fill: var(--color-certificate-gold);
+}
+.certificate__ribbon-gold--thin {
+  fill: var(--color-certificate-gold-soft);
+}
+
+/* The thin gold frame the text sits in. */
 .certificate__frame {
   position: absolute;
-  inset: 2.6cqw;
+  inset: 5.5cqw 7cqw;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 3.4cqw 6cqw 2.6cqw;
-  border: 0.32cqw solid var(--color-paper-accent);
-  outline: 0.12cqw solid var(--color-primary);
-  outline-offset: 0.7cqw;
+  padding: 2.4cqw 5cqw 2cqw;
+  border: 0.22cqw solid var(--color-certificate-gold);
   text-align: center;
 }
 
-.certificate__corner {
+.certificate__logo {
   position: absolute;
-  width: 9cqw;
-  height: 9cqw;
-  fill: none;
-}
-.certificate__corner--ts { inset-block-start: 0.9cqw; inset-inline-start: 0.9cqw; transform: scaleX(-1); }
-.certificate__corner--te { inset-block-start: 0.9cqw; inset-inline-end: 0.9cqw; }
-.certificate__corner--bs { inset-block-end: 0.9cqw; inset-inline-start: 0.9cqw; transform: scale(-1, -1); }
-.certificate__corner--be { inset-block-end: 0.9cqw; inset-inline-end: 0.9cqw; transform: scaleY(-1); }
-/* The star sits in the physical top-left of the drawing; in RTL «start» is the
-   right edge, so the mirrors above are written for RTL, the platform's only
-   direction at launch (§6). */
-.certificate__corner-line {
-  stroke: var(--color-paper-accent);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-}
-.certificate__corner-star rect {
-  fill: color-mix(in srgb, var(--color-paper-accent) 22%, var(--color-paper));
-  stroke: var(--color-paper-accent);
-  stroke-width: 1.4;
-}
-.certificate__corner-dot {
-  fill: var(--color-primary);
+  inset-block-start: -3.6cqw;
+  inset-inline-start: -4.4cqw;
+  width: 11cqw;
+  height: auto;
+  background: var(--color-paper);
+  padding: 0.5cqw;
 }
 
 .certificate__head {
@@ -81,127 +87,117 @@
   justify-items: center;
   gap: 0.4cqw;
 }
-.certificate__logo {
-  width: 10.5cqw;
-  height: 10.5cqw;
-  object-fit: contain;
-}
-.certificate__association {
-  margin: 0;
-  font-size: 1.75cqw;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: var(--color-primary);
-}
-.certificate__basmala {
-  margin: 0;
-  font-size: 1.7cqw;
-  color: var(--color-paper-accent);
-}
 .certificate__title {
   margin: 0;
-  font-size: 5cqw;
+  font-family: var(--font-family-display, inherit);
+  font-size: 5.6cqw;
   font-weight: 800;
-  line-height: 1.25;
-  color: var(--color-primary-strong);
+  line-height: 1.1;
+  color: var(--color-primary);
 }
-.certificate__divider {
-  width: 30cqw;
-  height: 2cqw;
-  fill: var(--color-paper-accent);
-  stroke: var(--color-paper-accent);
-  stroke-width: 1.2;
+.certificate__verse {
+  margin: 0;
+  display: grid;
+  justify-items: center;
+  font-size: 2.6cqw;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.certificate__verse-ref {
+  font-size: 1.2cqw;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.certificate__body {
+  display: grid;
+  gap: 0.55cqw;
+  max-width: 72cqw;
 }
 .certificate__line {
   margin: 0;
   font-size: 2.05cqw;
-  color: var(--color-primary);
+  font-weight: 700;
+  line-height: 1.55;
+  color: var(--color-text);
+  max-width: none;
 }
-.certificate__line--small {
-  font-size: 1.75cqw;
+.certificate__line--blessing {
+  color: var(--color-accent);
 }
 .certificate__name {
-  margin: 0;
-  padding: 0 4cqw 0.5cqw;
-  border-block-end: 0.16cqw solid color-mix(in srgb, var(--color-paper-accent) 70%, transparent);
-  font-size: 4.3cqw;
-  font-weight: 800;
-  line-height: 1.35;
-  color: var(--color-paper-accent);
+  font-size: 2.5cqw;
+  font-weight: 700;
+  color: var(--color-certificate-ink);
+  padding-inline: 0.6cqw;
+  border-block-end: 0.12cqw dotted var(--color-text-muted);
 }
 .certificate__level {
-  margin: 0;
-  font-size: 3cqw;
-  font-weight: 800;
-  color: var(--color-primary-strong);
+  color: var(--color-accent);
 }
-.certificate__category {
-  font-weight: 600;
-  color: var(--color-primary);
-}
-.certificate__hadith {
-  margin: 0;
-  font-size: 1.85cqw;
-  font-weight: 700;
-  color: var(--color-primary);
-}
-.certificate__hadith-source {
-  display: block;
-  font-size: 1.2cqw;
-  font-weight: 400;
-  color: color-mix(in srgb, var(--color-primary) 75%, transparent);
-}
+
 .certificate__foot {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: end;
-  width: 100%;
-  gap: 2cqw;
-  /* Clear of the two bottom corner ornaments, which reach 10cqw in. */
-  padding-inline: 5.5cqw;
-  box-sizing: border-box;
-}
-.certificate__meta {
-  display: grid;
-  gap: 0.2cqw;
-  justify-items: start;
-  text-align: start;
-  font-size: 1.35cqw;
-  color: var(--color-primary);
-}
-.certificate__meta strong {
-  font-size: 1.6cqw;
-  color: var(--color-primary-strong);
-}
-.certificate__meta--end {
-  justify-items: end;
-  text-align: end;
-}
-.certificate__signature {
-  margin-block-start: 0.6cqw;
-  padding-block-start: 0.4cqw;
-  border-block-start: 0.12cqw solid var(--color-primary);
-  font-weight: 700;
-}
-/* ── «شهاداتي» — the page around it ─────────────────────────────────────── */
-.certificate-list {
-  display: grid;
-  gap: var(--space-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.certificate-list__item {
-  display: grid;
-  gap: var(--space-3);
-  max-width: 56rem;
-}
-.certificate-list__actions {
+  align-self: stretch;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 2cqw;
 }
+.certificate__issued {
+  /* Start corner, as on the printed certificate; the number between; the seal at the end. */
+  order: 1;
+  display: grid;
+  justify-items: center;
+  font-size: 1.35cqw;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.certificate__number {
+  order: 2;
+  align-self: flex-end;
+  font-size: 1cqw;
+  color: var(--color-text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* The gold seal «توقيع الجمعية» on the end side, ribbon tails below. */
+.certificate__seal {
+  position: relative;
+  order: 3;
+  width: 10cqw;
+  margin-block-end: -1cqw;
+}
+.certificate__seal svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.certificate__seal-rim {
+  fill: var(--color-certificate-gold);
+}
+.certificate__seal-face {
+  fill: var(--color-text);
+  stroke: var(--color-certificate-gold-soft);
+  stroke-width: 2;
+}
+.certificate__seal-tail {
+  fill: var(--color-danger, var(--color-accent));
+}
+.certificate__seal-sign {
+  fill: none;
+  stroke: var(--color-certificate-gold);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.certificate__seal-text {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 56%;
+  font-size: 0.95cqw;
+  font-weight: 700;
+  color: var(--color-certificate-gold-soft);
+}
+
 /* Holds the one certificate being printed. Off-screen, never `display:none`:
    the logo must be loaded and laid out before the print snapshot is taken. */
 .certificate-print-root {

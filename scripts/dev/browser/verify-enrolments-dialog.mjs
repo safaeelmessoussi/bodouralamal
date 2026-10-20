@@ -198,7 +198,7 @@ const certificate = await evaluate(`(() => {
   };
 })()`);
 check('her confirmed certificate is there, in her own name', certificate.found === true && (certificate.text ?? '').includes('[dev-scenario] مستفيدة مسجّلة'), JSON.stringify(certificate).slice(0, 300));
-check('it states the document, the Level and a number', ['شهادة إتمام مستوى', 'BA-'].every((x) => (certificate.text ?? '').includes(x)), String(certificate.text).slice(0, 200));
+check('it states the document, the Level and a number', ['شهادة تقديرية', 'BA-'].every((x) => (certificate.text ?? '').includes(x)), String(certificate.text).slice(0, 200));
 check('it is drawn at A4-landscape proportions, logo loaded', Math.abs((certificate.ratio ?? 0) - 297 / 210) < 0.02 && certificate.logoLoaded === true, 'ratio=' + certificate.ratio + ' logo=' + certificate.logoLoaded);
 check('«تحميل PDF / طباعة» is offered', certificate.download === true);
 check('«شهاداتي» is in her menu', (certificate.nav ?? []).includes('شهاداتي'), JSON.stringify(certificate.nav));

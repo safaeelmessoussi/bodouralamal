@@ -430,6 +430,17 @@ export interface CertificateView {
   /** Morocco calendar dates (TD-11): a certificate names a day, not an instant. */
   completed_on: string;
   issued_on: string;
+  /**
+   * **R228 — what the association's printed certificate states**: the Level's
+   * place among its Category's steps («المستوى الثاني»; `0` a preparatory
+   * Level), what it covers (its «مقرر الحفظ», in Mushaf order, and whether a
+   * tafsir Subject is taught there — «حفظ وتفسير»), and the school year the
+   * completion falls in (`null` when no period of any year holds that day).
+   */
+  level_position: number;
+  syllabus_surahs: string[];
+  teaches_tafsir: boolean;
+  academic_year_label: string | null;
 }
 
 /**
@@ -450,6 +461,7 @@ export async function certificatesOf(
     orderBy: { completedAt: 'asc' },
     select: {
       certificateNumber: true,
+      levelId: true,
       completedAt: true,
       certificateIssuedAt: true,
       student: { select: { nameArabic: true, sex: true } },
@@ -457,7 +469,38 @@ export async function certificatesOf(
       branch: { select: { name: true } },
     },
   });
-  return marks.map((mark) => ({
+  const levelIds = [...new Set(marks.map((m) => m.levelId))];
+  const [levels, syllabus, tafsir] = await Promise.all([
+    prisma.level.findMany({
+      where: { id: { in: levelIds }, deletedAt: null },
+      select: { id: true, categoryId: true, journeyRole: true },
+    }),
+    prisma.levelSurah.findMany({
+      where: { levelId: { in: levelIds }, deletedAt: null },
+      select: { levelId: true, surah: { select: { nameArabic: true } } },
+      orderBy: { surahId: 'asc' },
+    }),
+    levelsRequiringSurahExams(prisma, levelIds),
+  ]);
+  const steps = await prisma.level.findMany({
+    where: { categoryId: { in: [...new Set(levels.map((l) => l.categoryId))] }, deletedAt: null, journeyRole: 'step' },
+    select: { id: true, categoryId: true },
+    orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+  });
+  const positionOf = (levelId: string): number => {
+    const level = levels.find((l) => l.id === levelId);
+    if (!level || level.journeyRole !== 'step') return 0;
+    return steps.filter((s) => s.categoryId === level.categoryId).findIndex((s) => s.id === levelId) + 1;
+  };
+  const yearOf = async (day: Date): Promise<string | null> =>
+    (
+      await prisma.academicPeriod.findFirst({
+        where: { startDate: { lte: day }, endDate: { gte: day } },
+        select: { academicYear: { select: { label: true } } },
+      })
+    )?.academicYear.label ?? null;
+
+  return Promise.all(marks.map(async (mark) => ({
     certificate_number: mark.certificateNumber!,
     student_name: mark.student.nameArabic,
     student_sex: mark.student.sex,
@@ -466,5 +509,9 @@ export async function certificatesOf(
     branch_name: mark.branch.name,
     completed_on: moroccoDateIso(mark.completedAt),
     issued_on: moroccoDateIso(mark.certificateIssuedAt!),
-  }));
+    level_position: positionOf(mark.levelId),
+    syllabus_surahs: syllabus.filter((r) => r.levelId === mark.levelId).map((r) => r.surah.nameArabic),
+    teaches_tafsir: tafsir.has(mark.levelId),
+    academic_year_label: await yearOf(new Date(`${moroccoDateIso(mark.completedAt)}T00:00:00.000Z`)),
+  })));
 }

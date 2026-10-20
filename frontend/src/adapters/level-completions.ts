@@ -94,6 +94,14 @@ export interface LevelCertificate {
   /** Morocco calendar dates (TD-11). */
   completed_on: string;
   issued_on: string;
+  /** R228 — the Level's place among its Category's steps (`0` preparatory). */
+  level_position: number;
+  /** R228 — its «مقرر الحفظ», in Mushaf order. */
+  syllabus_surahs: string[];
+  /** R228 — a tafsir Subject is taught there («حفظ وتفسير»). */
+  teaches_tafsir: boolean;
+  /** R228 — the school year the completion falls in. */
+  academic_year_label: string | null;
 }
 
 /** The ACTING student's confirmed certificates (§4.3 — herself, or the child a

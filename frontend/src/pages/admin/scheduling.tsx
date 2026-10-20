@@ -108,6 +108,8 @@ import { sortRows } from '../../lib/sort-rows.js';
 import { ApiError } from '../../lib/api.js';
 import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
 import { Feedback } from '../../components/ui/feedback.js';
+import { listCircles, type TeachingGroupRow } from '../../adapters/teaching-groups.js';
+import { fetchAllPages } from '../../components/scheduling/session-audience-dialog.js';
 
 /**
  * `/admin/scheduling` — **الجدولة, the single scheduling entry point**
@@ -428,6 +430,41 @@ export function SchedulingPage(): ReactNode {
   );
 
   /**
+   * **R228 (E16) — «الحلقة» offers circles, narrowed by the row.** The filter
+   * was shown and never given any: it offered «الكل» alone. Every circle is
+   * read once; the branch, Category, Level and Subject chosen leave only their
+   * own, and a circle no longer offered is cleared (rule 2).
+   */
+  const [allCircles, setAllCircles] = useState<TeachingGroupRow[]>([]);
+  useEffect(() => {
+    void fetchAllPages((page) => listCircles(accessToken, page, {}, null, 100))
+      .then(setAllCircles)
+      .catch(() => setAllCircles([]));
+  }, [accessToken]);
+  const filterCircles = useMemo(() => {
+    const { branchId, categoryId, levelId, subjectId } = filters.value;
+    return allCircles
+      .filter((c) => !branchId || c.branch_id === branchId)
+      .filter((c) => !levelId || c.level_id === levelId)
+      .filter((c) => !subjectId || c.subject_id === subjectId)
+      .filter((c) => !categoryId || listScope.levelCategoryIds[c.level_id] === categoryId)
+      .map((c) => ({
+        id: c.id,
+        name: t('scheduling.circleOption')
+          .replace('{subject}', c.subject_name)
+          .replace('{level}', c.level_name)
+          // «الحلقة 1» named so already stays «الحلقة 1» (as the server composes it).
+          .replace('الحلقة {name}', c.name.includes('حلقة') ? c.name : `الحلقة ${c.name}`)
+          .concat(!branchId && c.branch_name ? ` — ${c.branch_name}` : ''),
+      }));
+  }, [allCircles, filters.value, listScope.levelCategoryIds]);
+  useEffect(() => {
+    const chosen = filters.value.circleId;
+    if (chosen && allCircles.length > 0 && !filterCircles.some((c) => c.id === chosen)) filters.set('circleId', null);
+    // `filters.set` is stable; only the offered list decides.
+  }, [filterCircles]);
+
+  /**
    * **The filter row itself, built once and rendered by BOTH views** (R84).
    *
    * It lived inside the list's table toolbar, so switching to تقويم made the
@@ -454,6 +491,7 @@ export function SchedulingPage(): ReactNode {
       }))}
       subjects={listScope.options.subjectId.map((o) => ({ id: o.value, name: o.label }))}
       groups={listScope.options.groupId.map((o) => ({ id: o.value, name: o.label }))}
+      circles={filterCircles}
       types={AVAILABLE_TYPES.map((k) => ({ value: k, label: t(`scheduling.type.${k}`) }))}
     />
   );
@@ -1746,6 +1784,33 @@ export function SchedulingDialog({
       .catch(() => setTeachers([]));
   }, [token, canAssignStaff]);
 
+  /**
+   * **R228 (E16) — the مؤطِّرات offered are those of the branch in play**: the
+   * branches the class or activity is for (an exam's branch), or every one
+   * while it says «الكل». A مؤطِّرة whose role covers every branch is offered
+   * everywhere, and one already chosen stays listed wherever she is.
+   */
+  const staffBranches = type === 'exam' ? (scope.value.branchId ? [scope.value.branchId] : []) : branchIds;
+  const chosenStaff = new Set([
+    ...staffing.map((x) => x.user_id),
+    ...assistantIds,
+    supervisorId,
+    responsibleId,
+    teacherId,
+  ]);
+  const branchTeachers =
+    staffBranches.length === 0
+      ? teachers
+      : teachers.filter(
+          (person) =>
+            chosenStaff.has(person.id) ||
+            // The narrow list a مؤطِّرة reads carries no roles: nothing to narrow by.
+            !Array.isArray(person.roles) ||
+            person.roles.some(
+              (r) => r.role === 'teacher' && (r.branch_id === null || staffBranches.includes(r.branch_id)),
+            ),
+        );
+
   // Rooms belong to a branch, so the list follows the branch choice — a room at
   // another branch is one the class cannot meet in (§4.4).
   //
@@ -2609,7 +2674,7 @@ export function SchedulingDialog({
             onDelivery={setDelivery}
             mediaMode={mediaMode}
             onMediaMode={setMediaMode}
-            teachers={teachers}
+            teachers={branchTeachers}
             {...(asksSurahs
               ? {
                   surahs: (
@@ -2663,6 +2728,7 @@ export function SchedulingDialog({
             {!canAssignStaff && teachingContexts ? (
               <SelectField
                 label={t('scheduling.exam.forClass')}
+                required
                 value={examContextId}
                 onChange={(id: string) => {
                   setExamContextId(id);
@@ -2690,7 +2756,7 @@ export function SchedulingDialog({
             rooms={rooms}
             roomId={roomId}
             onRoom={setRoomId}
-            staff={teachers}
+            staff={branchTeachers}
             supervisorId={supervisorId}
             onSupervisor={setSupervisorId}
             assistantIds={assistantIds}
@@ -2703,7 +2769,7 @@ export function SchedulingDialog({
             // cannot populate would be four empty selectors.
             hideScope={!canAssignStaff && teachingContexts !== undefined}
             leadStaff={
-              canAssignStaff ? teachers : teachers.filter((x) => x.id === me?.id)
+              canAssignStaff ? branchTeachers : teachers.filter((x) => x.id === me?.id)
             }
             leadLocked={!canAssignStaff}
             />
@@ -2778,9 +2844,9 @@ export function SchedulingDialog({
              * **The assistants list stays whole**, because choosing who helps
              * her run it is precisely the thing this grant is for.
              */
-            staff={teachers}
+            staff={branchTeachers}
             leadStaff={
-              canAssignStaff ? teachers : teachers.filter((x) => x.id === me?.id)
+              canAssignStaff ? branchTeachers : teachers.filter((x) => x.id === me?.id)
             }
             responsibleId={canAssignStaff ? responsibleId : (me?.id ?? '')}
             onResponsible={setResponsibleId}

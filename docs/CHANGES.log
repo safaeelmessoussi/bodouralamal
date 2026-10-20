@@ -382,3 +382,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `updateCourseSchedule`: a `multi_dimension` edit naming branches that exclude the class's own moves `branch_id` (one named → it; else the room's if named; else the first); FORBIDDEN for a teacher-only actor; Admin scope on the new branch; `ROOM_BRANCH_MISMATCH` when the room stays elsewhere; audited `branch_moved`.
 - `scheduling.tsx`: on edit the audience is also sent when it names branches the class is not in (re-saving puts an existing class right).
 - Verified: `calendar-r176` R227 case (filters and calendar read the new branch), course-schedule suites.
+
+## 2026-10-20 — SRS Revision 228: «شهادة تقديرية», branch-narrowed lists, full-width text
+- Certificate: `certificatesOf` adds `level_position`, `syllabus_surahs`, `teaches_tafsir`, `academic_year_label`; `level-certificate.tsx`/`certificate.css` redrawn after the printed one (ribbons, frame, logo, seal, blessing); certificate colour tokens; harness `verify-enrolments-dialog` reads «شهادة تقديرية».
+- E16: «الجدولة» circle filter fed (narrowed by branch/Category/Level/Subject, cleared when no longer offered); `branchTeachers` narrows staff pickers by the branch(es) in play; placeholders per R224 §3; `required` on exam room and «الحصة المعنية».
+- `reset.css` `p` and `.field__hint` lose their 64ch/52ch caps. Verified: 30-page sweep at 1848px, no narrow wrapped text; certificate rendered and compared with the photo.
+- Owner ran `ops:apply-holidays` and `ops:import-translations` on Production (E14 closed); class re-saved (R227).
