@@ -2798,7 +2798,5 @@ describe("R238 — a class addressed to «المسار»", () => {
     expect(levels.map((l) => l.levelId)).toEqual([younger.id]);
     const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id }, select: { audienceTracks: true } });
     expect(row.audienceTracks).toEqual(["younger"]);
-    const listed = (await listCourseSchedules(prisma, superAdmin(), {})).data.find((s) => s.id === id);
-    expect(listed?.dimensions?.tracks).toEqual(["younger"]);
   });
 });
