@@ -209,6 +209,8 @@ interface SurahRow {
   nameArabic: string;
   nameTransliterated: string;
   totalAyahs: number;
+  /** R240 — مكية / مدنية, the Madani Mushaf's classification. */
+  revelation: 'makki' | 'madani';
 }
 
 /**
@@ -699,6 +701,7 @@ async function seedQuranSurahs(): Promise<void> {
         nameArabic: row.nameArabic,
         nameTransliterated: row.nameTransliterated,
         totalAyahs: row.totalAyahs,
+        revelation: row.revelation,
       },
       create: row,
     });

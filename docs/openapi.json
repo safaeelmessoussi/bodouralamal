@@ -2299,6 +2299,27 @@
         }
       }
     },
+    "/quran-surahs": {
+      "get": {
+        "summary": "The 114 Surahs, with where each was revealed",
+        "description": "SRS Revision 240. **Public**, like «حسب السورة» which reads it: `{ data: [{ surah_id, surah_name, revelation }] }` in Mushaf order — `revelation` is `makki` or `madani` (the Madani Mushaf's classification), shown as «نوع السورة». Seeded reference data; `Cache-Control: public, max-age=3600`.",
+        "responses": {
+          "200": {
+            "description": "The 114 Surahs."
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/translations": {
       "get": {
         "summary": "The stored texts in one language",

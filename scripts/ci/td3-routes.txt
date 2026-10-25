@@ -111,6 +111,7 @@ POST /admin/self-managed-claims/{id}/reject   # R132 — recorded refusal, soft-
 GET /calendar                                 # TD-3.4, §4.4
 GET /calendar/sessions/{id}                   # TD-3.4 (R43), focused canonical-dialog data; PUBLIC at the caller's tier
 GET /translations                             # R224 §4; public — one language's dictionary of the stored texts
+GET /quran-surahs                             # R240; public — the 114 Surahs with «نوع السورة» (مكية/مدنية)
 GET /events                                   # TD-3.4 (R56) — event DEFINITIONS, paginated
 POST /events                                  # TD-3.4, §4.4
 PATCH /events/{id}                            # TD-3.4, §4.4

@@ -200,6 +200,8 @@ const EXEMPT = new Set([
   "/calendar/bootstrap",
   // R224 §4: the stored texts in the reader's language, read by the public pages.
   "/translations",
+  // R240: the 114 Surahs with «نوع السورة», read by «حسب السورة».
+  "/quran-surahs",
   // R167 §2: which offset Morocco observes. It is a fact about the country, it
   // names nobody, and the sign-in and registration screens need it BEFORE there
   // is an account at all — so it is public, stated here on purpose.

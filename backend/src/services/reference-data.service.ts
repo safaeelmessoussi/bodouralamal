@@ -821,3 +821,18 @@ export async function unassignSurahFromLevel(
     });
   });
 }
+
+/**
+ * **R240 — every Surah, for «حسب السورة»'s list** (public, like the page): its
+ * number, its name and «نوع السورة» (مكية / مدنية). The 114 are seeded
+ * reference data, never typed into the client.
+ */
+export async function listPublicSurahs(
+  prisma: PrismaClient,
+): Promise<{ surah_id: number; surah_name: string; revelation: 'makki' | 'madani' }[]> {
+  const rows = await prisma.quranSurah.findMany({
+    select: { surahId: true, nameArabic: true, revelation: true },
+    orderBy: { surahId: 'asc' },
+  });
+  return rows.map((r) => ({ surah_id: r.surahId, surah_name: r.nameArabic, revelation: r.revelation }));
+}

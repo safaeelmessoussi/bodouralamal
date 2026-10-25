@@ -81,6 +81,14 @@ enum LevelJourneyRole {
   @@map("level_journey_role")
 }
 
+/// R240 — where a Surah was revealed.
+enum SurahRevelation {
+  makki
+  madani
+
+  @@map("surah_revelation")
+}
+
 /// R233 — a Category's parallel line of Levels: «صغار» (younger) or «كبار» (older).
 enum LevelTrack {
   younger
@@ -3313,6 +3321,8 @@ model QuranSurah {
   nameArabic         String @map("name_arabic") @db.VarChar(120)
   nameTransliterated String @map("name_transliterated") @db.VarChar(120)
   totalAyahs         Int    @map("total_ayahs")
+  /// R240 — مكية / مدنية (the Madani Mushaf's classification); the Surah page's «نوع السورة».
+  revelation         SurahRevelation @default(makki)
 
   logs            QuranProgressLog[]
   progress        StudentSurahProgress[]

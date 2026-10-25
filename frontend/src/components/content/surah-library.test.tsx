@@ -117,8 +117,18 @@ describe('SurahLibrary', () => {
     );
     expect(merged.map((g) => [g.id, g.name])).toEqual([[1, 'الفاتحة'], [36, 'يس']]);
   });
-  it('groups the Surah by what each item is: listen in place, read, see', () => {
+  it('R240 — arrives with every section closed («طيّ الكل»)', () => {
     const out = html(2);
+    expect(out).toContain('aria-expanded="false" aria-controls="surah-listen-body"');
+    expect(out).not.toContain('aria-expanded="true" aria-controls="surah-');
+    expect(out).not.toContain('surah-player');
+  });
+
+  it('groups the Surah by what each item is: listen in place, read, see', async () => {
+    const { SurahPage } = await import('./surah-page.js');
+    const out = renderToStaticMarkup(
+      <SurahPage surah={2} title="البقرة" items={groupBySurah(ENTRIES).find((g) => g.id === 2)!.items} accessToken={null} activeChildId={null} onOpen={() => undefined} startOpen />,
+    );
     expect(out).toContain(ar.content.bySurah.section.listen);
     expect(out).toContain(ar.content.bySurah.section.read);
     expect(out).toContain(ar.content.bySurah.section.see);
@@ -164,7 +174,7 @@ describe('R223 — a public lesson plays in one click', async () => {
   });
   const render = (item: ReturnType<typeof lesson>) =>
     renderToStaticMarkup(
-      <SurahPage surah={2} title="البقرة" items={[item]} accessToken={null} activeChildId={null} onOpen={() => undefined} />,
+      <SurahPage surah={2} title="البقرة" items={[item]} accessToken={null} activeChildId={null} onOpen={() => undefined} startOpen />,
     );
 
   it('shows its player at once, fetching nothing until play, with no «استماع» step', () => {

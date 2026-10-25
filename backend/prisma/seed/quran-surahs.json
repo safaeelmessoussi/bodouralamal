@@ -3,684 +3,798 @@
     "surahId": 1,
     "nameArabic": "الفاتحة",
     "nameTransliterated": "Al-Fatihah",
-    "totalAyahs": 7
+    "totalAyahs": 7,
+    "revelation": "makki"
   },
   {
     "surahId": 2,
     "nameArabic": "البقرة",
     "nameTransliterated": "Al-Baqarah",
-    "totalAyahs": 285
+    "totalAyahs": 285,
+    "revelation": "madani"
   },
   {
     "surahId": 3,
     "nameArabic": "آل عمران",
     "nameTransliterated": "Al-Imran",
-    "totalAyahs": 200
+    "totalAyahs": 200,
+    "revelation": "madani"
   },
   {
     "surahId": 4,
     "nameArabic": "النساء",
     "nameTransliterated": "An-Nisa",
-    "totalAyahs": 175
+    "totalAyahs": 175,
+    "revelation": "madani"
   },
   {
     "surahId": 5,
     "nameArabic": "المائدة",
     "nameTransliterated": "Al-Ma'idah",
-    "totalAyahs": 122
+    "totalAyahs": 122,
+    "revelation": "madani"
   },
   {
     "surahId": 6,
     "nameArabic": "الأنعام",
     "nameTransliterated": "Al-An'am",
-    "totalAyahs": 167
+    "totalAyahs": 167,
+    "revelation": "makki"
   },
   {
     "surahId": 7,
     "nameArabic": "الأعراف",
     "nameTransliterated": "Al-A'raf",
-    "totalAyahs": 206
+    "totalAyahs": 206,
+    "revelation": "makki"
   },
   {
     "surahId": 8,
     "nameArabic": "الأنفال",
     "nameTransliterated": "Al-Anfal",
-    "totalAyahs": 76
+    "totalAyahs": 76,
+    "revelation": "madani"
   },
   {
     "surahId": 9,
     "nameArabic": "التوبة",
     "nameTransliterated": "At-Tawbah",
-    "totalAyahs": 130
+    "totalAyahs": 130,
+    "revelation": "madani"
   },
   {
     "surahId": 10,
     "nameArabic": "يونس",
     "nameTransliterated": "Yunus",
-    "totalAyahs": 109
+    "totalAyahs": 109,
+    "revelation": "makki"
   },
   {
     "surahId": 11,
     "nameArabic": "هود",
     "nameTransliterated": "Hud",
-    "totalAyahs": 121
+    "totalAyahs": 121,
+    "revelation": "makki"
   },
   {
     "surahId": 12,
     "nameArabic": "يوسف",
     "nameTransliterated": "Yusuf",
-    "totalAyahs": 111
+    "totalAyahs": 111,
+    "revelation": "makki"
   },
   {
     "surahId": 13,
     "nameArabic": "الرعد",
     "nameTransliterated": "Ar-Ra'd",
-    "totalAyahs": 44
+    "totalAyahs": 44,
+    "revelation": "madani"
   },
   {
     "surahId": 14,
     "nameArabic": "إبراهيم",
     "nameTransliterated": "Ibrahim",
-    "totalAyahs": 54
+    "totalAyahs": 54,
+    "revelation": "makki"
   },
   {
     "surahId": 15,
     "nameArabic": "الحجر",
     "nameTransliterated": "Al-Hijr",
-    "totalAyahs": 99
+    "totalAyahs": 99,
+    "revelation": "makki"
   },
   {
     "surahId": 16,
     "nameArabic": "النحل",
     "nameTransliterated": "An-Nahl",
-    "totalAyahs": 128
+    "totalAyahs": 128,
+    "revelation": "makki"
   },
   {
     "surahId": 17,
     "nameArabic": "الإسراء",
     "nameTransliterated": "Al-Isra",
-    "totalAyahs": 110
+    "totalAyahs": 110,
+    "revelation": "makki"
   },
   {
     "surahId": 18,
     "nameArabic": "الكهف",
     "nameTransliterated": "Al-Kahf",
-    "totalAyahs": 105
+    "totalAyahs": 105,
+    "revelation": "makki"
   },
   {
     "surahId": 19,
     "nameArabic": "مريم",
     "nameTransliterated": "Maryam",
-    "totalAyahs": 99
+    "totalAyahs": 99,
+    "revelation": "makki"
   },
   {
     "surahId": 20,
     "nameArabic": "طه",
     "nameTransliterated": "Taha",
-    "totalAyahs": 134
+    "totalAyahs": 134,
+    "revelation": "makki"
   },
   {
     "surahId": 21,
     "nameArabic": "الأنبياء",
     "nameTransliterated": "Al-Anbiya",
-    "totalAyahs": 111
+    "totalAyahs": 111,
+    "revelation": "makki"
   },
   {
     "surahId": 22,
     "nameArabic": "الحج",
     "nameTransliterated": "Al-Hajj",
-    "totalAyahs": 76
+    "totalAyahs": 76,
+    "revelation": "madani"
   },
   {
     "surahId": 23,
     "nameArabic": "المؤمنون",
     "nameTransliterated": "Al-Mu'minun",
-    "totalAyahs": 119
+    "totalAyahs": 119,
+    "revelation": "makki"
   },
   {
     "surahId": 24,
     "nameArabic": "النور",
     "nameTransliterated": "An-Nur",
-    "totalAyahs": 62
+    "totalAyahs": 62,
+    "revelation": "madani"
   },
   {
     "surahId": 25,
     "nameArabic": "الفرقان",
     "nameTransliterated": "Al-Furqan",
-    "totalAyahs": 77
+    "totalAyahs": 77,
+    "revelation": "makki"
   },
   {
     "surahId": 26,
     "nameArabic": "الشعراء",
     "nameTransliterated": "Ash-Shu'ara",
-    "totalAyahs": 226
+    "totalAyahs": 226,
+    "revelation": "makki"
   },
   {
     "surahId": 27,
     "nameArabic": "النمل",
     "nameTransliterated": "An-Naml",
-    "totalAyahs": 95
+    "totalAyahs": 95,
+    "revelation": "makki"
   },
   {
     "surahId": 28,
     "nameArabic": "القصص",
     "nameTransliterated": "Al-Qasas",
-    "totalAyahs": 88
+    "totalAyahs": 88,
+    "revelation": "makki"
   },
   {
     "surahId": 29,
     "nameArabic": "العنكبوت",
     "nameTransliterated": "Al-Ankabut",
-    "totalAyahs": 69
+    "totalAyahs": 69,
+    "revelation": "makki"
   },
   {
     "surahId": 30,
     "nameArabic": "الروم",
     "nameTransliterated": "Ar-Rum",
-    "totalAyahs": 59
+    "totalAyahs": 59,
+    "revelation": "makki"
   },
   {
     "surahId": 31,
     "nameArabic": "لقمان",
     "nameTransliterated": "Luqman",
-    "totalAyahs": 33
+    "totalAyahs": 33,
+    "revelation": "makki"
   },
   {
     "surahId": 32,
     "nameArabic": "السجدة",
     "nameTransliterated": "As-Sajdah",
-    "totalAyahs": 30
+    "totalAyahs": 30,
+    "revelation": "makki"
   },
   {
     "surahId": 33,
     "nameArabic": "الأحزاب",
     "nameTransliterated": "Al-Ahzab",
-    "totalAyahs": 73
+    "totalAyahs": 73,
+    "revelation": "madani"
   },
   {
     "surahId": 34,
     "nameArabic": "سبأ",
     "nameTransliterated": "Saba",
-    "totalAyahs": 54
+    "totalAyahs": 54,
+    "revelation": "makki"
   },
   {
     "surahId": 35,
     "nameArabic": "فاطر",
     "nameTransliterated": "Fatir",
-    "totalAyahs": 46
+    "totalAyahs": 46,
+    "revelation": "makki"
   },
   {
     "surahId": 36,
     "nameArabic": "يس",
     "nameTransliterated": "Ya-Sin",
-    "totalAyahs": 82
+    "totalAyahs": 82,
+    "revelation": "makki"
   },
   {
     "surahId": 37,
     "nameArabic": "الصافات",
     "nameTransliterated": "As-Saffat",
-    "totalAyahs": 182
+    "totalAyahs": 182,
+    "revelation": "makki"
   },
   {
     "surahId": 38,
     "nameArabic": "ص",
     "nameTransliterated": "Sad",
-    "totalAyahs": 86
+    "totalAyahs": 86,
+    "revelation": "makki"
   },
   {
     "surahId": 39,
     "nameArabic": "الزمر",
     "nameTransliterated": "Az-Zumar",
-    "totalAyahs": 72
+    "totalAyahs": 72,
+    "revelation": "makki"
   },
   {
     "surahId": 40,
     "nameArabic": "غافر",
     "nameTransliterated": "Ghafir",
-    "totalAyahs": 84
+    "totalAyahs": 84,
+    "revelation": "makki"
   },
   {
     "surahId": 41,
     "nameArabic": "فصلت",
     "nameTransliterated": "Fussilat",
-    "totalAyahs": 53
+    "totalAyahs": 53,
+    "revelation": "makki"
   },
   {
     "surahId": 42,
     "nameArabic": "الشورى",
     "nameTransliterated": "Ash-Shura",
-    "totalAyahs": 50
+    "totalAyahs": 50,
+    "revelation": "makki"
   },
   {
     "surahId": 43,
     "nameArabic": "الزخرف",
     "nameTransliterated": "Az-Zukhruf",
-    "totalAyahs": 89
+    "totalAyahs": 89,
+    "revelation": "makki"
   },
   {
     "surahId": 44,
     "nameArabic": "الدخان",
     "nameTransliterated": "Ad-Dukhan",
-    "totalAyahs": 56
+    "totalAyahs": 56,
+    "revelation": "makki"
   },
   {
     "surahId": 45,
     "nameArabic": "الجاثية",
     "nameTransliterated": "Al-Jathiyah",
-    "totalAyahs": 36
+    "totalAyahs": 36,
+    "revelation": "makki"
   },
   {
     "surahId": 46,
     "nameArabic": "الأحقاف",
     "nameTransliterated": "Al-Ahqaf",
-    "totalAyahs": 34
+    "totalAyahs": 34,
+    "revelation": "makki"
   },
   {
     "surahId": 47,
     "nameArabic": "محمد",
     "nameTransliterated": "Muhammad",
-    "totalAyahs": 39
+    "totalAyahs": 39,
+    "revelation": "madani"
   },
   {
     "surahId": 48,
     "nameArabic": "الفتح",
     "nameTransliterated": "Al-Fath",
-    "totalAyahs": 29
+    "totalAyahs": 29,
+    "revelation": "madani"
   },
   {
     "surahId": 49,
     "nameArabic": "الحجرات",
     "nameTransliterated": "Al-Hujurat",
-    "totalAyahs": 18
+    "totalAyahs": 18,
+    "revelation": "madani"
   },
   {
     "surahId": 50,
     "nameArabic": "ق",
     "nameTransliterated": "Qaf",
-    "totalAyahs": 45
+    "totalAyahs": 45,
+    "revelation": "makki"
   },
   {
     "surahId": 51,
     "nameArabic": "الذاريات",
     "nameTransliterated": "Adh-Dhariyat",
-    "totalAyahs": 60
+    "totalAyahs": 60,
+    "revelation": "makki"
   },
   {
     "surahId": 52,
     "nameArabic": "الطور",
     "nameTransliterated": "At-Tur",
-    "totalAyahs": 47
+    "totalAyahs": 47,
+    "revelation": "makki"
   },
   {
     "surahId": 53,
     "nameArabic": "النجم",
     "nameTransliterated": "An-Najm",
-    "totalAyahs": 61
+    "totalAyahs": 61,
+    "revelation": "makki"
   },
   {
     "surahId": 54,
     "nameArabic": "القمر",
     "nameTransliterated": "Al-Qamar",
-    "totalAyahs": 55
+    "totalAyahs": 55,
+    "revelation": "makki"
   },
   {
     "surahId": 55,
     "nameArabic": "الرحمن",
     "nameTransliterated": "Ar-Rahman",
-    "totalAyahs": 77
+    "totalAyahs": 77,
+    "revelation": "madani"
   },
   {
     "surahId": 56,
     "nameArabic": "الواقعة",
     "nameTransliterated": "Al-Waqi'ah",
-    "totalAyahs": 99
+    "totalAyahs": 99,
+    "revelation": "makki"
   },
   {
     "surahId": 57,
     "nameArabic": "الحديد",
     "nameTransliterated": "Al-Hadid",
-    "totalAyahs": 28
+    "totalAyahs": 28,
+    "revelation": "madani"
   },
   {
     "surahId": 58,
     "nameArabic": "المجادلة",
     "nameTransliterated": "Al-Mujadilah",
-    "totalAyahs": 21
+    "totalAyahs": 21,
+    "revelation": "madani"
   },
   {
     "surahId": 59,
     "nameArabic": "الحشر",
     "nameTransliterated": "Al-Hashr",
-    "totalAyahs": 24
+    "totalAyahs": 24,
+    "revelation": "madani"
   },
   {
     "surahId": 60,
     "nameArabic": "الممتحنة",
     "nameTransliterated": "Al-Mumtahanah",
-    "totalAyahs": 13
+    "totalAyahs": 13,
+    "revelation": "madani"
   },
   {
     "surahId": 61,
     "nameArabic": "الصف",
     "nameTransliterated": "As-Saff",
-    "totalAyahs": 14
+    "totalAyahs": 14,
+    "revelation": "madani"
   },
   {
     "surahId": 62,
     "nameArabic": "الجمعة",
     "nameTransliterated": "Al-Jumu'ah",
-    "totalAyahs": 11
+    "totalAyahs": 11,
+    "revelation": "madani"
   },
   {
     "surahId": 63,
     "nameArabic": "المنافقون",
     "nameTransliterated": "Al-Munafiqun",
-    "totalAyahs": 11
+    "totalAyahs": 11,
+    "revelation": "madani"
   },
   {
     "surahId": 64,
     "nameArabic": "التغابن",
     "nameTransliterated": "At-Taghabun",
-    "totalAyahs": 18
+    "totalAyahs": 18,
+    "revelation": "madani"
   },
   {
     "surahId": 65,
     "nameArabic": "الطلاق",
     "nameTransliterated": "At-Talaq",
-    "totalAyahs": 12
+    "totalAyahs": 12,
+    "revelation": "madani"
   },
   {
     "surahId": 66,
     "nameArabic": "التحريم",
     "nameTransliterated": "At-Tahrim",
-    "totalAyahs": 12
+    "totalAyahs": 12,
+    "revelation": "madani"
   },
   {
     "surahId": 67,
     "nameArabic": "الملك",
     "nameTransliterated": "Al-Mulk",
-    "totalAyahs": 31
+    "totalAyahs": 31,
+    "revelation": "makki"
   },
   {
     "surahId": 68,
     "nameArabic": "القلم",
     "nameTransliterated": "Al-Qalam",
-    "totalAyahs": 52
+    "totalAyahs": 52,
+    "revelation": "makki"
   },
   {
     "surahId": 69,
     "nameArabic": "الحاقة",
     "nameTransliterated": "Al-Haqqah",
-    "totalAyahs": 52
+    "totalAyahs": 52,
+    "revelation": "makki"
   },
   {
     "surahId": 70,
     "nameArabic": "المعارج",
     "nameTransliterated": "Al-Ma'arij",
-    "totalAyahs": 44
+    "totalAyahs": 44,
+    "revelation": "makki"
   },
   {
     "surahId": 71,
     "nameArabic": "نوح",
     "nameTransliterated": "Nuh",
-    "totalAyahs": 30
+    "totalAyahs": 30,
+    "revelation": "makki"
   },
   {
     "surahId": 72,
     "nameArabic": "الجن",
     "nameTransliterated": "Al-Jinn",
-    "totalAyahs": 28
+    "totalAyahs": 28,
+    "revelation": "makki"
   },
   {
     "surahId": 73,
     "nameArabic": "المزمل",
     "nameTransliterated": "Al-Muzzammil",
-    "totalAyahs": 18
+    "totalAyahs": 18,
+    "revelation": "makki"
   },
   {
     "surahId": 74,
     "nameArabic": "المدثر",
     "nameTransliterated": "Al-Muddaththir",
-    "totalAyahs": 55
+    "totalAyahs": 55,
+    "revelation": "makki"
   },
   {
     "surahId": 75,
     "nameArabic": "القيامة",
     "nameTransliterated": "Al-Qiyamah",
-    "totalAyahs": 39
+    "totalAyahs": 39,
+    "revelation": "makki"
   },
   {
     "surahId": 76,
     "nameArabic": "الإنسان",
     "nameTransliterated": "Al-Insan",
-    "totalAyahs": 31
+    "totalAyahs": 31,
+    "revelation": "madani"
   },
   {
     "surahId": 77,
     "nameArabic": "المرسلات",
     "nameTransliterated": "Al-Mursalat",
-    "totalAyahs": 50
+    "totalAyahs": 50,
+    "revelation": "makki"
   },
   {
     "surahId": 78,
     "nameArabic": "النبأ",
     "nameTransliterated": "An-Naba",
-    "totalAyahs": 40
+    "totalAyahs": 40,
+    "revelation": "makki"
   },
   {
     "surahId": 79,
     "nameArabic": "النازعات",
     "nameTransliterated": "An-Nazi'at",
-    "totalAyahs": 45
+    "totalAyahs": 45,
+    "revelation": "makki"
   },
   {
     "surahId": 80,
     "nameArabic": "عبس",
     "nameTransliterated": "Abasa",
-    "totalAyahs": 42
+    "totalAyahs": 42,
+    "revelation": "makki"
   },
   {
     "surahId": 81,
     "nameArabic": "التكوير",
     "nameTransliterated": "At-Takwir",
-    "totalAyahs": 29
+    "totalAyahs": 29,
+    "revelation": "makki"
   },
   {
     "surahId": 82,
     "nameArabic": "الانفطار",
     "nameTransliterated": "Al-Infitar",
-    "totalAyahs": 19
+    "totalAyahs": 19,
+    "revelation": "makki"
   },
   {
     "surahId": 83,
     "nameArabic": "المطففين",
     "nameTransliterated": "Al-Mutaffifin",
-    "totalAyahs": 36
+    "totalAyahs": 36,
+    "revelation": "makki"
   },
   {
     "surahId": 84,
     "nameArabic": "الانشقاق",
     "nameTransliterated": "Al-Inshiqaq",
-    "totalAyahs": 25
+    "totalAyahs": 25,
+    "revelation": "makki"
   },
   {
     "surahId": 85,
     "nameArabic": "البروج",
     "nameTransliterated": "Al-Buruj",
-    "totalAyahs": 22
+    "totalAyahs": 22,
+    "revelation": "makki"
   },
   {
     "surahId": 86,
     "nameArabic": "الطارق",
     "nameTransliterated": "At-Tariq",
-    "totalAyahs": 17
+    "totalAyahs": 17,
+    "revelation": "makki"
   },
   {
     "surahId": 87,
     "nameArabic": "الأعلى",
     "nameTransliterated": "Al-A'la",
-    "totalAyahs": 19
+    "totalAyahs": 19,
+    "revelation": "makki"
   },
   {
     "surahId": 88,
     "nameArabic": "الغاشية",
     "nameTransliterated": "Al-Ghashiyah",
-    "totalAyahs": 26
+    "totalAyahs": 26,
+    "revelation": "makki"
   },
   {
     "surahId": 89,
     "nameArabic": "الفجر",
     "nameTransliterated": "Al-Fajr",
-    "totalAyahs": 32
+    "totalAyahs": 32,
+    "revelation": "makki"
   },
   {
     "surahId": 90,
     "nameArabic": "البلد",
     "nameTransliterated": "Al-Balad",
-    "totalAyahs": 20
+    "totalAyahs": 20,
+    "revelation": "makki"
   },
   {
     "surahId": 91,
     "nameArabic": "الشمس",
     "nameTransliterated": "Ash-Shams",
-    "totalAyahs": 15
+    "totalAyahs": 15,
+    "revelation": "makki"
   },
   {
     "surahId": 92,
     "nameArabic": "الليل",
     "nameTransliterated": "Al-Layl",
-    "totalAyahs": 21
+    "totalAyahs": 21,
+    "revelation": "makki"
   },
   {
     "surahId": 93,
     "nameArabic": "الضحى",
     "nameTransliterated": "Ad-Duha",
-    "totalAyahs": 11
+    "totalAyahs": 11,
+    "revelation": "makki"
   },
   {
     "surahId": 94,
     "nameArabic": "الشرح",
     "nameTransliterated": "Ash-Sharh",
-    "totalAyahs": 8
+    "totalAyahs": 8,
+    "revelation": "makki"
   },
   {
     "surahId": 95,
     "nameArabic": "التين",
     "nameTransliterated": "At-Tin",
-    "totalAyahs": 8
+    "totalAyahs": 8,
+    "revelation": "makki"
   },
   {
     "surahId": 96,
     "nameArabic": "العلق",
     "nameTransliterated": "Al-Alaq",
-    "totalAyahs": 20
+    "totalAyahs": 20,
+    "revelation": "makki"
   },
   {
     "surahId": 97,
     "nameArabic": "القدر",
     "nameTransliterated": "Al-Qadr",
-    "totalAyahs": 5
+    "totalAyahs": 5,
+    "revelation": "makki"
   },
   {
     "surahId": 98,
     "nameArabic": "البينة",
     "nameTransliterated": "Al-Bayyinah",
-    "totalAyahs": 8
+    "totalAyahs": 8,
+    "revelation": "madani"
   },
   {
     "surahId": 99,
     "nameArabic": "الزلزلة",
     "nameTransliterated": "Az-Zalzalah",
-    "totalAyahs": 9
+    "totalAyahs": 9,
+    "revelation": "madani"
   },
   {
     "surahId": 100,
     "nameArabic": "العاديات",
     "nameTransliterated": "Al-Adiyat",
-    "totalAyahs": 11
+    "totalAyahs": 11,
+    "revelation": "makki"
   },
   {
     "surahId": 101,
     "nameArabic": "القارعة",
     "nameTransliterated": "Al-Qari'ah",
-    "totalAyahs": 10
+    "totalAyahs": 10,
+    "revelation": "makki"
   },
   {
     "surahId": 102,
     "nameArabic": "التكاثر",
     "nameTransliterated": "At-Takathur",
-    "totalAyahs": 8
+    "totalAyahs": 8,
+    "revelation": "makki"
   },
   {
     "surahId": 103,
     "nameArabic": "العصر",
     "nameTransliterated": "Al-Asr",
-    "totalAyahs": 3
+    "totalAyahs": 3,
+    "revelation": "makki"
   },
   {
     "surahId": 104,
     "nameArabic": "الهمزة",
     "nameTransliterated": "Al-Humazah",
-    "totalAyahs": 9
+    "totalAyahs": 9,
+    "revelation": "makki"
   },
   {
     "surahId": 105,
     "nameArabic": "الفيل",
     "nameTransliterated": "Al-Fil",
-    "totalAyahs": 5
+    "totalAyahs": 5,
+    "revelation": "makki"
   },
   {
     "surahId": 106,
     "nameArabic": "قريش",
     "nameTransliterated": "Quraysh",
-    "totalAyahs": 5
+    "totalAyahs": 5,
+    "revelation": "makki"
   },
   {
     "surahId": 107,
     "nameArabic": "الماعون",
     "nameTransliterated": "Al-Ma'un",
-    "totalAyahs": 6
+    "totalAyahs": 6,
+    "revelation": "makki"
   },
   {
     "surahId": 108,
     "nameArabic": "الكوثر",
     "nameTransliterated": "Al-Kawthar",
-    "totalAyahs": 3
+    "totalAyahs": 3,
+    "revelation": "makki"
   },
   {
     "surahId": 109,
     "nameArabic": "الكافرون",
     "nameTransliterated": "Al-Kafirun",
-    "totalAyahs": 6
+    "totalAyahs": 6,
+    "revelation": "makki"
   },
   {
     "surahId": 110,
     "nameArabic": "النصر",
     "nameTransliterated": "An-Nasr",
-    "totalAyahs": 3
+    "totalAyahs": 3,
+    "revelation": "madani"
   },
   {
     "surahId": 111,
     "nameArabic": "المسد",
     "nameTransliterated": "Al-Masad",
-    "totalAyahs": 5
+    "totalAyahs": 5,
+    "revelation": "makki"
   },
   {
     "surahId": 112,
     "nameArabic": "الإخلاص",
     "nameTransliterated": "Al-Ikhlas",
-    "totalAyahs": 4
+    "totalAyahs": 4,
+    "revelation": "makki"
   },
   {
     "surahId": 113,
     "nameArabic": "الفلق",
     "nameTransliterated": "Al-Falaq",
-    "totalAyahs": 5
+    "totalAyahs": 5,
+    "revelation": "makki"
   },
   {
     "surahId": 114,
     "nameArabic": "الناس",
     "nameTransliterated": "An-Nas",
-    "totalAyahs": 6
+    "totalAyahs": 6,
+    "revelation": "makki"
   }
 ]

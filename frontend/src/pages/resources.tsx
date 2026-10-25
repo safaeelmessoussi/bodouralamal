@@ -423,10 +423,12 @@ function LibraryView({
 
   // Category → shelf (the Category's own shelf first) → year (newest first)
   // → branch (بدون فرع first) → subject → items.
-  // R217 — the Level cards the reader folded.
-  const [folded, setFolded] = useState<Set<string>>(() => new Set());
+  // R217 — a Level's card folds; R240 — every card starts folded (the
+  // Owner: «by default, طيّ الكل»), and this is the set the reader opened.
+  const [opened, setOpened] = useState<Set<string>>(() => new Set());
+  const folded = { has: (key: string): boolean => !opened.has(key) };
   const toggleShelf = (key: string): void =>
-    setFolded((was) => {
+    setOpened((was) => {
       const next = new Set(was);
       if (next.has(key)) next.delete(key);
       else next.add(key);

@@ -16,6 +16,7 @@ import {
   assignSurahToLevel,
   listLevelSurahs,
   listQuranSurahs,
+  listPublicSurahs,
   unassignSurahFromLevel,
   updateAcademicYear,
 } from '../services/reference-data.service.js';
@@ -226,5 +227,13 @@ export function unassignSurah(prisma: PrismaClient) {
 export function quranSurahs(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await listQuranSurahs(prisma, requireActor(req)) });
+  };
+}
+
+/** `GET /quran-surahs` (R240) — the 114 with «نوع السورة»; public and cached an hour. */
+export function publicSurahs(prisma: PrismaClient) {
+  return async (_req: Request, res: Response): Promise<void> => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.json({ data: await listPublicSurahs(prisma) });
   };
 }

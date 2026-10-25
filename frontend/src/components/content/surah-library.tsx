@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { ContentItem, LibraryEntry } from '../../adapters/content.js';
+import { listPublicSurahs, type PublicSurah } from '../../adapters/quran-surahs.js';
 import { t } from '../../i18n/index.js';
 import { SURAH_DIAGRAMS, type SurahDiagrams } from '../history/surah-diagrams.js';
 import { SurahPage, type SurahItem } from './surah-page.js';
@@ -27,6 +28,27 @@ export interface SurahGroup {
   id: number;
   name: string;
   items: SurahItem[];
+  /** R240 — «نوع السورة», from `GET /quran-surahs`; absent until it answers. */
+  revelation?: 'makki' | 'madani';
+}
+
+/**
+ * **R240 — all 114 Surahs are in the list** (the Owner, 2026-10-25: «add all
+ * the surahs of the quran … with only the title and نوع السورة»), each with
+ * its content when it has some. Mushaf order.
+ */
+export function withAllSurahs(groups: readonly SurahGroup[], all: readonly PublicSurah[]): SurahGroup[] {
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  for (const surah of all) {
+    const known = byId.get(surah.surah_id);
+    byId.set(
+      surah.surah_id,
+      known
+        ? { ...known, revelation: surah.revelation }
+        : { id: surah.surah_id, name: surah.surah_name, items: [], revelation: surah.revelation },
+    );
+  }
+  return [...byId.values()].sort((a, b) => a.id - b.id);
 }
 
 const TITLE_ORDER = new Intl.Collator('ar', { numeric: true, sensitivity: 'base', ignorePunctuation: true });
@@ -92,7 +114,23 @@ export function SurahLibrary({
   activeChildId: string | null;
   onOpen: (item: ContentItem) => void;
 }): ReactNode {
-  const surahs = useMemo(() => withDiagramSurahs(groupBySurah(entries), SURAH_DIAGRAMS), [entries]);
+  // R240 — the 114 and «نوع السورة» (public); the list shows what it has meanwhile.
+  const [allSurahs, setAllSurahs] = useState<PublicSurah[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void listPublicSurahs()
+      .then((rows) => {
+        if (alive) setAllSurahs(rows);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const surahs = useMemo(
+    () => withAllSurahs(withDiagramSurahs(groupBySurah(entries), SURAH_DIAGRAMS), allSurahs),
+    [entries, allSurahs],
+  );
   const [chosen, setChosen] = useState<number | null>(initialSurah);
   const current = surahs.find((s) => s.id === chosen) ?? surahs[0] ?? null;
   const panel = useRef<HTMLElement | null>(null);
@@ -153,6 +191,7 @@ export function SurahLibrary({
           surah={current.id}
           title={t('content.surahGroupLabel').replace('{surah}', current.name)}
           items={current.items}
+          {...(current.revelation ? { revelation: current.revelation } : {})}
           accessToken={accessToken}
           activeChildId={activeChildId}
           onOpen={onOpen}

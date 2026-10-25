@@ -34,10 +34,16 @@ export function SurahPage({
   accessToken,
   activeChildId,
   onOpen,
+  revelation,
+  startOpen = false,
 }: {
+  /** Every section open from the start (a static render, as «فتح الكل» leaves it). */
+  startOpen?: boolean;
   surah: number;
   title: string;
   items: readonly SurahItem[];
+  /** R240 — «نوع السورة» for a Surah with nothing written yet. */
+  revelation?: 'makki' | 'madani';
   /** «نظرة شاملة» moves the focus to the new heading after a move. */
   headingRef?: RefObject<HTMLHeadingElement | null>;
   accessToken: string | null;
@@ -50,11 +56,9 @@ export function SurahPage({
   );
   const diagrams = profile?.diagrams ?? [];
   const keys = [...(diagrams.length > 0 ? ['diagrams'] : []), ...shelves.map((section) => section.key)];
-  // R239 — every section opens and closes; the diagrams start closed when
-  // there are several, so the recordings are in view on arrival.
-  const [open, setOpen] = useState<Set<string>>(
-    () => new Set(keys.filter((key) => key !== 'diagrams' || diagrams.length <= 1)),
-  );
+  // R239 — every section opens and closes.
+  // R240 — every section closed on arrival (the Owner: «by default, طيّ الكل»).
+  const [open, setOpen] = useState<Set<string>>(() => new Set(startOpen ? keys : []));
   const toggle = (key: string): void =>
     setOpen((was) => {
       const next = new Set(was);
@@ -107,6 +111,13 @@ export function SurahPage({
       {profile && profile.lines.length > 0 ? (
         <div className="surah-library__profile">
           <Details lines={profile.lines} />
+        </div>
+      ) : revelation ? (
+        // R240 — until its «مطبوع» is uploaded, a Surah says where it was revealed.
+        <div className="surah-library__profile">
+          <Details
+            lines={[`${t('content.bySurah.typeLabel')}: ${t(`content.bySurah.revelation.${revelation}`)}`]}
+          />
         </div>
       ) : null}
 

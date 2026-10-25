@@ -334,6 +334,8 @@ export function createApp(
   api.get('/calendar/bootstrap', calendarBootstrap.read(prisma));
   // R224 §4 — the stored texts in the reader's language (public, cached).
   api.get('/translations', translationCtl.read(prisma));
+  // R240 — the 114 Surahs with «نوع السورة», for «حسب السورة» (public, cached).
+  api.get('/quran-surahs', referenceData.publicSurahs(prisma));
   // R167 §2 — Morocco's current official offset, from the host's zone database.
   api.get('/clock', clock.read());
   // R175 §2 — what the public chrome may offer on THIS deployment. Public,
