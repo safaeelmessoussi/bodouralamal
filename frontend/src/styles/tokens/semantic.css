@@ -96,6 +96,12 @@
   --color-gregorian-ink: var(--brand-logo-orange-ink);
   --color-hijri: var(--brand-logo-green);
   --color-hijri-ink: var(--brand-logo-green-ink);
+  /* R239 — a lesson's bar: what was heard in the logo's orange, the rest the
+     same orange, lighter. */
+  --color-listened: var(--brand-logo-orange);
+  /* The play button carries a symbol: the ink orange keeps it legible (4.7:1). */
+  --color-listened-strong: var(--brand-logo-orange-ink);
+  --color-listened-ahead: color-mix(in srgb, var(--brand-logo-orange) 22%, var(--color-surface-raised));
 
   /* Focus and selection — one ring colour everywhere, so «this is the thing
      you are on» looks the same on a button, a field and a calendar day. */

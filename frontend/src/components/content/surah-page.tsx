@@ -1,12 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject, type SyntheticEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { fetchContentUrl, type ContentItem } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
-import { formatDate } from '../../lib/format-date.js';
 import { Details } from '../history/humanity-details.js';
 import { HumanityDiagram } from '../history/humanity-diagram.js';
 import { SURAH_DIAGRAMS } from '../history/surah-diagrams.js';
-import { Button } from '../ui/button.js';
 import { Icon } from '../ui/icon.js';
 import { authorLine, ContentCard } from './content-card.js';
 
@@ -50,13 +48,60 @@ export function SurahPage({
   const shelves = SECTIONS.map((section) => ({ ...section, items: items.filter(section.holds) })).filter(
     (section) => section.items.length > 0,
   );
+  const diagrams = profile?.diagrams ?? [];
+  const keys = [...(diagrams.length > 0 ? ['diagrams'] : []), ...shelves.map((section) => section.key)];
+  // R239 — every section opens and closes; the diagrams start closed when
+  // there are several, so the recordings are in view on arrival.
+  const [open, setOpen] = useState<Set<string>>(
+    () => new Set(keys.filter((key) => key !== 'diagrams' || diagrams.length <= 1)),
+  );
+  const toggle = (key: string): void =>
+    setOpen((was) => {
+      const next = new Set(was);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  // R239 — after one lesson ends, the next one plays (on by default).
+  const [autoNext, setAutoNext] = useState<boolean>(() => readAutoNext());
+  const [cue, setCue] = useState<number | null>(null);
+
+  const heading = (key: string, icon: Parameters<typeof Icon>[0]['name'], label: string): ReactNode => (
+    <h3 id={`surah-${key}-title`} className="surah-library__sectionTitle">
+      <button
+        type="button"
+        className="surah-library__toggle"
+        aria-expanded={open.has(key)}
+        aria-controls={`surah-${key}-body`}
+        onClick={() => toggle(key)}
+      >
+        <Icon name={icon} size={18} />
+        {label}
+        {/* «+» closed, «−» open — what a diagram's own boxes show. */}
+        <span className="surah-library__chevron" aria-hidden="true">
+          {open.has(key) ? '−' : '+'}
+        </span>
+      </button>
+    </h3>
+  );
+
   return (
     <>
       <header className="surah-library__head">
         <h2 id="surah-library-title" className="surah-library__title" ref={headingRef} tabIndex={-1}>
           {title}
         </h2>
-        {profile?.subtitle ? <p className="surah-library__subtitle">{profile.subtitle}</p> : null}
+        {/* R239 — every section of the page at once, in the title bar. */}
+        {keys.length > 1 ? (
+          <div className="surah-library__toolbar">
+            <button type="button" className="hdiagram__action" onClick={() => setOpen(new Set(keys))}>
+              {t('content.bySurah.openAll')}
+            </button>
+            <button type="button" className="hdiagram__action" onClick={() => setOpen(new Set())}>
+              {t('content.bySurah.closeAll')}
+            </button>
+          </div>
+        ) : null}
       </header>
 
       {profile && profile.lines.length > 0 ? (
@@ -65,21 +110,20 @@ export function SurahPage({
         </div>
       ) : null}
 
-      {profile && profile.diagrams.length > 0 ? (
+      {diagrams.length > 0 ? (
         <section
           id="surah-diagrams"
           className="surah-library__section surah-library__section--diagrams"
           aria-labelledby="surah-diagrams-title"
         >
-          <h3 id="surah-diagrams-title" className="surah-library__sectionTitle">
-            <Icon name="book" size={18} />
-            {t('content.bySurah.section.diagrams')}
-          </h3>
-          <div className="humanity__diagrams surah-library__diagrams">
-            {profile.diagrams.map((diagram) => (
-              <HumanityDiagram key={diagram.title} diagram={diagram} heading={title} />
-            ))}
-          </div>
+          {heading('diagrams', 'book', t('content.bySurah.section.diagrams'))}
+          {open.has('diagrams') ? (
+            <div id="surah-diagrams-body" className="humanity__diagrams surah-library__diagrams">
+              {diagrams.map((diagram) => (
+                <HumanityDiagram key={diagram.title} diagram={diagram} heading={title} />
+              ))}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -90,24 +134,36 @@ export function SurahPage({
           className={`surah-library__section surah-library__section--${section.key}`}
           aria-labelledby={`surah-${section.key}-title`}
         >
-          <h3 id={`surah-${section.key}-title`} className="surah-library__sectionTitle">
-            <Icon name={section.icon} size={18} />
-            {t(`content.bySurah.section.${section.key}`)}
-          </h3>
-          {section.key === 'listen' ? (
-            <ol className="surah-library__tracks">
-              {section.items.map((item, index) => (
-                <AudioTrack
-                  key={item.id}
-                  item={item}
-                  index={index + 1}
-                  accessToken={accessToken}
-                  activeChildId={activeChildId}
+          {heading(section.key, section.icon, t(`content.bySurah.section.${section.key}`))}
+          {!open.has(section.key) ? null : section.key === 'listen' ? (
+            <div id={`surah-${section.key}-body`}>
+              <label className="surah-library__autonext">
+                <input
+                  type="checkbox"
+                  checked={autoNext}
+                  onChange={(event) => {
+                    setAutoNext(event.target.checked);
+                    storeAutoNext(event.target.checked);
+                  }}
                 />
-              ))}
-            </ol>
+                {t('content.bySurah.autoNext')}
+              </label>
+              <ol className="surah-library__tracks">
+                {section.items.map((item, index) => (
+                  <AudioTrack
+                    key={item.id}
+                    item={item}
+                    index={index + 1}
+                    accessToken={accessToken}
+                    activeChildId={activeChildId}
+                    cued={cue === index}
+                    onFinished={() => setCue(autoNext && index + 1 < section.items.length ? index + 1 : null)}
+                  />
+                ))}
+              </ol>
+            </div>
           ) : section.key === 'see' ? (
-            <ul className="surah-library__gallery">
+            <ul id={`surah-${section.key}-body`} className="surah-library__gallery">
               {section.items.map((item) => (
                 <ImageTile
                   key={item.id}
@@ -119,7 +175,7 @@ export function SurahPage({
               ))}
             </ul>
           ) : (
-            <ul className="content-list">
+            <ul id={`surah-${section.key}-body`} className="content-list">
               {section.items.map((item) => (
                 <ContentCard key={item.id} item={item} onOpen={onOpen} />
               ))}
@@ -132,13 +188,14 @@ export function SurahPage({
 }
 
 /**
- * **R212 — «شرائح الدروس»: a lesson's slides.** Nothing stored says a file is
- * slides, so the Owner chose the title: a file whose title says «شرائح», or a
- * presentation file (PowerPoint, OpenDocument). Everything else to read is
+ * **R212 — the lesson's handout; R239 — «مطبوعات الدروس»** (the Owner,
+ * 2026-10-25: «replace the usage of the word شرائح with the word مطبوع»).
+ * Nothing stored says a file is one, so the title does: «مطبوع» (or the
+ * former «شرائح»), or a presentation file. Everything else to read is
  * «ملخصات ومذكرات».
  */
 export function isSlides(item: Pick<ContentItem, 'title' | 'mime_type'>): boolean {
-  return item.title.includes('شرائح') || /presentation|powerpoint/i.test(item.mime_type);
+  return /مطبوع|شرائح/.test(item.title) || /presentation|powerpoint/i.test(item.mime_type);
 }
 
 const isReading = (item: ContentItem): boolean => item.kind === 'pdf' || item.kind === 'document';
@@ -157,10 +214,20 @@ const SECTIONS: readonly {
 ];
 
 /** One playing at a time: starting a lesson pauses any other on the page. */
-function pauseOthers(event: SyntheticEvent<HTMLAudioElement>): void {
+function pauseOthers(current: HTMLAudioElement): void {
   for (const audio of document.querySelectorAll('audio')) {
-    if (audio !== event.currentTarget) audio.pause();
+    if (audio !== current) audio.pause();
   }
+}
+
+/** `754` → «12:34»; `3754` → «1:02:34». */
+export function clock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return h > 0 ? `${String(h)}:${pad(m)}:${pad(s % 60)}` : `${String(m)}:${pad(s % 60)}`;
 }
 
 /**
@@ -169,31 +236,44 @@ function pauseOthers(event: SyntheticEvent<HTMLAudioElement>): void {
  * **R223 (the Owner, 2026-10-16).** A public lesson carries its stable address
  * (`stream_url`, §3.1), so its player shows at once and plays in ONE click;
  * `preload="none"` keeps the page from fetching any audio until then. A
- * private one still mints its URL on «استماع» (TD-12).
+ * private one still mints its URL on «استماع» (TD-12). Where it stopped is
+ * kept on this device; a URL that expires mid-play is renewed from the same
+ * second.
  *
- * - **Where it stopped is kept on this device** (`localStorage`, per item):
- *   it opens there next time, and finishing it forgets the place.
- * - **A URL that expires mid-play is renewed.** A 10-minute signature cut a
- *   1-hour lesson at its tenth minute, reading as «ended»; an error, or an end
- *   before the real end, mints again and carries on from the same second.
+ * **R239 (the Owner, 2026-10-25) — its own controls**: play/pause, «−10 ث»,
+ * and a bar whose listened part is the logo's orange and the rest the same
+ * orange, lighter — kept on this device, so a lesson already heard reads as
+ * heard. When it ends, the page plays the next one (`onFinished`; on by
+ * default, «تشغيل التالي تلقائيًا»).
  */
 function AudioTrack({
   item,
   index,
   accessToken,
   activeChildId,
+  cued,
+  onFinished,
 }: {
   item: SurahItem;
   index: number;
   accessToken: string | null;
   activeChildId: string | null;
+  /** R239 — the previous lesson just ended: start this one. */
+  cued: boolean;
+  onFinished: () => void;
 }): ReactNode {
   const direct = item.stream_url ?? null;
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'missing'>(direct ? 'ready' : 'idle');
   const [url, setUrl] = useState<string | null>(direct);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [current, setCurrent] = useState<number>(() => savedPlace(item.id) ?? 0);
+  const [duration, setDuration] = useState<number>(() => savedDuration(item.id) ?? 0);
   /** Set when a renewed URL must resume where the old one stopped. */
   const resumeAt = useRef<number | null>(null);
   const renewals = useRef(0);
+  /** Play as soon as the audio is ready (a click on a private lesson, or a cue). */
+  const playWhenReady = useRef(false);
 
   async function mint(): Promise<string | null> {
     try {
@@ -205,6 +285,7 @@ function AudioTrack({
 
   async function load(): Promise<void> {
     setState('loading');
+    playWhenReady.current = true;
     const minted = await mint();
     if (minted === null) {
       setState('missing');
@@ -222,16 +303,38 @@ function AudioTrack({
     }
     renewals.current += 1;
     resumeAt.current = audio.currentTime;
+    playWhenReady.current = true;
     const minted = await mint();
     if (minted === null) {
       setState('missing');
       return;
     }
-    // A stable address is the same string: re-assigning it reloads it all the same.
     audio.src = minted;
     audio.load();
     setUrl(minted);
   }
+
+  function play(): void {
+    const audio = audioRef.current;
+    if (!audio) {
+      void load();
+      return;
+    }
+    pauseOthers(audio);
+    // A finished lesson starts again from the beginning.
+    if (Number.isFinite(audio.duration) && audio.currentTime >= audio.duration - 1) audio.currentTime = 0;
+    void audio.play().catch(() => undefined);
+  }
+
+  // R239 — the previous lesson ended: this one starts.
+  useEffect(() => {
+    if (!cued) return;
+    if (state === 'ready') play();
+    else void load();
+  }, [cued]);
+
+  const total = duration > 0 ? duration : 0;
+  const listened = total > 0 ? Math.min(100, (current / total) * 100) : 0;
 
   return (
     <li className="surah-track">
@@ -241,31 +344,96 @@ function AudioTrack({
       <div className="surah-track__body">
         <p className="surah-track__title">{item.title}</p>
         {item.description ? <p className="surah-track__description">{item.description}</p> : null}
-        <p className="surah-track__meta">
-          {item.teacher_display_name ? <span>{authorLine(item)}</span> : null}
-          {item.subjectName ? <span>{item.subjectName}</span> : null}
-          <time dateTime={item.published_on}>{formatDate(item.published_on)}</time>
-        </p>
+        {/* R239 — only who teaches it; the Subject and the date said nothing the page did not. */}
+        {item.teacher_display_name ? (
+          <p className="surah-track__meta">
+            <span>{authorLine(item)}</span>
+          </p>
+        ) : null}
+        {state === 'missing' ? (
+          <p className="surah-track__error" role="status">
+            {t('content.bySurah.unavailable')}
+          </p>
+        ) : (
+          <div className="surah-player">
+            <button
+              type="button"
+              className="surah-player__button surah-player__button--play"
+              disabled={state === 'loading'}
+              onClick={() => (playing ? audioRef.current?.pause() : play())}
+              aria-label={`${playing ? t('content.bySurah.pause') : t('content.bySurah.play')} — ${item.title}`}
+            >
+              <span aria-hidden="true">{playing ? '❚❚' : '▶'}</span>
+            </button>
+            <button
+              type="button"
+              className="surah-player__button"
+              disabled={state !== 'ready'}
+              onClick={() => {
+                const audio = audioRef.current;
+                if (audio) audio.currentTime = Math.max(0, audio.currentTime - 10);
+              }}
+              aria-label={t('content.bySurah.back10')}
+              title={t('content.bySurah.back10')}
+            >
+              <span aria-hidden="true">↺10</span>
+            </button>
+            <input
+              type="range"
+              className="surah-player__bar"
+              min={0}
+              max={total || 1}
+              step={1}
+              value={Math.min(current, total || 1)}
+              disabled={state !== 'ready' || total === 0}
+              style={{ ['--listened' as string]: `${String(listened)}%` }}
+              aria-label={t('content.bySurah.seek')}
+              aria-valuetext={`${clock(current)} / ${clock(total)}`}
+              onChange={(event) => {
+                const at = Number(event.target.value);
+                setCurrent(at);
+                if (audioRef.current) audioRef.current.currentTime = at;
+              }}
+            />
+            <span className="surah-player__time" dir="ltr">
+              {clock(current)} / {clock(total)}
+            </span>
+          </div>
+        )}
         {state === 'ready' && url ? (
           <audio
-            className="surah-track__player"
-            controls
-            // Played on «استماع» — the reader already asked; a direct player waits.
-            autoPlay={!direct}
+            ref={audioRef}
             preload={direct ? 'none' : 'metadata'}
             src={url}
-            onPlay={pauseOthers}
+            onPlay={(event) => {
+              pauseOthers(event.currentTarget);
+              setPlaying(true);
+            }}
+            onPause={(event) => {
+              setPlaying(false);
+              keepPlace(item.id, event.currentTarget.currentTime, true);
+            }}
             onLoadedMetadata={(event) => {
               const audio = event.currentTarget;
+              if (Number.isFinite(audio.duration)) {
+                setDuration(audio.duration);
+                keepDuration(item.id, audio.duration);
+              }
               const at = resumeAt.current ?? savedPlace(item.id);
               resumeAt.current = null;
               if (at !== null && at > 0 && (!Number.isFinite(audio.duration) || at < audio.duration - 5)) {
                 audio.currentTime = at;
               }
-              if (renewals.current > 0) void audio.play().catch(() => undefined);
+              if (playWhenReady.current) {
+                playWhenReady.current = false;
+                pauseOthers(audio);
+                void audio.play().catch(() => undefined);
+              }
             }}
-            onTimeUpdate={(event) => keepPlace(item.id, event.currentTarget.currentTime)}
-            onPause={(event) => keepPlace(item.id, event.currentTarget.currentTime, true)}
+            onTimeUpdate={(event) => {
+              setCurrent(event.currentTarget.currentTime);
+              keepPlace(item.id, event.currentTarget.currentTime);
+            }}
             onError={(event) => void renew(event.currentTarget)}
             onEnded={(event) => {
               const audio = event.currentTarget;
@@ -274,41 +442,31 @@ function AudioTrack({
                 void renew(audio);
                 return;
               }
-              forgetPlace(item.id);
+              // Heard to the end: the bar stays full (R239), and the next one plays.
+              keepPlace(item.id, audio.duration, true);
+              setCurrent(audio.duration);
+              setPlaying(false);
+              onFinished();
             }}
           >
             {t('content.previewUnsupported')}
           </audio>
-        ) : state === 'missing' ? (
-          <p className="surah-track__error" role="status">
-            {t('content.bySurah.unavailable')}
-          </p>
         ) : null}
       </div>
-      {state === 'ready' ? null : (
-        <Button
-          variant="primary"
-          className="surah-track__play"
-          disabled={state === 'loading'}
-          onClick={() => void load()}
-          aria-label={`${t('content.bySurah.play')} — ${item.title}`}
-        >
-          <Icon name="audio" size={18} />
-          {state === 'loading' ? t('states.loading') : t('content.bySurah.play')}
-        </Button>
-      )}
     </li>
   );
 }
 
-/* ── R223 — where a lesson was stopped, on this device ──────────────────── */
+/* ── R223 — where a lesson was stopped, on this device; R239 — and its length ── */
 
 const placeKey = (id: string): string => `bodour.audio.${id}`;
+const durationKey = (id: string): string => `bodour.audio.${id}.length`;
+const AUTO_NEXT_KEY = 'bodour.audio.autoNext';
 const lastWrite = new Map<string, number>();
 
-function savedPlace(id: string): number | null {
+function readNumber(key: string): number | null {
   try {
-    const raw = window.localStorage.getItem(placeKey(id));
+    const raw = window.localStorage.getItem(key);
     const at = raw === null ? NaN : Number(raw);
     return Number.isFinite(at) ? at : null;
   } catch {
@@ -316,24 +474,37 @@ function savedPlace(id: string): number | null {
   }
 }
 
-/** Written at most every 5 s while playing, and at once on pause. */
+function writeValue(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage refused (private window, full): it is simply not kept.
+  }
+}
+
+const savedPlace = (id: string): number | null => readNumber(placeKey(id));
+const savedDuration = (id: string): number | null => readNumber(durationKey(id));
+const keepDuration = (id: string, seconds: number): void => writeValue(durationKey(id), String(Math.floor(seconds)));
+
+/** Written at most every 5 s while playing, and at once on pause or end. */
 function keepPlace(id: string, at: number, now = false): void {
   const last = lastWrite.get(id) ?? 0;
   if (!now && Date.now() - last < 5000) return;
   lastWrite.set(id, Date.now());
+  writeValue(placeKey(id), String(Math.floor(at)));
+}
+
+/** R239 — on unless the reader turned it off on this device. */
+function readAutoNext(): boolean {
   try {
-    window.localStorage.setItem(placeKey(id), String(Math.floor(at)));
+    return window.localStorage.getItem(AUTO_NEXT_KEY) !== 'off';
   } catch {
-    // Storage refused (private window, full): the place is simply not kept.
+    return true;
   }
 }
 
-function forgetPlace(id: string): void {
-  try {
-    window.localStorage.removeItem(placeKey(id));
-  } catch {
-    // Nothing to forget.
-  }
+function storeAutoNext(on: boolean): void {
+  writeValue(AUTO_NEXT_KEY, on ? 'on' : 'off');
 }
 
 /** A drawing or map of the Surah's ideas, shown as itself; opens full size. */

@@ -75,7 +75,10 @@ describe('SurahLibrary', () => {
     expect(out).toContain('البقرة');
     expect(out).toContain('يس');
     expect(out).toContain('aria-current="true"');
-    expect(out).toContain('<figure class="hdiagram');
+    // R239 — several diagrams: «خطاطة السورة» is offered closed, the recordings in view.
+    expect(out).toContain(ar.content.bySurah.section.diagrams);
+    expect(out).toMatch(/aria-expanded="false" aria-controls="surah-diagrams-body"/);
+    expect(out).not.toContain('<figure class="hdiagram');
   });
 
   it('R212 — a Surah reads: its name, its traits, its diagrams (closed), then its shelves in the Owner\'s order', () => {
@@ -91,7 +94,11 @@ describe('SurahLibrary', () => {
     ].map((text) => out.indexOf(text));
     expect(order.every((at) => at > -1)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
-    expect(out).not.toContain('aria-expanded="true"');
+    // Every tree opens closed (R212); R239 — every section is open but the diagrams, when several.
+    expect(out).not.toContain('is-branch is-open');
+    // R239 — no subtitle under the name, no title on a diagram card.
+    expect(out).not.toContain('surah-library__subtitle');
+    expect(out).not.toContain('hdiagram__title');
     // Nothing that repeats a section or pushes the Surah down.
     expect(out).not.toContain('surah-library__chip');
     expect(out).not.toContain('surah-library__lede');
@@ -99,7 +106,8 @@ describe('SurahLibrary', () => {
     expect(out).not.toContain('surah-library__more');
   });
 
-  it('R212 — slides are what their title calls «شرائح», or a presentation file', () => {
+  it('R212/R239 — a handout is what its title calls «مطبوع» (or «شرائح»), or a presentation file', () => {
+    expect(isSlides({ title: 'مطبوع تفسير سورة البقرة', mime_type: 'application/pdf' })).toBe(true);
     expect(isSlides({ title: 'شرائح حصة تفسير سورة مريم', mime_type: 'application/pdf' })).toBe(true);
     expect(isSlides({ title: 'درس', mime_type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })).toBe(true);
     expect(isSlides({ title: 'ملخص سورة مريم', mime_type: 'application/pdf' })).toBe(false);
@@ -115,7 +123,7 @@ describe('SurahLibrary', () => {
     expect(out).toContain(ar.content.bySurah.section.read);
     expect(out).toContain(ar.content.bySurah.section.see);
     expect(out).not.toContain(ar.content.bySurah.section.watch);
-    expect(out).toContain('surah-track__play');
+    expect(out).toContain('surah-player__button--play');
   });
   it('honours a shared ?surah=', () => {
     expect(html(36)).toContain('سورة يس');
@@ -169,7 +177,17 @@ describe('R223 — a public lesson plays in one click', async () => {
 
   it('keeps «استماع» for a lesson with no stable address (a private one)', () => {
     const html = render(lesson({ stream_url: null }));
+    // R239 — the same player; the URL is minted on its first play.
     expect(html).not.toContain('<audio');
-    expect(html).toMatch(/surah-track__play[" ]/);
+    expect(html).toContain('surah-player__button--play');
+  });
+});
+
+describe('R239 — the lesson player', async () => {
+  const { clock } = await import('./surah-page.js');
+  it('says the time as a reader reads a clock', () => {
+    expect(clock(0)).toBe('0:00');
+    expect(clock(754)).toBe('12:34');
+    expect(clock(3754)).toBe('1:02:34');
   });
 });

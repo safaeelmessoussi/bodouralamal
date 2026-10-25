@@ -44,8 +44,9 @@ export function HumanityDiagram({
   const all = branchKeys(diagram.root);
   return (
     <figure className="hdiagram">
-      <figcaption className="hdiagram__head">
-        <span className="hdiagram__title">{diagram.title}</span>
+      {/* R239 — no title on the card: the section says «خطاطة السورة» and the
+          root box names the diagram («التوحيد»). */}
+      <figcaption className="hdiagram__head" aria-label={diagram.root.label}>
         {all.length > 0 ? (
           <span className="hdiagram__actions">
             <button

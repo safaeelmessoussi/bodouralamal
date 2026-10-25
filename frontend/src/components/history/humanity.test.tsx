@@ -72,21 +72,27 @@ describe('R203 — «نظرة شاملة», the content from the Owner’s board
     expect(TIMELINE.at(-1)!.label).toBe('اليوم');
   });
 
-  it('R204 — draws every Surah’s axes as a diagram, al-Fatiha with its seven verses', () => {
+  it('R239 — only a Surah with its «مطبوع» has diagrams, and its «خطاطة السورة» stands on the Surah’s axis', () => {
     const surahs = all(HUMANITY).filter((n) => n.surah !== undefined);
+    const withMatbou = [1, 2, 3, 4, 5, 6, 19];
     for (const s of surahs) {
-      expect(s.diagrams?.length, s.title).toBeGreaterThan(0);
+      expect(s.subtitle, s.title).toBeUndefined();
+      if (!withMatbou.includes(s.surah!)) {
+        expect(s.diagrams, s.title).toBeUndefined();
+        continue;
+      }
+      expect(s.diagrams![0]!.title, s.title).toBe('خطاطة السورة');
+      // The root is the axis, never the Surah's name again.
+      const name = s.title.replace(/^سورة\s+/, '');
+      expect(s.diagrams![0]!.root.label.startsWith(name), s.title).toBe(false);
+      expect(s.diagrams![0]!.root.label.startsWith(s.title), s.title).toBe(false);
       for (const d of s.diagrams!) for (const b of boxes(d.root)) {
         expect(b.label.trim().length).toBeGreaterThan(0);
-        // A colour is never read as a box's sentence.
         expect(b.text ?? '', b.label).not.toMatch(/^\||^(gold|blue|violet|orange|green)$/);
       }
-      // The axes are no longer listed as text: the diagram says them.
-      expect((s.lines ?? []).some((l) => l.startsWith('المحاور')), s.title).toBe(false);
     }
     const fatiha = surahs.find((s) => s.surah === 1)!;
-    const verses = fatiha.diagrams![0]!.root.children!.map((v) => v.text);
-    expect(verses).toEqual(['الآية 1', 'الآية 2 — الرحمة', 'الآية 3 — المُلك', 'الآية 4', 'الآية 5 — طلب الهداية بصفة الرحمة', 'الآية 6 — أهل العلم والعمل', 'الآية 7']);
+    // Its other diagrams stay, as they were.
     expect(fatiha.diagrams!.map((d) => d.title)).toEqual(['خطاطة السورة', 'التوحيد في السورة', 'أقسام الناس', 'مدار الأسماء والصفات', 'الحمد والشكر والتسبيح', 'مراتب العلم']);
   });
 
@@ -143,17 +149,14 @@ describe('R203 — «نظرة شاملة», the content from the Owner’s board
     }
   });
 
-  it('R213 — a Surah says only what the Owner kept: its type, naming, opening and close, prevailing name, axes', () => {
-    const kept = /^(نوع السورة|سبب التسمية|علاقة أولها بآخرها|الاسم المهيمن في السورة|المحور الأساسي|المرتكزات الأساسية|محور السورة|ثمرة التقوى|اسم الله المهيمن في السورة):/;
+  it('R239 — a Surah says the same five things, in one order, and nothing else', () => {
+    const ORDER = ['نوع السورة', 'سبب التسمية', 'علاقة أولها بآخرها', 'التقوى في السورة', 'اسم الله المهيمن في السورة'];
     for (const surah of all(HUMANITY).filter((n) => n.surah !== undefined)) {
-      // A heading («…:») titles the lines after it; every other line under a
-      // heading is one of its points.
-      let underHeading = false;
-      for (const line of surah.lines ?? []) {
-        if (line.endsWith(':')) underHeading = true;
-        else if (!underHeading) expect(line, surah.id).toMatch(kept);
-        expect(line, surah.id).not.toMatch(/^(عدد الآيات|مكانتها|زمن النزول|من أسمائها):/);
-      }
+      const labels = (surah.lines ?? []).map((line) => line.split(':')[0]!);
+      for (const label of labels) expect(ORDER, surah.id).toContain(label);
+      expect([...labels].sort((x, y) => ORDER.indexOf(x) - ORDER.indexOf(y)), surah.id).toEqual(labels);
+      // The axes and pillars are the diagram's, not the card's.
+      expect(labels.some((l) => /المحور|المرتكزات|محور السورة/.test(l)), surah.id).toBe(false);
     }
   });
 
@@ -255,7 +258,9 @@ describe('R203 — the page', () => {
   it('R204 — draws a diagram as a tree whose branches open and close', () => {
     at('?view=history&node=seal/makki/al-fatiha');
     const page = renderToStaticMarkup(<HumanityTimeline />);
-    expect(page.match(/<figure class="hdiagram/g)?.length).toBe(6);
+    // R239 — al-Fatiha has several diagrams: «خطاطة السورة» is offered closed.
+    expect(page).toMatch(/aria-expanded="false" aria-controls="surah-diagrams-body"/);
+    expect(page.match(/<figure class="hdiagram/g)).toBeNull();
     const diagram = { title: 'خطاطة', root: { label: 'ج', children: [{ label: 'أ', text: '﴿اقْرَأْ﴾', tone: 'gold' as const }, { label: 'ب', children: [{ label: 'ت' }] }] } };
     // R212 — a tree opens closed: its trunk, and how many branches it holds.
     const closed = renderToStaticMarkup(<HumanityDiagram diagram={diagram} />);
@@ -263,7 +268,9 @@ describe('R203 — the page', () => {
     expect(closed).not.toContain('aria-expanded="true"');
     expect(closed).not.toContain('class="tone-prophets"');
     expect(closed).toContain('+2');
-    expect(page).not.toContain('aria-expanded="true"');
+    expect(page).not.toContain('is-branch is-open');
+    // R239 — a diagram card has no title of its own.
+    expect(closed).not.toContain('hdiagram__title');
     const html = renderToStaticMarkup(<HumanityDiagram diagram={diagram} startOpen />);
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('class="tone-prophets"');
@@ -332,12 +339,11 @@ describe('R203 — the page', () => {
 
 describe('R223 — every Surah with diagrams opens on «خطاطة السورة»', async () => {
   const { SURAH_DIAGRAMS } = await import('./surah-diagrams.js');
-  it('its first diagram, for every Surah that has any; Maryam\'s holds its five parts', () => {
+  it('its first diagram, for every Surah that has any; Maryam keeps its five parts beside it', () => {
     for (const surah of SURAH_DIAGRAMS.values()) {
       if (surah.diagrams.length > 0) expect(surah.diagrams[0]!.title, surah.name).toBe('خطاطة السورة');
     }
     const maryam = SURAH_DIAGRAMS.get(19)!;
-    expect(maryam.diagrams[0]!.root.children).toHaveLength(5);
-    expect(maryam.diagrams.slice(1).map((d) => d.root.label)).toEqual(maryam.diagrams[0]!.root.children!.map((c) => c.label));
+    expect(maryam.diagrams.slice(1)).toHaveLength(5);
   });
 });

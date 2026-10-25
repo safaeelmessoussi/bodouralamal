@@ -144,7 +144,8 @@ export function detailSections(lines: readonly string[]): DetailSection[] {
     }
     const colon = line.indexOf(':');
     const label = colon > 0 ? line.slice(0, colon).trim() : '';
-    if (colon > 0 && label.length <= 32 && !label.includes('﴿') && !label.includes('«')) {
+    // R239 — 64: «The name of Allah that prevails in the Surah» is a label too.
+    if (colon > 0 && label.length <= 64 && !label.includes('﴿') && !label.includes('«')) {
       current.lines.push({ kind: 'pair', label, text: line.slice(colon + 1).trim() });
     } else {
       current.lines.push({ kind: 'text', text: line });

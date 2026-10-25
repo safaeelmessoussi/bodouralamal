@@ -433,3 +433,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Migration `r238_audience_tracks`; class `dimensions.tracks` (filters R169 §7's Level expansion; written on create/edit/split), event `tracks` (expanded to `EventLevel` when no Level); returned on lists, `dimensions`, calendar occurrences.
 - `TrackFilter` narrows Levels, never selects (hint removed); `AudienceSelection.tracks`; event Levels narrowed by tracks; chip part `track`, dialog «المسار» row; six-language words.
 - Integration: class and event with a track and no Level; pinned shapes gain `tracks`. Chrome: «صغار» keeps «مستويات: الكل» and narrows its list.
+
+## 2026-10-25 — SRS Revision 239: the Surah page from the «مطبوع», and a lesson player
+- `surah-page.tsx`: own player (play/pause, −10 s, listened bar in `--color-listened`/`-ahead`, length kept per device, auto-next on by default), track line = teacher only; sections collapsible + «فتح الكل / طيّ الكل»; no subtitle; `isSlides` reads «مطبوع». `humanity-diagram.tsx`: no card title.
+- `humanity-data.ts`: seven Surahs rebuilt from their «مطبوع» decks (read slide by slide; verses from the KFGQPC Warsh text by their words); 8/9/10 lose diagrams; unified five-field cards; locales re-keyed and translated.
+- Chrome: tones served locally — play, bar 19 %, −10, end → 100 % and the next lesson playing.
