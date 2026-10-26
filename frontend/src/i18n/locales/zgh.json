@@ -602,7 +602,6 @@
  "content.previewDownloadOnly": "ⴰⵏⴰⵡ ⴰⴷ ⵏ ⵉⴼⴰⵢⵍⵓⵜⵏ ⵉⵜⵜⵓⵣⴷⴰⵎ, ⵓⵔ ⵉⵜⵜⵓⵙⵎⴰⵍ ⴳ ⵜⵙⵏⵙⵜ.",
  "content.previewUnsupported": "ⴰⵏⴰⵣⵔⴰⴳ ⴰⴷ ⵓⵔ ⵉⵣⵎⵉⵔ ⴰⴷ ⵉⵙⵙⵏⵜⵉ ⴰⴼⴰⵢⵍⵓ ⴰⴷ — ⵉⵣⵎⵔ ⴰⴷ ⵉⵜⵜⵓⵣⴷⴰⵎ.",
  "content.previewPdfPages": "ⵜⵜⵓⵙⵓⵏⵖⴰⵏⵜ ⵜⵙⵏⵉⵡⵉⵏ… {done} ⵙⴳ {total}",
- "content.openFile": "ⴰⵕⵥⵥⵓⵎ ⵏ ⵓⴼⴰⵢⵍⵓ ⴳ ⵓⵎⵙⴽⵏ ⵏ ⵓⵏⴰⵍⵍⴰⵙ",
  "nav.language": "ⵜⵓⵜⵍⴰⵢⵜ",
  "calendar.hijriMonths": [
   "ⵎⵓⵃⴰⵔⵔⴰⵎ",
@@ -619,7 +618,7 @@
   "ⴷⵓ ⵍⵃⵉⵊⵊⴰ"
  ],
  "content.history.era.rashidun": "ⵍⵅⵉⵍⴰⴼⴰ ⵅⴼ ⵓⴱⵔⵉⴷ ⵏ ⵜⵏⴱⵓⵜ",
- "content.bySurah.section.diagrams": "ⴰⵙⵖⵡⵙ ⵏ ⵜⵙⵓⵕⵜ",
+ "content.bySurah.section.diagrams": "ⵉⵙⵖⵡⴰⵙⵏ ⵏ ⵜⵙⵓⵕⵜ",
  "content.bySurah.section.slides": "ⵉⵙⵏⵢⵉⵍⵏ ⵉⵜⵜⵓⵙⵉⴳⵣⵏ ⵏ ⵜⵎⵙⵙⵓⵔⵉⵏ",
  "content.author.role.teacher": "ⴰⵙⵍⵎⴷ",
  "content.author.role.assistant": "ⵜⴰⵡⵉⵙⵉ ⴳ ⵓⵙⵍⵎⴷ",

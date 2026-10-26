@@ -400,12 +400,33 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  gap: var(--space-2);
 }
+/* R243 — no frame around the document: the stage is the document's room. */
 .dialog--full .preview__stage {
   flex: 1;
   min-height: 0;
   grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-  padding: var(--space-2);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+}
+.dialog--full .preview__pdfPages {
+  padding: 0;
+}
+/* «تنزيل الملف» as small as a button can be and still be pressed. */
+.dialog--full .preview__actions .btn {
+  min-block-size: 2.25rem;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-xs);
+}
+.dialog--full .preview__sessions {
+  margin-block-start: 0;
+  padding-block-start: var(--space-2);
+}
+.dialog--full .preview__sessions h3 {
+  margin-block-end: var(--space-1);
+  font-size: var(--font-size-xs);
 }
 .dialog--full .preview__pdf,
 .dialog--full .preview__pdfInPage,
@@ -948,8 +969,11 @@
   margin-block-start: var(--space-2);
 }
 .surah-player__button {
-  display: inline-grid;
-  place-items: center;
+  /* R243 — a row: the drawn arrow beside «10». */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15em;
   flex: none;
   min-inline-size: 2.5rem;
   block-size: 2.5rem;

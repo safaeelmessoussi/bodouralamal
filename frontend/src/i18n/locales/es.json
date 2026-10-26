@@ -602,7 +602,6 @@
  "content.previewDownloadOnly": "Este tipo de archivo se descarga y no se muestra dentro de la plataforma.",
  "content.previewUnsupported": "El navegador no permite reproducir este archivo; se puede descargar.",
  "content.previewPdfPages": "Dibujando las páginas… {done} de {total}",
- "content.openFile": "Abrir el archivo en el visor del dispositivo",
  "nav.language": "Idioma",
  "calendar.hijriMonths": [
   "Muharram",
@@ -619,7 +618,7 @@
   "Du al-Hiyya"
  ],
  "content.history.era.rashidun": "Un califato según el camino de la profecía",
- "content.bySurah.section.diagrams": "Esquema de la sura",
+ "content.bySurah.section.diagrams": "Esquemas de la sura",
  "content.bySurah.section.slides": "Apuntes impresos de las clases",
  "content.author.role.teacher": "Enseñanza",
  "content.author.role.assistant": "Docente asistente",

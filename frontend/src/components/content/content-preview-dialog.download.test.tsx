@@ -44,15 +44,15 @@ describe('the download button mints its own attachment-disposed URL', () => {
  * says so through `navigator.pdfViewerEnabled === false`. A browser that does
  * not answer (Safari, `undefined`) keeps the frame — it renders inline.
  */
-describe('a PDF on a device without an inline viewer opens in the device viewer', () => {
+describe('a PDF on a device without an inline viewer is drawn in the page', () => {
   it('asks the browser (`pdfViewerEnabled === false`), never the user agent string', () => {
     expect(source).toContain("navigator.pdfViewerEnabled === false");
     expect(source).not.toMatch(/userAgent|Android|iPhone/);
   });
 
-  it('offers «فتح الملف» as a new top-level context and keeps the frame otherwise', () => {
-    expect(source).toContain("window.open(url, '_blank', 'noopener,noreferrer')");
-    expect(source).toContain("t('content.openFile')");
+  it('R243 — no «فتح الملف في عارض الجهاز»; the frame otherwise', () => {
+    expect(source).toContain('<PdfCanvasPreview url={url}');
+    expect(source).not.toContain("t('content.openFile')");
     expect(source).toContain('<iframe className="preview__pdf" src={url} title={item.title} />');
   });
 });

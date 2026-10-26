@@ -23,8 +23,8 @@ import { PdfCanvasPreview } from './pdf-canvas-preview.js';
  * |           | where the browser has no inline PDF viewer   |
  * |           | (a phone: `navigator.pdfViewerEnabled` is     |
  * |           | `false`), drawn in the page by pdf.js        |
- * |           | (R190 §5; R184 §6's «فتح الملف» stays as a   |
- * |           | second way)                                  |
+ * |           | (R190 §5; R184 §6's «فتح الملف» withdrawn by |
+ * |           | R243 — download is the way out)              |
  * | Video     | Native `<video controls>`, plus download     |
  * | Audio     | Native `<audio controls>`, plus download     |
  * | Image     | Shown at full width, plus download           |
@@ -191,19 +191,12 @@ function PreviewSurface({ item, url, onError }: { item: ContentItem; url: string
       // PDF viewer and paints a broken-file icon into the frame. The browser
       // says so itself (`pdfViewerEnabled === false`; a browser that does not
       // answer — Safari — still renders inline), so the document is DRAWN in
-      // the page by pdf.js instead, with «فتح الملف» (the device's own viewer)
-      // as a second way under it. The download button below stays.
+      // the page by pdf.js instead. The download button below stays.
       if (typeof navigator !== 'undefined' && navigator.pdfViewerEnabled === false) {
+        // R243 — the document alone («فتح الملف في عارض الجهاز» withdrawn).
         return (
           <div className="preview__pdfInPage">
             <PdfCanvasPreview url={url} title={item.title} onError={onError} />
-            <Button
-              variant="ghost"
-              icon="document"
-              onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
-            >
-              {t('content.openFile')}
-            </Button>
           </div>
         );
       }
@@ -292,18 +285,12 @@ function UsedInSessions({
         {sessions.map((occurrence) => (
           <li key={occurrence.id}>
             <a href={occurrenceHref(occurrence)}>
-              {/* Enough to identify the sitting without opening it: what it is,
-                  when, and which curriculum it belongs to. The date is formatted
-                  by the platform's one formatter (Arabic, TD-11). */}
+              {/* R243 — the session's title and when, nothing more (its Subject
+                  and Level withdrawn). The date is formatted by the platform's
+                  one formatter (TD-11). */}
               {occurrence.title} — {formatDate(occurrence.date)}
               {occurrence.start_time ? ` · ${occurrence.start_time}` : ''}
             </a>
-            {occurrence.level_name || occurrence.subject_name ? (
-              <span className="muted">
-                {' '}
-                {[occurrence.subject_name, occurrence.level_name].filter(Boolean).join(' · ')}
-              </span>
-            ) : null}
           </li>
         ))}
       </ul>

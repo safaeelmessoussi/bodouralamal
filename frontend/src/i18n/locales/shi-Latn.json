@@ -602,7 +602,6 @@
  "content.previewDownloadOnly": "Anaw ad n ifuyla ar ittusidr, ur ar ittbayyan ɣ ugensu n tɣrrit.",
  "content.previewUnsupported": "Amsnud ur izḍar ad isnkkr afaylu ad — izḍar ad ittusidr.",
  "content.previewPdfPages": "Ar ttyaranin tisniwin… {done} zɣ {total}",
- "content.openFile": "Arẓam n ufaylu ɣ umsknay n wallal",
  "nav.language": "Tutlayt",
  "calendar.hijriMonths": [
   "Lmuḥarram",
@@ -619,7 +618,7 @@
   "Ḍu lḥijja"
  ],
  "content.history.era.rashidun": "Lxilafa f nnhj n nnubuwwa",
- "content.bySurah.section.diagrams": "Asɣws n tsuṛt",
+ "content.bySurah.section.diagrams": "Isɣwasn n tsuṛt",
  "content.bySurah.section.slides": "Isnyiln ittusiggzn n tmssurin",
  "content.author.role.teacher": "Aslmd",
  "content.author.role.assistant": "Aɛawn ɣ uslmd",

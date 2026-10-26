@@ -453,3 +453,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `surah-page.tsx`: shelves listen/slides/read («ملخصات ومذكرات» takes drawings + videos; `see`/`watch` keys gone), SVG play/pause; `Dialog` `full` for `content-preview-dialog.tsx` (stage and media fill it).
 - `GET /library?author_id=<uuid>|none`, sort `author` (integration test); «مكتبة المحتوى» column + `AuthorPicker filter`; «الحجم» column, `formatSize`, `content.size`/`col.size` keys removed.
 - `.lede` → `--font-size-xs`; `SummitFigure asked={false}` in the show. `verify-sorting-headers.mjs` checks the author column instead of size.
+
+## 2026-10-26 — SRS Revision 243: the preview's height for the content, a backward arrow, «خطاطات السورة»
+- `dialog.css`/`content.css` `.dialog--full`: thin head/body, ellipsised title, 2 rem close, no stage border, compact `.btn`; `content-preview-dialog.tsx` drops «فتح الملف» (`content.openFile` gone in 7 catalogues) and the session's Subject · Level line.
+- `surah-page.tsx` «−10»: mirrored replay SVG; `section.diagrams` «خطاطات السورة»; `programs-show.tsx` graduation→question timer removed (test pins no `setTimeout` advance).
+- `verify-sorting-headers.mjs`: R198 §6 (all but «إجراءات» sort), «الاختبار» header — 17/17 on Localhost.

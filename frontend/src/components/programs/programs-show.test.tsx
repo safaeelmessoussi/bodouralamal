@@ -127,8 +127,8 @@ describe('ProgramsShow', () => {
     expect(question).toContain('العودة إلى الفئات');
   });
 
-  it('never advances by itself under reduced motion, and closes on Escape and on leaving full screen', () => {
-    expect(SHOW_SOURCE).toContain("state.kind !== 'graduation' || reduced");
+  it('never advances by itself (R243 — the question waits for the click), and closes on Escape and on leaving full screen', () => {
+    expect(SHOW_SOURCE).not.toContain('window.setTimeout(() => setState');
     expect(SHOW_SOURCE).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches");
     expect(SHOW_SOURCE).toContain("if (event.key === 'Escape') onClose();");
     expect(SHOW_SOURCE).toContain('if (!document.fullscreenElement) onClose();');

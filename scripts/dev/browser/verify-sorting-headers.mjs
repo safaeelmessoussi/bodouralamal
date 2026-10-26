@@ -179,24 +179,23 @@ if (whenHeader) {
 }
 
 /**
- * **The audit, in the browser: derived columns are NOT offered as sortable.**
- * A header that looks clickable and orders by nothing meaningful is the defect
- * the Owner asked to catch in both directions.
+ * **R198 §6 — every header sorts** (the Owner: «headers sort except on drag
+ * tables»), derived ones included («الهدف», «التكرار»); the action column
+ * never does.
  */
 const headers = JSON.parse(await evaluate(`JSON.stringify([...document.querySelectorAll('thead th')].map((h) => ({ label: h.textContent.trim(), sortable: !!h.querySelector('button') })))`));
 const sortableOf = (label) => headers.find((h) => h.label.startsWith(label))?.sortable;
-check('الهدف is NOT sortable — a derived audience description', sortableOf('الهدف') === false);
-check('التكرار is NOT sortable — a derived recurrence description', sortableOf('التكرار') === false);
 check('إجراءات is NOT sortable — an action column never is', sortableOf('إجراءات') === false);
-check('نوع العنصر, العنوان, التوقيت and الفرع ARE',
-  ['نوع العنصر', 'العنوان', 'التوقيت', 'الفرع'].every((l) => sortableOf(l) === true),
+check('every other header of الجدولة sorts (R198 §6)',
+  headers.length > 1 && headers.filter((h) => !h.label.startsWith('إجراءات')).every((h) => h.sortable),
   JSON.stringify(headers.map((h) => `${h.label}:${h.sortable}`)));
 
 /* ── The rule that matters: a draft-bearing sheet is never reordered ─────── */
 
 await goto('/admin/exam-grades');
-const examListSorts = await clickHeader('الامتحان');
-check('نقاط الامتحانات — the EXAM LIST sorts', examListSorts === 'ok', examListSorts);
+// «الامتحان» became «الاختبار» (the page «نقاط الاختبارات»).
+const examListSorts = await clickHeader('الاختبار');
+check('نقاط الاختبارات — the EXAM LIST sorts', examListSorts === 'ok', examListSorts);
 
 const sheetHeaders = await evaluate(`(() => {
   const open = [...document.querySelectorAll('button')].find((b) => /فتح|الدرجات/.test(b.textContent));

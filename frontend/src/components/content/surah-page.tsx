@@ -410,7 +410,14 @@ function AudioTrack({
               aria-label={t('content.bySurah.back10')}
               title={t('content.bySurah.back10')}
             >
-              <span aria-hidden="true">↺10</span>
+              {/* R243 — the arrow turns toward the start: in this right-to-left bar, rightwards. */}
+              <svg className="surah-player__glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path
+                  transform="matrix(-1 0 0 1 24 0)"
+                  d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"
+                />
+              </svg>
+              <span aria-hidden="true">10</span>
             </button>
             <input
               type="range"

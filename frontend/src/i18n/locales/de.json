@@ -602,7 +602,6 @@
  "content.previewDownloadOnly": "Dateien dieses Typs werden heruntergeladen und nicht in der Plattform angezeigt.",
  "content.previewUnsupported": "Dieser Browser kann die Datei nicht abspielen – sie kann heruntergeladen werden.",
  "content.previewPdfPages": "Seiten werden gerendert … {done} von {total}",
- "content.openFile": "Datei im Dateibetrachter des Geräts öffnen",
  "nav.language": "Sprache",
  "calendar.hijriMonths": [
   "Muharram",
@@ -619,7 +618,7 @@
   "Dhu l-Hiddscha"
  ],
  "content.history.era.rashidun": "Ein Kalifat nach dem Weg des Prophetentums",
- "content.bySurah.section.diagrams": "Schema der Sure",
+ "content.bySurah.section.diagrams": "Schemata der Sure",
  "content.bySurah.section.slides": "Skripte der Unterrichtsstunden",
  "content.author.role.teacher": "Unterricht",
  "content.author.role.assistant": "Assistenzlehrkraft",

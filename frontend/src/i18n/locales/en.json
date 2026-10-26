@@ -602,7 +602,6 @@
  "content.previewDownloadOnly": "This type of file is downloaded, not displayed within the platform.",
  "content.previewUnsupported": "This browser cannot play this file — it can be downloaded.",
  "content.previewPdfPages": "Drawing the pages… {done} of {total}",
- "content.openFile": "Open the file in the device's viewer",
  "nav.language": "Language",
  "calendar.hijriMonths": [
   "Muharram",
@@ -619,7 +618,7 @@
   "Dhu al-Hijja"
  ],
  "content.history.era.rashidun": "A caliphate on the way of prophethood",
- "content.bySurah.section.diagrams": "The Surah's diagram",
+ "content.bySurah.section.diagrams": "The Surah's diagrams",
  "content.bySurah.section.slides": "Lesson handouts",
  "content.author.role.teacher": "Teaching",
  "content.author.role.assistant": "Assistant teacher",

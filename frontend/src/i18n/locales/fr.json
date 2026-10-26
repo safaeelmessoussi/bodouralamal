@@ -602,7 +602,6 @@
  "content.previewDownloadOnly": "Ce type de fichier se télécharge et ne s'affiche pas dans la plateforme.",
  "content.previewUnsupported": "Ce navigateur ne peut pas lire ce fichier — il peut être téléchargé.",
  "content.previewPdfPages": "Rendu des pages… {done} sur {total}",
- "content.openFile": "Ouvrir le fichier dans la visionneuse de l'appareil",
  "nav.language": "Langue",
  "calendar.hijriMonths": [
   "Mouharram",
@@ -619,7 +618,7 @@
   "Dhou al-Hijja"
  ],
  "content.history.era.rashidun": "Un califat sur la voie de la prophétie",
- "content.bySurah.section.diagrams": "Schéma de la sourate",
+ "content.bySurah.section.diagrams": "Schémas de la sourate",
  "content.bySurah.section.slides": "Polycopiés des cours",
  "content.author.role.teacher": "Enseignement",
  "content.author.role.assistant": "Assistante d'enseignement",

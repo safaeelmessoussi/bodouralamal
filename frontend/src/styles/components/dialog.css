@@ -155,10 +155,30 @@
    head leaves. Last, so it outranks the phone widths above. */
 .dialog--full,
 .dialog--full[open] {
-  width: calc(100vw - var(--space-4));
+  width: calc(100vw - var(--space-2));
   max-width: none;
-  height: calc(100dvh - var(--space-4));
+  height: calc(100dvh - var(--space-2));
   max-height: none;
+  border-radius: var(--radius-md);
+}
+/* R243 — the content gets the height: a one-line title, a small close, thin margins. */
+.dialog--full .dialog__head {
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+}
+.dialog--full .dialog__title {
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dialog--full .dialog__close {
+  width: 2rem;
+  height: 2rem;
+}
+.dialog--full .dialog__body {
+  padding: var(--space-2);
 }
 
 @media (width < 48rem) {

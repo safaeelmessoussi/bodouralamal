@@ -27,7 +27,8 @@ import { Trophy } from './trophy.js';
  *    milestone at the end of a Category, on into the next Category — to the
  *    last Level of the LAST Category;
  * 3. then the graduation — the attire under confetti filling the screen;
- * 4. then the question, «متى يحين دورُك؟», large over everything else, blurred.
+ * 4. then, on a click or tap (R243 — never by itself), the question,
+ *    «متى يحين دورُك؟», large over everything else, blurred.
  *
  * A tap anywhere on a screen moves on (a control on a card — «…», «عرض أقل»
  * — does not); so does the visible «انقري للمتابعة» button, for a keyboard;
@@ -93,14 +94,6 @@ export function ProgramsShow({
     if (!node) return;
     node.scrollTo({ left: -node.scrollWidth, behavior: reduced ? 'auto' : 'smooth' });
   }, [open, state, reduced]);
-
-  // The graduation lingers under its confetti, then the question comes by
-  // itself — unless motion is reduced, when it waits for the tap.
-  useEffect(() => {
-    if (!open || state.kind !== 'graduation' || reduced) return;
-    const timer = window.setTimeout(() => setState((s) => advance(journey, s)), 3200);
-    return () => window.clearTimeout(timer);
-  }, [open, state, reduced, journey]);
 
   if (!open) return null;
 
