@@ -14,19 +14,23 @@
  * - **Other mobile browsers** (Firefox on Android) install from their own menu;
  *   the button says where.
  * - **Already installed** (running standalone): there is nothing to offer, so
- *   nothing is shown.
+ *   nothing is shown. **Installed, but opened in the browser** (R244 — Chrome
+ *   then sends no offer, and its menu reads «فتح التطبيق»): the button says it
+ *   is installed and where its icon is (`getInstalledRelatedApps`).
  * - **A desktop browser that announced nothing**: not shown either — the Owner
  *   asked for phones, and a button that can only say «not here» is noise.
  *
  * Pure, so it is tested without a browser.
  */
-export type InstallOffer = 'prompt' | 'ios' | 'manual' | 'none';
+export type InstallOffer = 'prompt' | 'installed' | 'ios' | 'manual' | 'none';
 
 export interface InstallFacts {
   /** `beforeinstallprompt` has fired and its event is held. */
   promptAvailable: boolean;
   /** `display-mode: standalone`, or iOS's `navigator.standalone`. */
   standalone: boolean;
+  /** R244 — the browser reports this app installed on the device (it is open in a tab). */
+  installed?: boolean;
   userAgent: string;
   /** iPadOS reports itself as a Mac; touch points are what tell them apart. */
   maxTouchPoints: number;
@@ -42,6 +46,7 @@ export function isIos(facts: Pick<InstallFacts, 'userAgent' | 'maxTouchPoints'>)
 export function installOffer(facts: InstallFacts): InstallOffer {
   if (facts.standalone) return 'none';
   if (facts.promptAvailable) return 'prompt';
+  if (facts.installed) return 'installed';
   if (isIos(facts)) return 'ios';
   if (/Android|Mobile/.test(facts.userAgent)) return 'manual';
   return 'none';
@@ -61,7 +66,28 @@ export interface InstallPromptEvent extends Event {
  */
 export function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) return;
-  window.addEventListener('load', () => {
+  const register = (): void => {
     navigator.serviceWorker.register('/sw.js').catch(() => undefined);
-  });
+  };
+  // R244 — since R209 the application starts after the language has loaded,
+  // usually after `load` has fired: waiting for it registered nothing, and the
+  // browsers that want a worker before offering «تثبيت» never offered it.
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register, { once: true });
+}
+
+/**
+ * R244 — whether this app is installed on the device although it is open in a
+ * tab. Chrome on Android answers through `getInstalledRelatedApps` (the
+ * manifest names the app itself, `platform: webapp`); a browser that cannot
+ * answer says «no».
+ */
+export async function isInstalledHere(): Promise<boolean> {
+  const nav = navigator as Navigator & { getInstalledRelatedApps?: () => Promise<unknown[]> };
+  if (typeof nav.getInstalledRelatedApps !== 'function') return false;
+  try {
+    return (await nav.getInstalledRelatedApps()).length > 0;
+  } catch {
+    return false;
+  }
 }

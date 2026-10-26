@@ -441,8 +441,11 @@
   color: var(--color-on-primary);
   font-size: var(--font-size-sm);
 }
-/* A glow behind the attire. */
+/* A glow behind the attire. R243 follow-up — the glow reaches 1 rem out, so
+   the attire keeps that much room (and the gap) from the lines above and
+   below: they sat on the glow's edge. */
 .show__graduation .journey__attire {
+  margin-block: calc(1rem + var(--space-2));
   box-shadow:
     0 0 0 1rem color-mix(in srgb, var(--color-accent-fill) 28%, transparent),
     var(--shadow-lg);
@@ -457,7 +460,7 @@
   width: auto;
   max-width: 100%;
   height: auto;
-  max-height: clamp(9rem, calc(100vh - 25rem), 30rem);
+  max-height: clamp(9rem, calc(100vh - 28rem), 30rem);
 }
 .show__graduation .journey__summit {
   width: auto;
@@ -597,7 +600,7 @@
     padding-inline: var(--space-4);
   }
   .show__graduation .journey__attire img {
-    max-height: clamp(8rem, calc(100vh - 24rem), 22rem);
+    max-height: clamp(8rem, calc(100vh - 27rem), 22rem);
   }
 }
 

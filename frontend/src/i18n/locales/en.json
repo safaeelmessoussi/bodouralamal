@@ -415,6 +415,7 @@
  "install.button": "Install the app",
  "install.title": "Install Bodour Al Amal on your device",
  "install.note": "The app is the platform itself: it opens from an icon on the screen without the browser bar, and needs the internet just like the website.",
+ "install.installed": "The app is already installed on this device: open it from the «Bodour Al Amal» icon on the home screen or in the app list.",
  "install.ios.lede": "On iPhone and iPad, installation is done from the Safari browser:",
  "install.ios.step1": "Tap the “Share” button in the Safari bar (a square with an arrow pointing up).",
  "install.ios.step2": "Scroll down the menu and choose “Add to Home Screen”.",

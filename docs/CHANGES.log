@@ -459,3 +459,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `surah-page.tsx` «−10»: mirrored replay SVG; `section.diagrams` «خطاطات السورة»; `programs-show.tsx` graduation→question timer removed (test pins no `setTimeout` advance).
 - `verify-sorting-headers.mjs`: R198 §6 (all but «إجراءات» sort), «الاختبار» header — 17/17 on Localhost.
 - CI caught `100vw` counting the scrollbar (the dialog 7 px off a scrolling page): `width: calc(100% - …)`, close 2.25 rem; `verify-public-reader.mjs` prints the box on a failed fit.
+
+## 2026-10-26 — SRS Revision 244: the attire's room, «تثبيت التطبيق» on every phone
+- `programs-show.css`: the attire keeps `1rem + gap` from its lines (glow overlap), image allowance −3 rem; checked at 1920/1366/390 (gaps 16 px, nothing off screen).
+- `install-app.ts`: worker registers when `readyState === 'complete'`; `installed` offer via `getInstalledRelatedApps` (+ manifest `related_applications`); button waits 2.5 s for `beforeinstallprompt`, catches a refused `prompt()`; steps dialog portalled to `body`.
+- `dialog.css`: panel/body `flex: 1 1 auto` (Safari zero-basis collapse); `verify-programs-show.mjs`: the question waits for the click, the glow clears both lines.

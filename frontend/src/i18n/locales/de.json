@@ -415,6 +415,7 @@
  "install.button": "App installieren",
  "install.title": "Bodour Al Amal auf dem Gerät installieren",
  "install.note": "Die App ist die Plattform selbst: Sie öffnet sich über ein Symbol auf dem Bildschirm ohne Browserleiste und braucht genau wie die Website eine Internetverbindung.",
+ "install.installed": "Die App ist auf diesem Gerät bereits installiert: Öffnen Sie sie über das Symbol „Bodour Al Amal“ auf dem Startbildschirm oder in der App-Liste.",
  "install.ios.lede": "Auf iPhone und iPad erfolgt die Installation über den Safari-Browser:",
  "install.ios.step1": "Auf die Schaltfläche „Teilen“ in der Safari-Leiste tippen (ein Quadrat mit einem Pfeil nach oben).",
  "install.ios.step2": "Das Menü nach unten scrollen und „Zum Home-Bildschirm“ wählen.",

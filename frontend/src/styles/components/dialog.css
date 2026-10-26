@@ -94,8 +94,12 @@
   display: flex;
   flex-direction: column;
   /* Fills the shell rather than inheriting a border-box height that does not
-     fit inside it. `min-height: 0` lets the body below actually shrink. */
-  flex: 1;
+     fit inside it. `min-height: 0` lets the body below actually shrink.
+     **`1 1 auto`, never `flex: 1`** (basis 0): an iPhone's Safari sized a shell
+     of no set height from that zero basis and drew the whole dialog as a thin
+     white line («تثبيت التطبيق», 2026-10-26). From `auto` it starts at its
+     content and still shrinks to the shell's max-height. */
+  flex: 1 1 auto;
   min-height: 0;
 }
 
@@ -125,7 +129,8 @@
      view scrolled the body smoothly, and Chrome closes a native <select>'s
      list when its container scrolls — «السورة» opened and closed at once. */
   scroll-behavior: auto;
-  flex: 1;
+  /* `auto` basis, as the panel above. */
+  flex: 1 1 auto;
   min-height: 0;
   padding: var(--space-5) var(--space-6) var(--space-6);
   overflow-y: auto;

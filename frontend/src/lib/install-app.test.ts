@@ -50,6 +50,25 @@ describe('what «تثبيت التطبيق» offers', () => {
   });
 });
 
+describe('R244 — installed already, and the worker that must register', () => {
+  it('says it is installed when the browser reports it (open in a tab, no offer), unless an offer is held', () => {
+    expect(installOffer(facts({ installed: true }))).toBe('installed');
+    expect(installOffer(facts({ installed: true, promptAvailable: true }))).toBe('prompt');
+    expect(installOffer(facts({ installed: true, standalone: true }))).toBe('none');
+  });
+
+  it('the manifest names the app itself, so Chrome can report it installed', () => {
+    expect((manifest as { related_applications?: { platform: string }[] }).related_applications?.[0]?.platform).toBe(
+      'webapp',
+    );
+  });
+
+  it('registers the worker at once when the page has already loaded — the app starts after `load` since R209', async () => {
+    const source = (await import('./install-app.ts?raw')).default;
+    expect(source).toContain("if (document.readyState === 'complete') register();");
+  });
+});
+
 describe('what makes the platform installable', () => {
   it('a manifest a browser accepts: standalone, RTL Arabic, a 192 and a 512 icon and a maskable one', () => {
     expect(manifest.display).toBe('standalone');

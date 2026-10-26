@@ -56,7 +56,14 @@ r.check("the strip held every card of the way", await evaluate("document.querySe
 r.check("the graduation: confetti over the whole screen, the LAST Category's words without «وتتواصل الرحلة», the attire", await evaluate(`(() => { const s = document.querySelector('.show__screen--graduation'); const c = s.querySelector('.show__confetti').getBoundingClientRect(); const lastName = [...document.querySelectorAll('[data-journey-category] .stage__title')].at(-1).textContent; return s.querySelectorAll('.show__piece').length === 64 && c.width >= window.innerWidth - 2 && s.textContent.includes('يكتمل برنامج') && s.textContent.includes(lastName.replace('فئة ', '') + '.') && !s.textContent.includes('وتتواصل') && !!s.querySelector('.journey__attire img'); })()`));
 await wait(800);
 await shot('show-3-graduation');
-r.check("the question comes by itself after the graduation", await until(`document.querySelector('.show--question .show__question') !== null`, 20));
+// R243 — the attire's glow (1 rem round its frame) never reaches the words above and below it.
+const glow = JSON.parse(await evaluate(`JSON.stringify((() => { const g = document.querySelector('.show__graduation'); const a = g.querySelector('.journey__attire').getBoundingClientRect(); const rem = parseFloat(getComputedStyle(document.documentElement).fontSize); const above = g.querySelector(':scope > .journey__milestoneText').getBoundingClientRect(); const below = g.querySelector('.journey__summit > .journey__milestoneText').getBoundingClientRect(); return { aboveGap: Math.round(a.top - rem - above.bottom), belowGap: Math.round(below.top - (a.bottom + rem)), fitsScreen: g.getBoundingClientRect().bottom <= innerHeight }; })())`));
+r.check("the attire's glow clears the line above and the line below (R243)", glow.aboveGap >= 0 && glow.belowGap >= 0, JSON.stringify(glow));
+// R243 — the question waits for the click: nothing after a pause longer than the old 3.2 s timer.
+await wait(4200);
+r.check("the question does NOT come by itself (R243)", await evaluate("document.querySelector('.show--question') === null && !document.querySelector('.show__graduation').textContent.includes('متى يحين')"));
+await click('.show__next');
+r.check("…it comes on the click", await until(`document.querySelector('.show--question .show__question') !== null`, 20));
 await wait(900);
 r.check("…large, over a blurred background", await evaluate(`(() => { const q = document.querySelector('.show__question'); const g = document.querySelector('.show__graduation'); return parseFloat(getComputedStyle(q).fontSize) > 36 && getComputedStyle(g).filter.includes('blur') && q.textContent === 'متى يحين دورُك؟'; })()`));
 await shot('show-4-question');
