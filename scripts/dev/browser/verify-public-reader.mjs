@@ -68,11 +68,15 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width: value, height: 900, deviceScaleFactor: 1, mobile: false });
   }
   const overflow = () => evaluate('document.documentElement.scrollWidth <= innerWidth + 1');
-  const dialogFits = () => evaluate(`(() => {
-    const d = document.querySelector('dialog[open]'); if (!d) return false;
+  // Its measurements travel with a failure, so CI says WHAT did not fit.
+  const dialogBox = () => evaluate(`(() => {
+    const d = document.querySelector('dialog[open]'); if (!d) return null;
     const r = d.getBoundingClientRect(), b = d.querySelector('.dialog__close').getBoundingClientRect();
-    return r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight + 1 && b.width >= 32 && b.left >= r.left && b.right <= r.right;
+    const box = { left: r.left, right: r.right, top: r.top, bottom: r.bottom, vw: innerWidth, vh: innerHeight, close: b.width, closeLeft: b.left, closeRight: b.right };
+    box.fits = r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight + 1 && b.width >= 32 && b.left >= r.left && b.right <= r.right;
+    return JSON.stringify(box);
   })()`);
+  const dialogFits = async () => JSON.parse((await dialogBox()) ?? '{"fits":false}').fits;
   const shelf = (id) => `/resources?level=${fixture.levelId}&content=${id}`;
   await send('Network.clearBrowserCookies');
   await width(390);
@@ -106,7 +110,9 @@ try {
     if (kind === 'audio' || kind === 'video') {
       check(`${kind}: actual playback advances`, await evaluate(`(async () => { const e = document.querySelector('${kind}'); e.muted = true; await e.play(); await new Promise(r => setTimeout(r, 400)); return !e.error && e.currentTime > 0; })()`));
     }
-    check(`${kind}: phone dialog fits`, await dialogFits());
+    const box = await dialogBox();
+    const fits = JSON.parse(box ?? '{"fits":false}').fits;
+    check(`${kind}: phone dialog fits`, fits, fits ? '' : (box ?? 'no dialog'));
     check(`${kind}: no runtime errors`, await evaluate('window.__readerErrors.length === 0'));
   }
   await open(shelf(fixture.items.image));

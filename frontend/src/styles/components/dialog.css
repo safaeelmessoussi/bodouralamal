@@ -155,7 +155,9 @@
    head leaves. Last, so it outranks the phone widths above. */
 .dialog--full,
 .dialog--full[open] {
-  width: calc(100vw - var(--space-2));
+  /* `100%`, not `100vw`: the viewport unit counts the page's scrollbar, and a
+     page that scrolls pushed the dialog 7 px past the edge (R243, the CI fit check). */
+  width: calc(100% - var(--space-2));
   max-width: none;
   height: calc(100dvh - var(--space-2));
   max-height: none;
@@ -174,8 +176,9 @@
   text-overflow: ellipsis;
 }
 .dialog--full .dialog__close {
-  width: 2rem;
-  height: 2rem;
+  /* Small, still a comfortable tap (≥ 32 px with room to spare). */
+  width: 2.25rem;
+  height: 2.25rem;
 }
 .dialog--full .dialog__body {
   padding: var(--space-2);
