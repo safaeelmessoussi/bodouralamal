@@ -1152,3 +1152,193 @@
 .surah-library__diagrams {
   margin: 0;
 }
+
+/* R241 — «اختبار الفهم»: a lesson's quiz, and the Surah's final one. Right in
+   the brand green, wrong in the danger red, the stars in the logo's orange. */
+.surah-quiz__open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-self: start;
+  margin-block-start: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-listened-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
+  color: var(--color-listened-strong);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+.surah-quiz__open:hover {
+  background: var(--color-listened-ahead);
+}
+.surah-quiz__open:focus-visible,
+.surah-quiz__choice:focus-visible,
+.surah-quiz__next:focus-visible,
+.surah-quiz__secondary:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.surah-quiz__open--final {
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-listened-strong);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-md);
+}
+.surah-quiz__open--final:hover {
+  background: var(--color-listened-strong);
+  opacity: 0.92;
+}
+.surah-quiz__best {
+  font-weight: 400;
+  opacity: 0.85;
+}
+.surah-quiz__final {
+  display: flex;
+  justify-content: center;
+  margin-block-start: var(--space-4);
+}
+.surah-quiz {
+  display: grid;
+  gap: var(--space-3);
+}
+.surah-quiz__progress {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.surah-quiz__dots {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.surah-quiz__dots li {
+  flex: 1;
+  block-size: 0.35rem;
+  border-radius: var(--radius-full);
+  background: var(--color-listened-ahead);
+}
+.surah-quiz__dots li.is-done,
+.surah-quiz__dots li.is-current {
+  background: var(--color-listened);
+}
+.surah-quiz__question {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  line-height: 1.7;
+}
+.surah-quiz__choices {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.surah-quiz__choice {
+  inline-size: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font: inherit;
+  text-align: start;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.surah-quiz__choice:hover:not(:disabled) {
+  border-color: var(--color-listened);
+}
+.surah-quiz__choice:disabled {
+  cursor: default;
+}
+.surah-quiz__choice.is-right {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  font-weight: 700;
+}
+.surah-quiz__choice.is-wrong {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.surah-quiz__choice.is-dim {
+  opacity: 0.6;
+}
+.surah-quiz__feedback {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border-inline-start: 4px solid var(--color-primary);
+  background: var(--color-primary-soft);
+  line-height: 1.7;
+}
+.surah-quiz__feedback.is-wrong {
+  border-inline-start-color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.surah-quiz__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.surah-quiz__next,
+.surah-quiz__secondary {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.surah-quiz__next {
+  border: 0;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+.surah-quiz__next:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.surah-quiz__secondary {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+.surah-quiz__result {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  text-align: center;
+}
+.surah-quiz__stars {
+  margin: 0;
+  font-size: 2.5rem;
+  letter-spacing: 0.25rem;
+  color: var(--color-listened);
+}
+.surah-quiz__stars-off {
+  color: var(--color-listened-ahead);
+}
+.surah-quiz__score {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .surah-quiz__result {
+    animation: surah-quiz-pop var(--transition-base) both;
+  }
+  @keyframes surah-quiz-pop {
+    from {
+      transform: scale(0.92);
+      opacity: 0;
+    }
+  }
+}

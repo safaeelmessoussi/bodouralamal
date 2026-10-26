@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { EXPEDITIONS, HUMANITY, PHASES, TIMELINE } from '../components/history/humanity-data.js';
 import { localiseHumanity, type ContentDictionary } from '../components/history/humanity-i18n.js';
+import { SURAH_QUIZZES } from '../components/content/surah-quizzes.js';
 import type { DiagramNode, HistoryNode } from '../components/history/humanity-model.js';
 import { ar } from './ar.js';
 import { LOCALES, type FlatCatalog } from './index.js';
@@ -82,7 +83,10 @@ describe('R209 — «نظرة شاملة» in every language', () => {
 
   it('every key is one the tree reads, and every string the tree shows is translated', () => {
     // Each key mapped to itself: what the tree shows afterwards is exactly the keys it read.
-    const probe = Object.fromEntries(Object.keys(Object.values(CONTENT)[0]!).map((k) => [k, `«${k}»`]));
+    // R241 — the quizzes' keys are checked on their own, below.
+    const probe = Object.fromEntries(
+      Object.keys(Object.values(CONTENT)[0]!).filter((k) => !k.startsWith('quiz|')).map((k) => [k, `«${k}»`]),
+    );
     const shown = localiseHumanity(content, probe);
     const all = [
       ...strings(shown.root),
@@ -93,6 +97,29 @@ describe('R209 — «نظرة شاملة» in every language', () => {
     const read = new Set(all.filter((s) => s.startsWith('«')).map((s) => s.slice(1, -1)));
     expect([...Object.keys(probe)].filter((k) => !read.has(k)), 'keys the tree never reads').toEqual([]);
     expect(all.filter((s) => !s.startsWith('«')), 'strings left untranslated').toEqual([]);
+  });
+
+  it('R241 — every quiz text has its translation, every translation a quiz text, verses kept', () => {
+    const expected = new Map<string, string>();
+    for (const [surah, quizzes] of Object.entries(SURAH_QUIZZES)) {
+      const all = [...Object.entries(quizzes.lessons), ...(quizzes.final ? [['final', quizzes.final] as const] : [])];
+      for (const [key, quiz] of all) {
+        quiz.questions.forEach((q, i) => {
+          const base = `quiz|${surah}|${key}|${String(i)}`;
+          expected.set(`${base}|q`, q.q);
+          q.choices.forEach((c, j) => expected.set(`${base}|c${String(j)}`, c));
+          if (q.why) expected.set(`${base}|why`, q.why);
+        });
+      }
+    }
+    for (const [path, dict] of Object.entries(CONTENT)) {
+      const keys = Object.keys(dict).filter((k) => k.startsWith('quiz|'));
+      expect(keys.filter((k) => !expected.has(k)), `${nameOf(path)}: keys no quiz reads`).toEqual([]);
+      expect([...expected.keys()].filter((k) => !(k in dict)), `${nameOf(path)}: untranslated`).toEqual([]);
+      for (const [k, arabic] of expected) {
+        for (const verse of arabic.match(/﴿[^﴾]*﴾/g) ?? []) expect(dict[k], k).toContain(verse);
+      }
+    }
   });
 
   it('keeps every verse, byte for byte, and no Arabic outside quotations', () => {

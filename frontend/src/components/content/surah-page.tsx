@@ -7,6 +7,7 @@ import { HumanityDiagram } from '../history/humanity-diagram.js';
 import { SURAH_DIAGRAMS } from '../history/surah-diagrams.js';
 import { Icon } from '../ui/icon.js';
 import { authorLine, ContentCard } from './content-card.js';
+import { QuizButton } from './surah-quiz.js';
 
 /** An item of the library filed under a Surah, with the Subject it was taught in. */
 export type SurahItem = ContentItem & { subjectName: string | null };
@@ -163,6 +164,7 @@ export function SurahPage({
                 {section.items.map((item, index) => (
                   <AudioTrack
                     key={item.id}
+                    surah={surah}
                     item={item}
                     index={index + 1}
                     accessToken={accessToken}
@@ -172,6 +174,10 @@ export function SurahPage({
                   />
                 ))}
               </ol>
+              {/* R241 — one quiz over every lesson of the Surah. */}
+              <div className="surah-quiz__final">
+                <QuizButton surah={surah} quizKey="final" label={t('content.quiz.final')} final />
+              </div>
             </div>
           ) : section.key === 'see' ? (
             <ul id={`surah-${section.key}-body`} className="surah-library__gallery">
@@ -258,6 +264,7 @@ export function clock(seconds: number): string {
  * default, «تشغيل التالي تلقائيًا»).
  */
 function AudioTrack({
+  surah,
   item,
   index,
   accessToken,
@@ -265,6 +272,7 @@ function AudioTrack({
   cued,
   onFinished,
 }: {
+  surah: number;
   item: SurahItem;
   index: number;
   accessToken: string | null;
@@ -411,6 +419,8 @@ function AudioTrack({
             </span>
           </div>
         )}
+        {/* R241 — «اختبار الفهم» of this lesson, where it has one. */}
+        <QuizButton surah={surah} quizKey={item.id} label={t('content.quiz.open')} />
         {state === 'ready' && url ? (
           <audio
             ref={audioRef}
