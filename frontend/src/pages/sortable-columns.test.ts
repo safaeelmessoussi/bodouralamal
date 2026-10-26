@@ -90,8 +90,9 @@ const PAGES: { label: string; path: string; sortable: string[]; never: string[] 
     label: 'مكتبة المحتوى',
     path: '/src/pages/content.tsx',
     // R198 §6 (the Owner: every header sorts) — `kind` by MIME type and
-    // `visibility` by openness, never by their labels' alphabet.
-    sortable: ['title', 'branch', 'size', 'created', 'kind', 'visibility'],
+    // `visibility` by openness, never by their labels' alphabet. R242 — «صاحب
+    // المحتوى» joins, «الحجم» leaves.
+    sortable: ['title', 'author', 'branch', 'created', 'kind', 'visibility'],
     never: [],
   },
   {

@@ -216,7 +216,7 @@ export function ProgramsShow({
             <p className="journey__milestoneText">
               {t('programs.journey.graduationText').replace('{category}', last.name)}
             </p>
-            <SummitFigure sizes="(max-width: 44rem) 14rem, 20rem" />
+            <SummitFigure sizes="(max-width: 44rem) 14rem, 20rem" asked={false} />
           </div>
           {state.kind === 'question' ? (
             <p className="show__question">{t('programs.journey.summitQuestion')}</p>

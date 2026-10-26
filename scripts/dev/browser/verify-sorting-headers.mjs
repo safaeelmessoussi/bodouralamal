@@ -7,7 +7,7 @@
  *
  * Covers all three value types the Owner named, on real screens:
  *   text    مكتبة المحتوى → العنوان        (server-side, ar-x-icu)
- *   numeric مكتبة المحتوى → الحجم          (size_bytes, not the humanised label)
+ *   names   مكتبة المحتوى → صاحب المحتوى  (server-side, nobody named last — R242)
  *   date    الجدولة        → الوقت          (client-side merge of three sources)
  *
  * NEVER put a backtick in page code — see cdp.mjs.
@@ -98,31 +98,31 @@ check('…and the values are the ascending list, reversed',
   `${JSON.stringify(titleAsc?.values?.slice(0, 3))} vs ${JSON.stringify(titleDesc?.values?.slice(0, 3))}`);
 
 /**
- * **The numeric column, which is the one a string sort gets wrong.** The cell
- * renders a humanised size, so this asserts the ORDER of the underlying bytes
- * by checking the rendered magnitudes are monotonic once parsed.
+ * **R242 — «صاحب المحتوى» sorts on the server** («الحجم» withdrawn the same
+ * day). Ascending puts the named items before the ones with nobody named
+ * (NULLS LAST), so the first cell is a name whenever any item has one.
  */
-const sizeLabel = await evaluate(`(() => {
-  const th = [...document.querySelectorAll('thead th')].find((h) => /الحجم/.test(h.textContent));
+const authorLabel = await evaluate(`(() => {
+  const th = [...document.querySelectorAll('thead th')].find((h) => /صاحب المحتوى/.test(h.textContent));
   return th ? th.textContent.trim() : null;
 })()`);
-if (sizeLabel) {
-  await clickHeader(sizeLabel);
-  const asc = await readColumn(sizeLabel);
-  await clickHeader(sizeLabel);
-  const desc = await readColumn(sizeLabel);
-  const magnitude = (v) => {
-    const n = parseFloat(v.replace(/[^\d.]/g, '')) || 0;
-    const unit = /غ/.test(v) ? 1e9 : /م/.test(v) ? 1e6 : /ك/.test(v) ? 1e3 : 1;
-    return n * unit;
-  };
-  const nums = (c) => (c?.values ?? []).map(magnitude);
-  const monotonic = (a, up) => a.every((v, i) => i === 0 || (up ? v >= a[i - 1] : v <= a[i - 1]));
-  check('الحجم sorts NUMERICALLY ascending (9 MB before 10 MB, not after)',
-    monotonic(nums(asc), true), JSON.stringify(asc?.values?.slice(0, 4)));
-  check('…and descending', monotonic(nums(desc), false), JSON.stringify(desc?.values?.slice(0, 4)));
+check('الحجم is gone from مكتبة المحتوى (R242)',
+  !(await evaluate(`[...document.querySelectorAll('thead th')].some((h) => /الحجم/.test(h.textContent))`)), '');
+if (authorLabel) {
+  await clickHeader(authorLabel);
+  const asc = await readColumn(authorLabel);
+  const values = asc?.values ?? [];
+  const firstBlank = values.indexOf('');
+  const named = firstBlank === -1 ? values : values.slice(0, firstBlank);
+  // `readColumn` drops empty cells, so on data with nobody named the order is
+  // vacuous; the header's own state still proves the click sorted.
+  check('صاحب المحتوى sorts: the header says ascending, the named items in order',
+    asc?.ariaSort === 'ascending' &&
+    (firstBlank === -1 || values.slice(firstBlank).every((v) => v === '')) &&
+      named.every((v, i) => i === 0 || v.localeCompare(named[i - 1], 'ar') >= 0),
+    JSON.stringify(values.slice(0, 4)));
 } else {
-  check('الحجم column present to exercise the numeric path', false, 'header not found');
+  check('صاحب المحتوى column present (R242)', false, 'header not found');
 }
 
 /* ── Sorting composes with filters and does not widen scope ──────────────── */

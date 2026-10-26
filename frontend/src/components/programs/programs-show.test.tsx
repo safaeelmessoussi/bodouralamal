@@ -118,9 +118,12 @@ describe('ProgramsShow', () => {
     expect(graduation).not.toContain('وتتواصل الرحلة');
     expect(graduation).toContain('src="/journey/graduation-attire.jpg"');
     expect(graduation).not.toContain('show__question');
+    // R242 — nor under the attire: the question waits for the click.
+    expect(graduation).not.toContain('متى يحين دورُك؟');
     const question = render({ kind: 'question' });
     expect(question).toContain('show__screen--graduation is-asked');
     expect(question).toContain('class="show__question">متى يحين دورُك؟');
+    expect(question.split('متى يحين دورُك؟').length - 1).toBe(1);
     expect(question).toContain('العودة إلى الفئات');
   });
 

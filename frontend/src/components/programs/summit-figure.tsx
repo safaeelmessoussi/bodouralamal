@@ -11,10 +11,13 @@ import { t } from '../../i18n/index.js';
 export function SummitFigure({
   sizes = '(max-width: 44rem) 10rem, 12rem',
   bare = false,
+  asked = true,
 }: {
   sizes?: string;
   /** R188 §3 — the attire alone, no caption and no line under it (the road). */
   bare?: boolean;
+  /** R242 — «متى يحين دورُك؟» under the attire; the full-screen show asks it only after the click. */
+  asked?: boolean;
 }): ReactNode {
   return (
     <div className="journey__summit" role="group" aria-label={t('programs.journey.summit')}>
@@ -27,7 +30,7 @@ export function SummitFigure({
           loading="lazy"
           decoding="async"
         />
-        {bare ? null : (
+        {bare || !asked ? null : (
           <figcaption className="journey__attireCaption">
             {t('programs.journey.summitQuestion')}
           </figcaption>

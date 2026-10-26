@@ -100,7 +100,8 @@ main .section[id] {
 
 .lede {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-md);
+  /* R242 — every page's subtitle smaller than the text: it explains, the title names. */
+  font-size: var(--font-size-xs);
   line-height: 1.65;
   /* R190 §2 (Owner, 2026-10-01; supersedes R177 §1) — one line where it fits,
      wrapped only where the line is full; `pretty` keeps a lone word off the

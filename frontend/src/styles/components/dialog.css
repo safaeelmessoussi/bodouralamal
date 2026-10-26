@@ -151,6 +151,16 @@
   overflow-wrap: anywhere;
 }
 
+/* R242 — the whole page (a content preview): the stage below takes what the
+   head leaves. Last, so it outranks the phone widths above. */
+.dialog--full,
+.dialog--full[open] {
+  width: calc(100vw - var(--space-4));
+  max-width: none;
+  height: calc(100dvh - var(--space-4));
+  max-height: none;
+}
+
 @media (width < 48rem) {
   .dialog,
   .dialog--wide {

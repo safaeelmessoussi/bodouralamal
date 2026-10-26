@@ -179,24 +179,34 @@ export function SurahPage({
                 <QuizButton surah={surah} quizKey="final" label={t('content.quiz.final')} final />
               </div>
             </div>
-          ) : section.key === 'see' ? (
-            <ul id={`surah-${section.key}-body`} className="surah-library__gallery">
-              {section.items.map((item) => (
-                <ImageTile
-                  key={item.id}
-                  item={item}
-                  accessToken={accessToken}
-                  activeChildId={activeChildId}
-                  onOpen={onOpen}
-                />
-              ))}
-            </ul>
           ) : (
-            <ul id={`surah-${section.key}-body`} className="content-list">
-              {section.items.map((item) => (
-                <ContentCard key={item.id} item={item} onOpen={onOpen} />
-              ))}
-            </ul>
+            <div id={`surah-${section.key}-body`} className="surah-library__shelf">
+              {section.items.some((item) => item.kind !== 'image') ? (
+                <ul className="content-list">
+                  {section.items
+                    .filter((item) => item.kind !== 'image')
+                    .map((item) => (
+                      <ContentCard key={item.id} item={item} onOpen={onOpen} />
+                    ))}
+                </ul>
+              ) : null}
+              {/* Drawings of the Surah's ideas are shown as themselves (R196). */}
+              {section.items.some((item) => item.kind === 'image') ? (
+                <ul className="surah-library__gallery">
+                  {section.items
+                    .filter((item) => item.kind === 'image')
+                    .map((item) => (
+                      <ImageTile
+                        key={item.id}
+                        item={item}
+                        accessToken={accessToken}
+                        activeChildId={activeChildId}
+                        onOpen={onOpen}
+                      />
+                    ))}
+                </ul>
+              ) : null}
+            </div>
           )}
         </section>
       ))}
@@ -217,17 +227,19 @@ export function isSlides(item: Pick<ContentItem, 'title' | 'mime_type'>): boolea
 
 const isReading = (item: ContentItem): boolean => item.kind === 'pdf' || item.kind === 'document';
 
-/** A Surah's shelves, in the order the Owner listed them (R212). */
+/**
+ * A Surah's shelves, in the order the Owner listed them (R212). **R242** —
+ * three: the recordings, the «مطبوعات», and «ملخصات ومذكرات» holding all the
+ * rest (summaries, drawings, videos).
+ */
 const SECTIONS: readonly {
-  key: 'listen' | 'slides' | 'read' | 'see' | 'watch';
-  icon: 'audio' | 'document' | 'image' | 'video';
+  key: 'listen' | 'slides' | 'read';
+  icon: 'audio' | 'document';
   holds: (item: ContentItem) => boolean;
 }[] = [
   { key: 'listen', icon: 'audio', holds: (item) => item.kind === 'audio' },
   { key: 'slides', icon: 'document', holds: (item) => isReading(item) && isSlides(item) },
-  { key: 'read', icon: 'document', holds: (item) => isReading(item) && !isSlides(item) },
-  { key: 'see', icon: 'image', holds: (item) => item.kind === 'image' },
-  { key: 'watch', icon: 'video', holds: (item) => item.kind === 'video' },
+  { key: 'read', icon: 'document', holds: (item) => item.kind !== 'audio' && !(isReading(item) && isSlides(item)) },
 ];
 
 /** One playing at a time: starting a lesson pauses any other on the page. */
@@ -382,7 +394,10 @@ function AudioTrack({
               onClick={() => (playing ? audioRef.current?.pause() : play())}
               aria-label={`${playing ? t('content.bySurah.pause') : t('content.bySurah.play')} — ${item.title}`}
             >
-              <span aria-hidden="true">{playing ? '❚❚' : '▶'}</span>
+              {/* R242 — drawn, not the «▶» character: a phone's font turned it into an emoji. */}
+              <svg className="surah-player__glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                {playing ? <path d="M4 3h3v10H4zM9 3h3v10H9z" /> : <path d="M5 2.5v11l9-5.5z" />}
+              </svg>
             </button>
             <button
               type="button"

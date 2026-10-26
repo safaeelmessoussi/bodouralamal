@@ -1,6 +1,6 @@
 import { SearchableSelect } from '../components/ui/searchable-select.js';
 import { BranchScopeField } from '../components/content/branch-scope-field.js';
-import { AuthorPicker, type AuthorValue } from '../components/content/author-picker.js';
+import { AuthorPicker, NO_AUTHOR, type AuthorValue } from '../components/content/author-picker.js';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { kindOf, type ContentKind } from '../adapters/content.js';
@@ -398,6 +398,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   });
   const { levelId, subjectId, surahId, academicYearId, branchId } = scope.value;
 
+  /** R242 — «صاحب المحتوى» as a filter: a person, «بدون», or «الكل» (`NO_AUTHOR`). */
+  const [author, setAuthor] = useState<AuthorValue>(NO_AUTHOR);
+  const authorId = author.id ?? '';
   const [rows, setRows] = useState<LibraryRow[]>([]);
   /** R76 — server-side: this list is paginated, so the DATABASE orders it. */
   const [sort, setSort] = useState<SortState | null>(null);
@@ -429,6 +432,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     // pages are the filtered set's (a branch filtered one page of 25 here).
     if (branchId) params.set('branch_id', branchId);
     if (surahId) params.set('surah_id', surahId);
+    if (authorId) params.set('author_id', authorId);
     try {
       const body = await api<{
         data: LibraryRow[];
@@ -445,7 +449,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     } catch {
       setStatus('error');
     }
-  }, [accessToken, levelId, subjectId, surahId, academicYearId, branchId, page, sort]);
+  }, [accessToken, levelId, subjectId, surahId, academicYearId, branchId, authorId, page, sort]);
 
   useEffect(() => {
     void load();
@@ -455,7 +459,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   // shows an empty table that reads as "there is no content".
   useEffect(() => {
     setPage(1);
-  }, [levelId, subjectId, surahId, academicYearId, branchId]);
+  }, [levelId, subjectId, surahId, academicYearId, branchId, authorId]);
 
   function refilter(apply: () => void): void {
     apply();
@@ -503,6 +507,8 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
    */
   const columns: Column<LibraryRow>[] = [
     { key: 'title', sortKey: 'title', header: t('content.col.title'), cell: (r) => r.title },
+    // R242 — who made it (the «الحجم» column withdrawn the same day).
+    { key: 'author', sortKey: 'author', header: t('content.author.label'), cell: (r) => r.author_name ?? '' },
     {
       key: 'kind',
       sortKey: 'kind',
@@ -536,15 +542,6 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         r.branch_name === null
           ? t('content.globalScope')
           : [r.branch_name, ...(r.additional_branches ?? []).map((b) => b.name)].join('، '),
-    },
-    {
-      key: 'size',
-      // `size_bytes`, not the humanised label: ordering «٩ ميغابايت»
-      // as a STRING would put 9 MB after 10 MB.
-      sortKey: 'size',
-      header: t('content.col.size'),
-      secondary: true,
-      cell: (r) => formatSize(r.size_bytes),
     },
     {
       key: 'created',
@@ -700,10 +697,11 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         status={status}
         actions={actions}
         onRetry={() => void load()}
-        filtered={levelId !== '' || subjectId !== '' || surahId !== '' || branchId !== ''}
+        filtered={levelId !== '' || subjectId !== '' || surahId !== '' || branchId !== '' || authorId !== ''}
         onClearFilters={() =>
           refilter(() => {
             scope.setMany({ levelId: '', subjectId: '', surahId: '', branchId: '' });
+            setAuthor(NO_AUTHOR);
           })
         }
         toolbar={
@@ -717,6 +715,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
               mode="filter"
               extraOptions={{ surahId: [{ value: NO_SURAH, label: t('common.noneChosen') }] }}
             />
+            <AuthorPicker value={author} onChange={(next) => refilter(() => setAuthor(next))} token={accessToken} filter />
           </>
         }
         sort={sort}
@@ -820,11 +819,4 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       />
     </Layout>
   );
-}
-
-/** Arabic units, matching the library cards — one size vocabulary platform-wide. */
-function formatSize(bytes: number): string {
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1) return `${mb.toFixed(1)} ${t('content.size.mb')}`;
-  return `${Math.max(1, Math.round(bytes / 1024)).toString()} ${t('content.size.kb')}`;
 }

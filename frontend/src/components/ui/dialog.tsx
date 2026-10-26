@@ -53,6 +53,7 @@ export function Dialog({
   onClose,
   title,
   wide = false,
+  full = false,
   dismissible = true,
   children,
 }: {
@@ -60,6 +61,8 @@ export function Dialog({
   onClose: () => void;
   title: string;
   wide?: boolean;
+  /** R242 — the whole page: a preview of content, the document or the video as large as the screen. */
+  full?: boolean;
   /**
    * Whether the backdrop and `Escape` dismiss it.
    *
@@ -116,7 +119,7 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className={wide ? 'dialog dialog--wide' : 'dialog'}
+      className={full ? 'dialog dialog--full' : wide ? 'dialog dialog--wide' : 'dialog'}
       aria-labelledby={titleId}
       // Clicking the backdrop dismisses **a dismissible dialog**. The check is on
       // the target being the dialog itself: a click inside the panel bubbles to

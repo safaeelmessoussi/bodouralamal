@@ -69,6 +69,8 @@ export interface LibraryFilters extends PageParams {
   surahId?: number | null;
   /** R223 — the items of a branch: filed there, or Global (every branch). */
   branchId?: string;
+  /** R242 — one person's items; `null` is «بدون», the items with nobody named. */
+  authorId?: string | null;
   /** R167 §5 — only (or never) the items addressed to a whole Category. */
   wholeCategory?: boolean;
   sortBy?: string | undefined;
@@ -101,6 +103,8 @@ const LIBRARY_SORT_COLUMNS: Record<string, Prisma.Sql> = {
   branch: Prisma.sql`b."name"`,
   kind: Prisma.sql`c."mime_type"`,
   visibility: Prisma.sql`CASE c."visibility" WHEN 'public' THEN 0 WHEN 'private' THEN 1 ELSE 2 END`,
+  // R242 — «صاحب المحتوى», by the name the table shows (a departed person's is not shown).
+  author: Prisma.sql`CASE WHEN au."deleted_at" IS NULL THEN COALESCE(au."public_display_name", au."name_arabic") END`,
 };
 
 /**
@@ -417,6 +421,8 @@ export async function listLibrary(
   // R177 §7 — items about that Surah; an item about none never matches.
   if (filters.surahId === null) conditions.push(Prisma.sql`c."surah_id" IS NULL`);
   else if (filters.surahId !== undefined) conditions.push(Prisma.sql`c."surah_id" = ${filters.surahId}`);
+  if (filters.authorId === null) conditions.push(Prisma.sql`c."author_id" IS NULL`);
+  else if (filters.authorId !== undefined) conditions.push(Prisma.sql`c."author_id" = ${filters.authorId}::uuid`);
   // R223 — a branch's items: its own (home or additional) and the Global ones,
   // which are every branch's («الكل» on that dimension).
   if (filters.branchId) {

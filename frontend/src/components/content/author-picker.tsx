@@ -14,6 +14,9 @@ export interface AuthorValue {
 
 export const NO_AUTHOR: AuthorValue = { id: null, name: null };
 
+/** R242 — «بدون» in the filter: the items with nobody named (the API's `author_id=none`). */
+export const NO_AUTHOR_FILTER = 'none';
+
 /**
  * **R217 — «صاحب المحتوى»: one searchable list** (the Owner, 2026-10-11: «a
  * simple searchable drop down … listing only teachers, just to not make the
@@ -29,11 +32,17 @@ export function AuthorPicker({
   onChange,
   token,
   disabled = false,
+  filter = false,
 }: {
   value: AuthorValue;
   onChange: (next: AuthorValue) => void;
   token: string | null;
   disabled?: boolean;
+  /**
+   * R242 — the same list as a FILTER of «مكتبة المحتوى»: «الكل» when nothing is
+   * chosen, and «بدون» (the items with nobody named, `id` = `NO_AUTHOR_FILTER`) first (R198).
+   */
+  filter?: boolean;
 }): ReactNode {
   const [teachers, setTeachers] = useState<DirectoryEntry[]>([]);
   const [query, setQuery] = useState('');
@@ -83,11 +92,12 @@ export function AuthorPicker({
       hint: roleLabel(authorRoleOf(person)),
     }));
     // The person already chosen stays nameable even when not in this list.
-    if (value.id !== null && !listed.some((o) => o.value === value.id)) {
+    if (value.id !== null && value.id !== NO_AUTHOR_FILTER && !listed.some((o) => o.value === value.id)) {
       listed.unshift({ value: value.id, label: value.name ?? '', hint: '' });
     }
+    if (filter) listed.unshift({ value: NO_AUTHOR_FILTER, label: t('common.noneChosen'), hint: '' });
     return listed;
-  }, [query, found, teachers, value.id, value.name]);
+  }, [query, found, teachers, value.id, value.name, filter]);
 
   return (
     <div data-author-picker>
@@ -100,8 +110,8 @@ export function AuthorPicker({
           onChange(id === '' ? NO_AUTHOR : { id, name: person?.name_arabic ?? value.name });
         }}
         onQueryChange={setQuery}
-        placeholder={t('content.author.none')}
-        hint={t('content.author.searchHint')}
+        placeholder={filter ? t('common.all') : t('content.author.none')}
+        {...(filter ? {} : { hint: t('content.author.searchHint') })}
         searchThreshold={0}
         disabled={disabled}
       />

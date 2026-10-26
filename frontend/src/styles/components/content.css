@@ -383,6 +383,44 @@
 }
 
 
+/* R242 — «ملخصات ومذكرات» holds the files and, under them, the drawings. */
+.surah-library__shelf {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* R242 — in the whole-page dialog the stage fills the body, and the media
+   fill the stage. */
+.dialog--full .dialog__body {
+  display: flex;
+  flex-direction: column;
+}
+.dialog--full .preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.dialog--full .preview__stage {
+  flex: 1;
+  min-height: 0;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  padding: var(--space-2);
+}
+.dialog--full .preview__pdf,
+.dialog--full .preview__pdfInPage,
+.dialog--full .preview__pdfCanvas {
+  height: 100%;
+  max-height: none;
+}
+.dialog--full .preview__pdfInPage {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.dialog--full .preview__video,
+.dialog--full .preview__image {
+  max-height: 100%;
+}
+
 /* ── Uploader (§4.9, §14.3) ──────────────────────────────────────────────── */
 
 /*
@@ -930,6 +968,11 @@
   background: var(--color-listened-strong);
   color: var(--color-text-inverse);
 }
+.surah-player__glyph {
+  inline-size: 1em;
+  block-size: 1em;
+  fill: currentColor;
+}
 .surah-player__button:disabled {
   opacity: 0.55;
   cursor: default;
@@ -983,11 +1026,6 @@
   font-variant-numeric: tabular-nums;
   color: var(--color-text-secondary);
 }
-/* R239 — the tab's lede, smaller: it should not push the Surahs down. */
-.content-page__head .lede {
-  font-size: var(--font-size-sm);
-}
-
 /* A lesson to listen to, played in place. */
 .surah-library__tracks {
   display: grid;

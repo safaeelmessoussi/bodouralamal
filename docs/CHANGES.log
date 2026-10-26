@@ -448,3 +448,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - 20 recordings transcribed locally (faster-whisper small, 5-min chunks), rewritten in standard Arabic, 478 quoted verses replaced by the KFGQPC Warsh text by their words; kept as `backend/src/ops/data/transcripts/surah-1/<content id>.ar.json` (paragraphs + timings, topics, unclear count).
 - `surah-quizzes.ts` `SURAH_QUIZZES[1]`: 20 lesson quizzes (109 questions) + «الاختبار الشامل» (11); `surah-quiz.tsx` dialog (one question at a time, why, stars, best score per device); buttons in `surah-page.tsx`.
 - Quiz texts in the six «نظرة شاملة» dictionaries (`quiz|1|…` keys, verses byte for byte; `locales.test.ts`); tests pin 20 + final, valid answers, neutral wording.
+
+## 2026-10-26 — SRS Revision 242: Surah page in four sections, full-page previews, «صاحب المحتوى»
+- `surah-page.tsx`: shelves listen/slides/read («ملخصات ومذكرات» takes drawings + videos; `see`/`watch` keys gone), SVG play/pause; `Dialog` `full` for `content-preview-dialog.tsx` (stage and media fill it).
+- `GET /library?author_id=<uuid>|none`, sort `author` (integration test); «مكتبة المحتوى» column + `AuthorPicker filter`; «الحجم» column, `formatSize`, `content.size`/`col.size` keys removed.
+- `.lede` → `--font-size-xs`; `SummitFigure asked={false}` in the show. `verify-sorting-headers.mjs` checks the author column instead of size.

@@ -90,7 +90,6 @@ describe('SurahLibrary', () => {
       ar.content.bySurah.section.listen,
       ar.content.bySurah.section.slides,
       ar.content.bySurah.section.read,
-      ar.content.bySurah.section.see,
     ].map((text) => out.indexOf(text));
     expect(order.every((at) => at > -1)).toBe(true);
     expect([...order].sort((x, y) => x - y)).toEqual(order);
@@ -124,16 +123,22 @@ describe('SurahLibrary', () => {
     expect(out).not.toContain('surah-player');
   });
 
-  it('groups the Surah by what each item is: listen in place, read, see', async () => {
+  it('R242 — three shelves: recordings, «مطبوعات», and «ملخصات ومذكرات» holding the rest (drawings as pictures)', async () => {
     const { SurahPage } = await import('./surah-page.js');
     const out = renderToStaticMarkup(
       <SurahPage surah={2} title="البقرة" items={groupBySurah(ENTRIES).find((g) => g.id === 2)!.items} accessToken={null} activeChildId={null} onOpen={() => undefined} startOpen />,
     );
     expect(out).toContain(ar.content.bySurah.section.listen);
     expect(out).toContain(ar.content.bySurah.section.read);
-    expect(out).toContain(ar.content.bySurah.section.see);
-    expect(out).not.toContain(ar.content.bySurah.section.watch);
+    expect(out).not.toContain('surah-library__section--see');
+    expect(out).not.toContain('surah-library__section--watch');
+    // The drawings sit inside «ملخصات ومذكرات», shown as themselves.
+    const read = out.slice(out.indexOf('surah-library__section--read'));
+    expect(read).toContain('surah-library__gallery');
     expect(out).toContain('surah-player__button--play');
+    // R242 — the play sign is drawn: a phone's font made «▶» an emoji.
+    expect(out).toContain('class="surah-player__glyph"');
+    expect(out).not.toContain('▶');
   });
   it('honours a shared ?surah=', () => {
     expect(html(36)).toContain('سورة يس');

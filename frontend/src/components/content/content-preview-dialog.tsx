@@ -106,7 +106,7 @@ export function ContentPreviewDialog({
   }, [item, attempt, accessToken, activeChildId]);
 
   return (
-    <Dialog open={item !== null} onClose={onClose} title={item?.title ?? t('content.previewTitle')} wide>
+    <Dialog open={item !== null} onClose={onClose} title={item?.title ?? t('content.previewTitle')} full>
       {item ? (
         <div className="preview">
           {item.description ? <p className="preview__description">{item.description}</p> : null}

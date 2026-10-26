@@ -710,3 +710,26 @@ describe("R223 — stream_url, branch_id and surah_id=none", () => {
     expect((await call(`${scoped}${academicYearId}&surah_id=nothing`)).status).toBe(400);
   });
 });
+
+describe("R242 — «صاحب المحتوى»: author_id filters, author sorts", () => {
+  it("author_id lists that person's items, none the items with nobody named, and sort_by=author orders by the name", async () => {
+    const zainab = await makeUser("زينب");
+    const asmaa = await makeUser("أسماء");
+    const byZ = await content("لزينب");
+    const byA = await content("لأسماء");
+    await prisma.educationalContent.update({ where: { id: byZ }, data: { authorId: zainab, authorRole: "teacher" } });
+    await prisma.educationalContent.update({ where: { id: byA }, data: { authorId: asmaa, authorRole: "teacher" } });
+    const of = async (q: string): Promise<string[]> =>
+      (await call(`${scoped}${academicYearId}&page_size=100${q}`)).body.data!.map((r) => String(r.id));
+    expect(await of(`&author_id=${zainab}`)).toEqual([byZ]);
+    const none = await of("&author_id=none");
+    expect(none).toContain(ids.publicA);
+    expect(none).not.toContain(byZ);
+    expect(none).not.toContain(byA);
+    const sorted = await of("&sort_by=author&sort_dir=asc");
+    // أسماء before زينب; the items with nobody named last (NULLS LAST).
+    expect(sorted.indexOf(byA)).toBeLessThan(sorted.indexOf(byZ));
+    expect(sorted.indexOf(byZ)).toBeLessThan(sorted.indexOf(ids.publicA));
+    expect((await call(`${scoped}${academicYearId}&author_id=someone`)).status).toBe(400);
+  });
+});
