@@ -464,3 +464,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `programs-show.css`: the attire keeps `1rem + gap` from its lines (glow overlap), image allowance −3 rem; checked at 1920/1366/390 (gaps 16 px, nothing off screen).
 - `install-app.ts`: worker registers when `readyState === 'complete'`; `installed` offer via `getInstalledRelatedApps` (+ manifest `related_applications`); button waits 2.5 s for `beforeinstallprompt`, catches a refused `prompt()`; steps dialog portalled to `body`.
 - `dialog.css`: panel/body `flex: 1 1 auto` (Safari zero-basis collapse); `verify-programs-show.mjs`: the question waits for the click, the glow clears both lines.
+
+## 2026-10-26 — SRS Revision 245: one-click install only, «بانتظار المتخرّجات»
+- `installOffer`: `isChromium` without a held offer → `none` (the button appears with the offer); the 2.5 s wait removed; steps only on iOS and Firefox. Tests per browser.
+- `install-app-button.tsx` restored to the project's quote style (R244 had run prettier over it) with R244's portal/installed/catch kept.
+- `programs.journey.summitText` «في نهاية الرحلة، زيّ التخرّج بانتظار المتخرّجات.» (+ en/fr/es/de).

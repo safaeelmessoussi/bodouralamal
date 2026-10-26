@@ -38,9 +38,17 @@ describe('what «تثبيت التطبيق» offers', () => {
     expect(isIos({ userAgent: IPAD_AS_MAC, maxTouchPoints: 0 })).toBe(false);
   });
 
-  it('the browser-menu steps on any other phone, and before Chrome has announced anything', () => {
+  it('the browser-menu steps only where no one-click offer can come (Firefox)', () => {
     expect(installOffer(facts({ userAgent: ANDROID_FIREFOX }))).toBe('manual');
-    expect(installOffer(facts({}))).toBe('manual');
+  });
+
+  it('R245 — Chrome, Samsung Internet, Edge: no button until the offer, then one click installs', () => {
+    const SAMSUNG =
+      'Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0 Mobile Safari/537.36';
+    for (const userAgent of [ANDROID_CHROME, SAMSUNG]) {
+      expect(installOffer(facts({ userAgent }))).toBe('none');
+      expect(installOffer(facts({ userAgent, promptAvailable: true }))).toBe('prompt');
+    }
   });
 
   it('nothing once installed, and nothing on a desktop that cannot install', () => {

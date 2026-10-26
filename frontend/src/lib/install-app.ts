@@ -12,7 +12,8 @@
  *   Safari underneath, and only «مشاركة ← إضافة إلى الشاشة الرئيسية» installs.
  *   The button opens those steps, with the icons she will actually see.
  * - **Other mobile browsers** (Firefox on Android) install from their own menu;
- *   the button says where.
+ *   the button says where. **R245 — a Chromium browser without its offer yet
+ *   shows no button** (it appears with the offer, one click from installing).
  * - **Already installed** (running standalone): there is nothing to offer, so
  *   nothing is shown. **Installed, but opened in the browser** (R244 — Chrome
  *   then sends no offer, and its menu reads «فتح التطبيق»): the button says it
@@ -43,11 +44,21 @@ export function isIos(facts: Pick<InstallFacts, 'userAgent' | 'maxTouchPoints'>)
   );
 }
 
+/** The engines that announce `beforeinstallprompt` (Chrome, Samsung Internet, Edge, Opera). */
+export function isChromium(userAgent: string): boolean {
+  return /Chrome\/|SamsungBrowser|EdgA\/|OPR\//.test(userAgent) && !/Firefox/.test(userAgent);
+}
+
 export function installOffer(facts: InstallFacts): InstallOffer {
   if (facts.standalone) return 'none';
   if (facts.promptAvailable) return 'prompt';
   if (facts.installed) return 'installed';
   if (isIos(facts)) return 'ios';
+  // R245 — a browser that installs in one click (Chrome, Samsung Internet,
+  // Edge, Opera) shows the button only once it has made its offer: one click
+  // then opens its own install sheet, and nowhere does it send the reader to
+  // a menu. Only a phone browser that never offers (Firefox) gets the steps.
+  if (isChromium(facts.userAgent)) return 'none';
   if (/Android|Mobile/.test(facts.userAgent)) return 'manual';
   return 'none';
 }
