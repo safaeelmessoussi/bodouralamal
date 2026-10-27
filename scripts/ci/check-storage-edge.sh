@@ -36,6 +36,14 @@ if grep -rnE --include='*.conf' 'proxy_pass[[:space:]]+\$minio_upstream' "$repo_
   fail 'a MinIO proxy path bypasses the shared storage-proxy snippet'
 fi
 
+# R246 — the store's `aws-chunked` upload token never reaches a browser as the
+# object's Content-Encoding (an iPhone refused every lesson that carried it).
+[[ "$(grep -Fc 'proxy_hide_header Content-Encoding;' "$shared")" -eq 1 && \
+   "$(grep -Fc 'add_header Content-Encoding $storage_content_encoding always;' "$shared")" -eq 1 ]] ||
+  fail 'the shared proxy must replace Content-Encoding with the aws-chunked-free value'
+grep -q 'aws-chunked' "$repo_root/nginx/nginx.conf" ||
+  fail 'nginx.conf must map aws-chunked out of the stored Content-Encoding'
+
 include_count="$(grep -Fc 'include /etc/nginx/snippets/storage-proxy.conf;' "$routing")"
 [[ "$include_count" -ge 4 ]] ||
   fail 'not every public/private storage route includes the shared proxy policy'

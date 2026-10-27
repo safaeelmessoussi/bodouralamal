@@ -469,3 +469,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `installOffer`: `isChromium` without a held offer → `none` (the button appears with the offer); the 2.5 s wait removed; steps only on iOS and Firefox. Tests per browser.
 - `install-app-button.tsx` restored to the project's quote style (R244 had run prettier over it) with R244's portal/installed/catch kept.
 - `programs.journey.summitText` «في نهاية الرحلة، زيّ التخرّج بانتظار المتخرّجات.» (+ en/fr/es/de).
+
+## 2026-10-27 — SRS Revision 246: lessons play on iPhone (no `aws-chunked` encoding)
+- Live probe: 40/40 lessons answered `Content-Encoding: aws-chunked` (SDK checksum upload, kept by SeaweedFS); Safari fails such a body, the player gave «تعذّر تشغيل هذا الدرس» after 3 renewals.
+- `nginx.conf` map `$storage_content_encoding` (token removed, a real encoding kept); `storage-proxy.conf` `proxy_hide_header` + `add_header`; `check-storage-edge.sh` pins it; runbook check added.
+- Verified: `nginx -t` + restart on Localhost (no header on a read), throwaway nginx proves the three cases; content integration through the new edge.
