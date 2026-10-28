@@ -29,7 +29,7 @@ export function ContentCard({
 }): ReactNode {
   const kindLabel = t(`content.kind.${item.kind}`);
   return (
-    <li className="content-card__wrap">
+    <li className="content-card__wrap" data-content-id={item.id}>
       <button
         type="button"
         className={`content-card content-card--${item.kind}`}

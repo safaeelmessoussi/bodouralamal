@@ -676,7 +676,7 @@ function OccurrenceMaterials({
                     {/* The existing library flow, which is where the download
                       permission and the presigned URL live (TD-3.5) — never a
                       second viewer. */}
-                    <a href={`/resources?level=${item.level_id}&content=${item.id}`}>
+                    <a href={`/resources?content=${item.id}`}>
                       {item.title}
                     </a>
                   </li>
@@ -691,7 +691,7 @@ function OccurrenceMaterials({
               <ul className="details__list">
                 {materials.map((item) => (
                   <li key={item.id}>
-                    <a href={`/resources?level=${item.level_id}&content=${item.id}`}>
+                    <a href={`/resources?content=${item.id}`}>
                       {item.title}
                     </a>
                   </li>

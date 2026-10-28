@@ -1,23 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import {
-  fetchLibraryEntries,
-  fetchCategoryWideContent,
-  fetchLevelContent,
-  type ContentItem,
-  type LevelContent,
-} from '../adapters/content.js';
+import { fetchLibraryEntries, type ContentItem } from '../adapters/content.js';
 import { fetchCalendarBootstrap } from '../adapters/calendar.js';
 import type { LibraryEntry } from '../adapters/content.js';
 import { normalizeArabic } from '../components/content/content-filters.js';
 import { ContentCard } from '../components/content/content-card.js';
-import {
-  applyFilters,
-  ContentFilters,
-  EMPTY_FILTERS,
-  hasActiveFilters,
-  type ContentFilterState,
-} from '../components/content/content-filters.js';
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
 import { useWarmPdfPreview } from '../components/content/pdf-canvas-preview.js';
 import { byTitle, groupBySurah, SurahLibrary } from '../components/content/surah-library.js';
@@ -84,11 +71,11 @@ export function ResourcesPage(): ReactNode {
     () => new URLSearchParams(window.location.search).get('content'),
     [],
   );
-  // A deep link to an item still opens on its own shelf (rule AB); a deep link
-  // to a Level or a Category preselects the filter on the whole library.
-  if (contentId && levelId) return <LevelView shelf={{ kind: 'level', id: levelId }} />;
-  if (contentId && categoryId) return <LevelView shelf={{ kind: 'whole_category', id: categoryId }} />;
-  return <LibraryPage levelId={levelId} categoryId={categoryId} />;
+  // A deep link to a Level or a Category preselects the filter on the whole
+  // library. **R255 — a deep link to an item (`?content=`) opens it where it is
+  // read**: an item about a Surah on that Surah's page, anything else with its
+  // preview over the library (the Level page it used to open is withdrawn).
+  return <LibraryPage levelId={levelId} categoryId={categoryId} focusId={contentId} />;
 }
 
 /**
@@ -100,8 +87,20 @@ export function ResourcesPage(): ReactNode {
  */
 type LibraryMode = 'history' | 'surah' | 'level' | 'category';
 
-function LibraryPage({ levelId, categoryId }: { levelId: string | null; categoryId: string | null }): ReactNode {
+function LibraryPage({
+  levelId,
+  categoryId,
+  focusId,
+}: {
+  levelId: string | null;
+  categoryId: string | null;
+  focusId: string | null;
+}): ReactNode {
+  // R255 — where a linked item about no Surah is shown instead.
+  const [elsewhere, setElsewhere] = useState<LibraryEntry | null>(null);
   const [mode, setMode] = useState<LibraryMode>(() => {
+    // R255 — a linked item is looked for in «حسب السورة» first.
+    if (focusId !== null) return 'surah';
     const param = new URLSearchParams(window.location.search).get('view');
     // R250 — «حسب الفئة»: what is addressed to a whole Category.
     if (param === 'categories' || (categoryId !== null && levelId === null)) return 'category';
@@ -114,14 +113,26 @@ function LibraryPage({ levelId, categoryId }: { levelId: string | null; category
   const shown: LibraryMode = mode;
   const tabs = <ModeTabs mode={shown} onMode={setMode} />;
   if (shown === 'history') return <HistoryView tabs={tabs} />;
-  if (shown === 'surah') return <SurahView tabs={tabs} />;
+  if (shown === 'surah') {
+    return (
+      <SurahView
+        tabs={tabs}
+        focusId={focusId}
+        onElsewhere={(entry) => {
+          setElsewhere(entry);
+          setMode(entry.shelf_kind === 'whole_category' ? 'category' : 'level');
+        }}
+      />
+    );
+  }
   // Keyed: each view starts with its own filters.
   return (
     <LibraryView
       key={shown}
       scope={shown === 'category' ? 'whole_category' : 'level'}
-      initialLevel={levelId}
-      initialCategory={categoryId}
+      initialLevel={elsewhere && elsewhere.shelf_kind === 'level' ? elsewhere.level_id : levelId}
+      initialCategory={elsewhere && elsewhere.shelf_kind === 'whole_category' ? elsewhere.category_id : categoryId}
+      focusId={elsewhere?.item.id ?? null}
       tabs={tabs}
     />
   );
@@ -237,15 +248,48 @@ function useLibraryEntries(accessToken: string | null): Load<LibraryEntry[]> {
 }
 
 /** R196 — the Surah view: the same rows, read by Surah (`surah-library.tsx`). */
-function SurahView({ tabs }: { tabs: ReactNode }): ReactNode {
+function SurahView({
+  tabs,
+  focusId = null,
+  onElsewhere,
+}: {
+  tabs: ReactNode;
+  /** R255 — the item a link names (`?content=`). */
+  focusId?: string | null;
+  /** R255 — the linked item is about no Surah: show it in the library instead. */
+  onElsewhere?: (entry: LibraryEntry) => void;
+}): ReactNode {
   const { accessToken } = useSession();
   const { activeChildId } = useActiveChild();
   const load = useLibraryEntries(accessToken);
   const [open, setOpen] = useState<ContentItem | null>(null);
-  const initialSurah = useMemo(() => {
+  // R255 — the linked item, or the recording a linked page («صفحات المطبوع») belongs to.
+  const focus = useMemo(() => {
+    if (focusId === null || load.kind !== 'ready') return null;
+    const entry = load.data.find((e) => e.item.id === focusId) ?? null;
+    const parent = entry?.item.slide_of ? load.data.find((e) => e.item.id === entry.item.slide_of) : undefined;
+    return parent ?? entry;
+  }, [focusId, load]);
+  const urlSurah = useMemo(() => {
     const raw = Number(new URLSearchParams(window.location.search).get('surah'));
     return Number.isInteger(raw) && raw >= 1 && raw <= 114 ? raw : null;
   }, []);
+  const initialSurah = focus?.surah_id ?? urlSurah;
+  const [focusHandled, setFocusHandled] = useState(false);
+  useEffect(() => {
+    if (focusHandled || focus === null) return;
+    setFocusHandled(true);
+    if (focus.surah_id === null) {
+      onElsewhere?.(focus);
+      return;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set('surah', String(focus.surah_id));
+    window.history.replaceState(null, '', url);
+    // Opened over its Surah's page, where it is also brought into view.
+    setOpen(focus.item);
+  }, [focus, focusHandled, onElsewhere]);
+  if (focus !== null && focus.surah_id === null) return <Shell title={t('content.title')} lede={null} tabs={tabs}><YearSkeletons /></Shell>;
   return (
     <Shell title={t('content.title')} lede={null} tabs={tabs}>
       {load.kind === 'loading' ? <YearSkeletons /> : null}
@@ -257,6 +301,7 @@ function SurahView({ tabs }: { tabs: ReactNode }): ReactNode {
           accessToken={accessToken}
           activeChildId={activeChildId}
           onOpen={setOpen}
+          focusId={focus?.item.id ?? null}
         />
       ) : null}
       <ContentPreviewDialog item={open} onClose={() => setOpen(null)} accessToken={accessToken} activeChildId={activeChildId} />
@@ -321,12 +366,15 @@ function LibraryView({
   scope,
   initialLevel,
   initialCategory,
+  focusId = null,
   tabs,
 }: {
   /** R250 — «حسب المستوى» holds the Levels' shelves, «حسب الفئة» what is addressed to a whole Category. */
   scope: 'level' | 'whole_category';
   initialLevel: string | null;
   initialCategory: string | null;
+  /** R255 — a linked item about no Surah: its preview opens over this view. */
+  focusId?: string | null;
   tabs: ReactNode;
 }): ReactNode {
   const { accessToken } = useSession();
@@ -338,6 +386,14 @@ function LibraryView({
     ...(initialCategory ? { shelfKey: `category:${initialCategory}` } : {}),
   });
   const [open, setOpen] = useState<ContentItem | null>(null);
+  // R255 — opened once, when the rows it is among have loaded.
+  const [focusHandled, setFocusHandled] = useState(false);
+  useEffect(() => {
+    if (focusHandled || focusId === null || load.kind !== 'ready') return;
+    setFocusHandled(true);
+    const entry = load.data.find((e) => e.item.id === focusId);
+    if (entry) setOpen(entry.item);
+  }, [focusHandled, focusId, load]);
   // R188 §2 — the Super Admin's order for the Categories and Levels, from
   // the public bootstrap (one small cached read); without it, names order.
   const [ranking, setRanking] = useState<Ranking>(NO_RANKING);
@@ -725,186 +781,6 @@ function LibraryView({
   );
 }
 
-/* ── Page 2 — one level ──────────────────────────────────────────────────── */
-
-function LevelView({
-  shelf,
-}: {
-  shelf: { kind: 'level' | 'whole_category'; id: string };
-}): ReactNode {
-  // Anonymous and authenticated readers share this surface. Both metadata and
-  // bytes are server-scoped; the mint additionally verifies live child context.
-  const { accessToken, status: sessionStatus } = useSession();
-  const { activeChildId } = useActiveChild();
-  const [load, setLoad] = useState<Load<LevelContent | null>>({ kind: 'loading' });
-  const [filters, setFilters] = useState<ContentFilterState>(EMPTY_FILTERS);
-  const [open, setOpen] = useState<ContentItem | null>(null);
-
-  /**
-   * **`?content=` opens one item on arrival** (2026-08-17).
-   *
-   * A session's materials link here — *"clicking a content opens it in the
-   * library"* — and until now the parameter they carried (`?content_id=`) was
-   * consumed by nothing at all: the link landed on the Category index, and the
-   * item was neither opened nor on the page.
-   *
-   * It is **focus, never a gate** (rule A): the Level's shelf renders in full
-   * whether or not the parameter is present, and an id that matches nothing here
-   * simply opens nothing rather than emptying the page. The effect runs once the
-   * content has loaded, because the item it opens is one of the loaded rows —
-   * the dialog renders the item, not an id.
-   */
-  const focusId = useMemo(
-    () => new URLSearchParams(window.location.search).get('content'),
-    [],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoad({ kind: 'loading' });
-    void (async () => {
-      try {
-        const data =
-          shelf.kind === 'level'
-            ? await fetchLevelContent(shelf.id, accessToken)
-            : await fetchCategoryWideContent(shelf.id, accessToken);
-        if (!cancelled) setLoad({ kind: 'ready', data });
-      } catch {
-        if (!cancelled) setLoad({ kind: 'error' });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [shelf.kind, shelf.id, accessToken]);
-
-  const content = load.kind === 'ready' ? load.data : null;
-
-  // Opened once, when the shelf it belongs to has loaded. `focusId` is read at
-  // mount and never changes, so this cannot reopen a dialog the reader has shut.
-  const [focusHandled, setFocusHandled] = useState(false);
-  useEffect(() => {
-    if (focusHandled || focusId === null || content === null || sessionStatus === 'loading') return;
-    // §5.2 groups a Level's shelf by academic year and then by branch, so the
-    // item is two levels down — searched rather than assumed to be anywhere in
-    // particular.
-    for (const year of content.years) {
-      for (const branch of year.branches) {
-        for (const item of branch.items) {
-          if (item.id === focusId) {
-            setFocusHandled(true);
-            setOpen(item);
-            return;
-          }
-        }
-      }
-    }
-  }, [focusHandled, focusId, content, sessionStatus]);
-  const filtered = useMemo(
-    () => (content ? applyFilters(content, filters) : null),
-    [content, filters],
-  );
-
-  /**
-   * Academic years **newest first**.
-   *
-   * Sorted on the `YYYY-YYYY` label, which is safe to compare as a string
-   * because TD-6 constrains the format — so `2026-2027 > 2025-2026`
-   * lexicographically as well as chronologically, with no date parsing.
-   *
-   * §5.2 pins the `is_current` year at top; newest-first and current-first
-   * coincide for every ordinary year, and where they would not — a year recorded
-   * ahead of the current one — this shows the newest. That divergence is reported,
-   * not resolved here.
-   */
-  const years = useMemo(
-    () => (filtered ? [...filtered.years].sort((a, b) => b.label.localeCompare(a.label)) : []),
-    [filtered],
-  );
-
-  return (
-    <Shell
-      title={
-        shelf.kind === 'whole_category'
-          ? t('content.wholeCategory.title')
-          : (content?.level_name ?? t('content.title'))
-      }
-      lede={content?.description ?? null}
-      eyebrow={content?.category_name ?? null}
-      back
-    >
-      {load.kind === 'loading' ? <YearSkeletons /> : null}
-      {load.kind === 'error' ? <ErrorState /> : null}
-
-      {/* A level id that resolves to nothing — a stale link, or content removed
-          since it was shared. Distinct from "this level is empty". */}
-      {load.kind === 'ready' && content === null ? <EmptyState /> : null}
-
-      {content ? (
-        <>
-          <ContentFilters content={content} value={filters} onChange={setFilters} />
-
-          {years.length === 0 ? (
-            hasActiveFilters(filters) ? (
-              // "Nothing matches your filters" is a different answer from
-              // "nothing here yet" (§14.4), and it offers the way out.
-              <NoResultsState onClear={() => setFilters(EMPTY_FILTERS)} />
-            ) : (
-              <EmptyState />
-            )
-          ) : null}
-
-          {years.map((year) => (
-            <section
-              key={year.academic_year_id}
-              className="content-year"
-              aria-labelledby={`year-${year.academic_year_id}`}
-            >
-              <h2 id={`year-${year.academic_year_id}`} className="content-year__title">
-                {year.label}
-                {year.is_current ? (
-                  <span className="content-year__badge">{t('content.currentYear')}</span>
-                ) : null}
-              </h2>
-
-              {year.branches.map((branch) => (
-                <section
-                  key={branch.branch_id ?? 'global'}
-                  className="content-branch"
-                  aria-labelledby={`br-${year.academic_year_id}-${branch.branch_id ?? 'global'}`}
-                >
-                  <h3
-                    id={`br-${year.academic_year_id}-${branch.branch_id ?? 'global'}`}
-                    className="content-branch__title"
-                  >
-                    <Icon name={branch.branch_id ? 'book' : 'shield'} size={16} />
-                    {/* The Global / بدون فرع container, which §5.2 places at the
-                        top of the branch tier — content belonging to no single
-                        branch has to surface somewhere (BR-20). */}
-                    {branch.branch_name ?? t('content.globalScope')}
-                  </h3>
-                  <ul className="content-list">
-                    {branch.items.map((item) => (
-                      <ContentCard key={item.id} item={item} onOpen={setOpen} />
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </section>
-          ))}
-        </>
-      ) : null}
-
-      <ContentPreviewDialog
-        item={open}
-        onClose={() => setOpen(null)}
-        accessToken={accessToken}
-        activeChildId={activeChildId}
-      />
-    </Shell>
-  );
-}
-
 /* ── Shared chrome ───────────────────────────────────────────────────────── */
 
 /**
@@ -915,15 +791,11 @@ function LevelView({
 function Shell({
   title,
   lede,
-  eyebrow = null,
-  back = false,
   tabs = null,
   children,
 }: {
   title: string;
   lede: string | null;
-  eyebrow?: string | null;
-  back?: boolean;
   /** R196 — «حسب السورة | حسب المستوى», under the heading. */
   tabs?: ReactNode;
   children: ReactNode;
@@ -935,13 +807,6 @@ function Shell({
         <section className="section content-page" aria-labelledby="content-title">
           <Container>
             <div className="content-page__head">
-              {back ? (
-                <a className="content-page__back" href="/resources">
-                  <Icon name="chevron" size={16} />
-                  {t('content.backToLibrary')}
-                </a>
-              ) : null}
-              {eyebrow ? <span className="eyebrow">{eyebrow}</span> : null}
               <h1 id="content-title" className="content-page__title">
                 {title}
               </h1>

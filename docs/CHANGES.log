@@ -522,3 +522,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Harnesses: admin-navigation, platform-owner-framing (steps 6–9 via «تحديد الكل»), quran-entry check 22; `seed-quran-scenario` cleanup deletes tagged `category_subject` links first.
 - Verified: integration course-schedule+calendar 80/80, content 89/89; browser probes 21/21 (columns, «السورة», teacher filters, Categories→Levels, «حفظي», wide edit twice = 200); sorting 17/17, capabilities 6/6, admin-nav 44/44, unsaved 24/24, calendar-filters 11/11, quran-entry 23/24, framing 1–9.
 - Pre-existing (same on HEAD): teaching-profile 5/6/9–11, teacher-scheduling 12, quran-entry 2 (Localhost data), framing registration submit after step 9.
+
+## 2026-10-29 — SRS Revision 255: teacher «الفرع», «كل مستويات الفئة», «المادة» column, past rooms, split clash, links to the Surah page, Level page removed
+- Backend: options add enrolment branches; `audienceNames` collapses a whole Category; `fillBlankSessionRooms` on a class edit (+ `ops:fill-session-rooms`, APPLY=1 to write); a split ignores clashes on retained dates.
+- Frontend: `?content=` resolved in the library (Surah page with the item marked and opened, else the Level/Category view); `LevelView`, `ContentFilters`/`applyFilters`, the back link and two keys (ar + six locales) removed; «المادة» after «العنوان».
+- Production data: 25 roomless past/cancelled occurrences of 5 classes filled (dry run first; audit rows), 0 left.

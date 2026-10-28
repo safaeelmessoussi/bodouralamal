@@ -2,14 +2,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { kindOf } from '../adapters/content.js';
-import type { ContentItem, LevelContent, LevelSummary } from '../adapters/content.js';
+import type { ContentItem, LevelSummary } from '../adapters/content.js';
 import { authorLine, ContentCard } from '../components/content/content-card.js';
-import {
-  applyFilters,
-  EMPTY_FILTERS,
-  GLOBAL,
-  hasActiveFilters,
-} from '../components/content/content-filters.js';
+import { normalizeArabic } from '../components/content/content-filters.js';
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
 import { LevelCard } from '../components/content/level-card.js';
 
@@ -43,39 +38,6 @@ const level = (over: Partial<LevelSummary> = {}): LevelSummary => ({
   academic_year_count: 2,
   ...over,
 });
-
-const content: LevelContent = {
-  level_id: 'l1',
-  level_name: 'المستوى الأول',
-  category_name: 'الكبار',
-  description: null,
-  years: [
-    {
-      academic_year_id: 'y26',
-      label: '2026-2027',
-      is_current: true,
-      branches: [
-        { branch_id: null, branch_name: null, items: [item({ id: 'g1', title: 'دليل عام', kind: 'pdf' })] },
-        {
-          branch_id: 'b1',
-          branch_name: 'مقر أمرشيش',
-          items: [
-            item({ id: 'a1', title: 'تسجيل الحلقة', kind: 'audio' }),
-            item({ id: 'a2', title: 'أَحْكام التجويد', kind: 'video' }),
-          ],
-        },
-      ],
-    },
-    {
-      academic_year_id: 'y25',
-      label: '2025-2026',
-      is_current: false,
-      branches: [
-        { branch_id: 'b2', branch_name: 'مقر تاركة', items: [item({ id: 'o1', title: 'مذكّرة', kind: 'pdf' })] },
-      ],
-    },
-  ],
-};
 
 describe('a level card', () => {
   it('is a link, not a button — it navigates', () => {
@@ -191,47 +153,10 @@ describe('a content card', () => {
   });
 });
 
-describe('filtering one level', () => {
-  it('does nothing when no filter is set', () => {
-    expect(hasActiveFilters(EMPTY_FILTERS)).toBe(false);
-    expect(applyFilters(content, EMPTY_FILTERS).years).toHaveLength(2);
-  });
-
-  it('narrows by year, dropping the years that no longer match', () => {
-    const out = applyFilters(content, { ...EMPTY_FILTERS, yearId: 'y26' });
-    expect(out.years.map((y) => y.label)).toEqual(['2026-2027']);
-  });
-
-  it('treats the Global scope as a real branch choice', () => {
-    const out = applyFilters(content, { ...EMPTY_FILTERS, branchId: GLOBAL });
-    expect(out.years).toHaveLength(1);
-    expect(out.years[0]!.branches[0]!.branch_id).toBeNull();
-  });
-
-  it('narrows by type', () => {
-    const out = applyFilters(content, { ...EMPTY_FILTERS, kind: 'audio' });
-    const titles = out.years.flatMap((y) => y.branches.flatMap((b) => b.items.map((i) => i.title)));
-    expect(titles).toEqual(['تسجيل الحلقة']);
-  });
-
-  it('DROPS groups a filter emptied rather than rendering a bare heading', () => {
-    // A year heading above no content states that the year exists and is empty,
-    // which is not what a filter means.
-    const out = applyFilters(content, { ...EMPTY_FILTERS, kind: 'audio' });
-    expect(out.years).toHaveLength(1);
-    expect(out.years[0]!.branches).toHaveLength(1);
-  });
-
-  it('folds Arabic variants in search, as TD-10 normalisation does', () => {
+describe('library search', () => {
+  it('folds Arabic variants, as TD-10 normalisation does', () => {
     // `احكام` must find `أَحْكام` — diacritics stripped and alef folded.
-    const out = applyFilters(content, { ...EMPTY_FILTERS, query: 'احكام' });
-    const titles = out.years.flatMap((y) => y.branches.flatMap((b) => b.items.map((i) => i.title)));
-    expect(titles).toEqual(['أَحْكام التجويد']);
-  });
-
-  it('returns nothing when a search matches nothing, so the page can say so', () => {
-    const out = applyFilters(content, { ...EMPTY_FILTERS, query: 'لا-يوجد-شيء' });
-    expect(out.years).toHaveLength(0);
+    expect(normalizeArabic('أَحْكام التجويد')).toContain(normalizeArabic('احكام'));
   });
 });
 

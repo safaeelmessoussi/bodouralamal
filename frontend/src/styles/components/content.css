@@ -21,27 +21,6 @@
   font-size: var(--font-size-lg);
   color: var(--color-primary-strong);
 }
-/* A quiet back affordance above the heading — the drill-down's only way out, so
-   it is always present on a level view and never on the index. */
-.content-page__back {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  min-block-size: var(--tap-min);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  text-decoration: none;
-}
-.content-page__back:hover {
-  color: var(--color-primary);
-}
-/* `dir="rtl"` already reverses the row, so the chevron points back without being
-   mirrored in markup — the same call the calendar's month controls made. */
-.content-page__back svg {
-  transform: rotate(90deg);
-}
-
 /* ── Category groups (page 1) ────────────────────────────────────────────── */
 
 .content-group + .content-group {
@@ -1603,4 +1582,11 @@
       opacity: 0;
     }
   }
+}
+
+/* R255 — the item a link opened the Surah page on (a session's «المواد المرفقة»). */
+.surah-track.is-focused,
+.content-card__wrap.is-focused > .content-card {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }

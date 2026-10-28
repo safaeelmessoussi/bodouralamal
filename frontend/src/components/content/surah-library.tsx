@@ -123,7 +123,10 @@ export function SurahLibrary({
   accessToken,
   activeChildId,
   onOpen,
+  focusId = null,
 }: {
+  /** R255 — the item a link names, on `initialSurah`'s page. */
+  focusId?: string | null;
   entries: readonly LibraryEntry[];
   /** `?surah=` — a shared link opens on its Surah; else the first that has content. */
   initialSurah: number | null;
@@ -211,6 +214,7 @@ export function SurahLibrary({
           accessToken={accessToken}
           activeChildId={activeChildId}
           onOpen={onOpen}
+          focusId={current.id === initialSurah ? focusId : null}
         />
       </section>
     </div>

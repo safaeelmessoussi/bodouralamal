@@ -1217,6 +1217,7 @@ export async function personalCalendarOptions(
     where: { studentId: userId, deletedAt: null, ...inProgressEnrolmentWhere(userId) },
     select: {
       levelId: true,
+      branchId: true,
       administrativeGroupId: true,
       level: { select: { id: true, name: true, categoryId: true, category: { select: { name: true } } } },
     },
@@ -1260,6 +1261,10 @@ export async function personalCalendarOptions(
     }),
   ]);
   const branchIds = new Set<string>([
+    // R255 — and the branch of each Level she is enrolled in: a مؤطِّرة who is
+    // also a beneficiary sees those occurrences (`personalFilters`), and with
+    // no class of her own to staff this list was empty.
+    ...enrolments.map((e) => e.branchId),
     ...taught.branchIds,
     ...scheduleBranches.map((b) => b.branchId),
     ...staffedSessions.flatMap((s) => [s.session.schedule.branchId, ...s.session.audienceBranches.map((b) => b.branchId)]),

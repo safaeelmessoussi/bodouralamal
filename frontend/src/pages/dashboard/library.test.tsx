@@ -9,10 +9,10 @@ import PAGE from './library.tsx?raw';
  * ## Why a source guard
  *
  * The button used to land on `/resources?level=<id>` — the Level's whole
- * shelf, with the item she chose nowhere marked. `resources.tsx`'s own
- * `LevelView` already reads a SECOND parameter, `?content=<id>`, to open
- * `ContentPreviewDialog` on arrival (the identical mechanism
- * `EventDetailsDialog`'s own materials links already use) — this page's own
+ * shelf, with the item she chose nowhere marked. `resources.tsx` reads
+ * `?content=<id>` and opens `ContentPreviewDialog` where the item is read —
+ * its Surah's page, else the library (R255; the identical link
+ * `EventDetailsDialog`'s materials use) — this page's own
  * data loads asynchronously (`fetchStudentIdentity`/`fetchLevelContent`), so
  * a static render shows only the loading state and never the row this fix
  * touches; the source is what actually states the link, both parameters and
@@ -21,12 +21,8 @@ import PAGE from './library.tsx?raw';
 const source = PAGE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
 describe('the library table\'s open link deep-links to the exact item', () => {
-  it('carries `?content=<id>` — the SAME parameter resources.tsx already reads to open the preview dialog', () => {
-    expect(source).toMatch(/href=\{`\/resources\?level=\$\{levelId\}&content=\$\{i\.id\}`\}/);
-  });
-
-  it('keeps `?level=` alongside it, so a stale or unauthorized id still lands on her own Level\'s shelf', () => {
-    expect(source).toContain('level=${levelId}');
+  it('carries `?content=<id>` — resources.tsx opens it where it is read (R255: its Surah page, else the library)', () => {
+    expect(source).toMatch(/href=\{`\/resources\?content=\$\{i\.id\}`\}/);
   });
 
   it('reads the id from the ROW the link renders for, not a page-level or stale value', () => {

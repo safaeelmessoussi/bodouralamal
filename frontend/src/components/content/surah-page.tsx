@@ -37,7 +37,13 @@ export function SurahPage({
   onOpen,
   revelation,
   startOpen = false,
+  focusId = null,
 }: {
+  /**
+   * R255 — an item a link names («المواد المرفقة» of a session): its section
+   * and year open on arrival and it is brought into view, marked.
+   */
+  focusId?: string | null;
   /** Every section open from the start (a static render, as «فتح الكل» leaves it). */
   startOpen?: boolean;
   surah: number;
@@ -73,7 +79,17 @@ export function SurahPage({
   ];
   // R239 — every section opens and closes.
   // R240 — every section closed on arrival (the Owner: «by default, طيّ الكل»).
-  const [open, setOpen] = useState<Set<string>>(() => new Set(startOpen ? keys : []));
+  // R255 — the linked item, or the recording a linked page belongs to.
+  const focusItem = (() => {
+    if (focusId === null) return null;
+    const item = items.find((i) => i.id === focusId) ?? null;
+    if (item && pages.ids.has(item.id) && item.slide_of) return items.find((i) => i.id === item.slide_of) ?? item;
+    return item;
+  })();
+  const focusSection = focusItem ? (shelves.find((s) => s.items.includes(focusItem))?.key ?? null) : null;
+  const [open, setOpen] = useState<Set<string>>(
+    () => new Set([...(startOpen ? keys : []), ...(focusSection ? [focusSection] : [])]),
+  );
   const toggle = (key: string): void =>
     setOpen((was) => {
       const next = new Set(was);
@@ -89,7 +105,20 @@ export function SurahPage({
    * first, each year closed — unless the section has one year only, which is
    * open from the start. A year's key is flipped from that default.
    */
-  const [flipped, setFlipped] = useState<Set<string>>(() => new Set());
+  const [flipped, setFlipped] = useState<Set<string>>(() => {
+    // R255 — the linked item's year open (a section of one year already is).
+    if (!focusItem || (focusSection !== 'listen' && focusSection !== 'slides')) return new Set();
+    const years = byYear(shelves.find((s) => s.key === focusSection)!.items);
+    return years.length > 1 ? new Set([`${focusSection}:${focusItem.academic_year_label ?? ''}`]) : new Set();
+  });
+  // Once, on arrival (the id does not change): the reader moves on from here.
+  const focusedId = focusItem?.id ?? null;
+  useEffect(() => {
+    if (focusedId === null) return;
+    const node = document.querySelector(`[data-content-id="${CSS.escape(focusedId)}"]`);
+    node?.classList.add('is-focused');
+    node?.scrollIntoView({ block: 'center' });
+  }, [focusedId]);
   const yearOpen = (key: string, single: boolean): boolean => (single || startOpen) !== flipped.has(key);
   const flip = (key: string): void =>
     setFlipped((was) => {
@@ -635,7 +664,7 @@ function AudioTrack({
   const listened = total > 0 ? Math.min(100, (current / total) * 100) : 0;
 
   return (
-    <li className="surah-track">
+    <li className="surah-track" data-content-id={item.id}>
       <span className="surah-track__index" aria-hidden="true">
         {index}
       </span>

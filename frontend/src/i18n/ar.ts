@@ -3738,7 +3738,6 @@ export const ar = {
     // The educational library (§5.2, §4.9).
 
     title: 'المحتوى التعليمي',
-    backToLibrary: 'كل المستويات',
     // القرار 167 §5 — ما أُعِدّ لكل مستويات الفئة، لا لمستوى واحد.
     wholeCategory: {
       title: 'كل مستويات الفئة',
@@ -3746,7 +3745,6 @@ export const ar = {
       badge: 'لكل مستويات الفئة',
     },
     globalScope: 'كل الفروع',
-    currentYear: 'السنة الحالية',
     openItem: 'عرض المحتوى',
     download: 'تنزيل الملف',
     // Presentation classes, not file extensions (§14.6): the label tells a reader

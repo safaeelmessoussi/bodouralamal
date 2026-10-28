@@ -186,6 +186,13 @@ export function TeacherSchedulesPage(): ReactNode {
       cell: (r) =>
         r.title.trim() !== '' ? r.title : <span className="muted">{t('scheduling.untitled')}</span>,
     },
+    // R255 — «المادة» right after the title, as on الجدولة.
+    {
+      key: 'subject',
+      header: t('admin.schedules.subject'),
+      fit: true,
+      cell: (r) => r.subjectName ?? <span className="muted">—</span>,
+    },
     // R254 — the same three columns as الجدولة.
     ...audienceColumns(),
     {
@@ -203,11 +210,6 @@ export function TeacherSchedulesPage(): ReactNode {
         ) : (
           <span className="muted">{t('scheduling.allDay')}</span>
         ),
-    },
-    {
-      key: 'subject',
-      header: t('admin.schedules.subject'),
-      cell: (r) => r.subjectName ?? <span className="muted">—</span>,
     },
     {
       key: 'recurrence',

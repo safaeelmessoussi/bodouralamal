@@ -79,7 +79,8 @@ try {
     return JSON.stringify(box);
   })`);
   const dialogFits = async () => JSON.parse((await dialogBox()) ?? '{"fits":false}').fits;
-  const shelf = (id) => `/resources?level=${fixture.levelId}&content=${id}`;
+  // R255 — an item's link names the item alone; it opens where it is read.
+  const shelf = (id) => `/resources?content=${id}`;
   await send('Network.clearBrowserCookies');
   await width(390);
   // R196 — the bare page opens «حسب السورة»; the Level shelves are «حسب المستوى».
@@ -126,6 +127,7 @@ try {
   for (const [kind, id] of Object.entries(fixture.items)) {
     await open(shelf(id));
     check(`${kind}: preview opens anonymously`, await waitFor("!!document.querySelector('dialog[open] .preview__actions button')"));
+    // R255 — a recording about a Surah opens over that Surah's page, marked there.
     check(`${kind}: anonymous application mint succeeds`, await evaluate(`window.__readerCalls.some(c => c.url.includes('/content/${id}/download-url') && c.status === 200 && !c.authorized)`));
     const media = kind === 'image' ? 'img.preview__image' : kind === 'pdf' ? 'iframe.preview__pdf' : kind;
     check(`${kind}: underlying file through real edge`, await evaluate(`(async () => {
@@ -147,6 +149,20 @@ try {
     check(`${kind}: phone dialog fits`, fits, fits ? '' : (box ?? 'no dialog'));
     check(`${kind}: no runtime errors`, await evaluate('window.__readerErrors.length === 0'));
   }
+  // R255 — a link opens the item where it is read: a recording about a Surah
+  // (or one of its pages) over that Surah's page, the track marked; an item
+  // about no Surah over «حسب المستوى».
+  const landing = () => evaluate(`JSON.stringify({ surah: new URLSearchParams(location.search).get('surah'), tab: document.querySelector('.content-modes [aria-selected="true"]')?.textContent.trim() ?? null, focused: document.querySelector('.surah-track.is-focused .surah-track__title')?.textContent.trim() ?? null, dialog: !!document.querySelector('dialog[open] .preview__actions button') })`).then(JSON.parse);
+  for (const [label, id] of [['a Surah recording', sp.lesson], ["a recording's page", sp.page]]) {
+    await open(shelf(id));
+    await waitFor("!!document.querySelector('dialog[open] .preview__actions button')");
+    const at = await landing();
+    check(`${label}: its link opens its Surah's page, the recording marked`, at.surah === String(sp.surah) && (at.tab ?? '').includes('حسب السورة') && at.focused === sp.lessonTitle && at.dialog, JSON.stringify(at));
+  }
+  await open(shelf(fixture.items.audio));
+  await waitFor("!!document.querySelector('dialog[open] .preview__actions button')");
+  const plain = await landing();
+  check('an item about no Surah opens over «حسب المستوى»', plain.surah === null && (plain.tab ?? '').includes('حسب المستوى') && plain.dialog, JSON.stringify(plain));
   await open(shelf(fixture.items.image));
   check('public content does not expose a hidden Session', await waitFor(`document.querySelectorAll('.preview__sessions a').length === 1`) && await evaluate(`!document.querySelector('a[href*="${fixture.privateSessionId}"]')`));
   await evaluate("document.querySelector('.preview__sessions a').click()");
@@ -157,7 +173,7 @@ try {
     const text = document.querySelector('dialog[open]')?.textContent ?? '';
     return [${JSON.stringify(fixture.expected.subject)}, ${JSON.stringify(fixture.expected.audience)}, ${JSON.stringify(fixture.expected.instructor)}].every(value => text.includes(value));
   })()`));
-  check('materials link includes level and content', await evaluate(`document.querySelector('dialog[open] .details__list a')?.getAttribute('href') === ${JSON.stringify(shelf(fixture.items.image))}`));
+  check('materials link names the content', await evaluate(`document.querySelector('dialog[open] .details__list a')?.getAttribute('href') === ${JSON.stringify(shelf(fixture.items.image))}`));
   for (const w of [320, 360, 375, 390, 412, 430, 768, 1280]) {
     await width(w);
     check(`${w}: canonical dialog is open`, await waitFor("!!document.querySelector('dialog[open] .details')"));

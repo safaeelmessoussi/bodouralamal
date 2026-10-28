@@ -676,6 +676,95 @@ describe("the write boundary refuses what would re-point history", () => {
     expect(split.status, JSON.stringify(split.body)).toBe(200);
   });
 
+  it("R255 — «هذه الحصة وكل ما بعدها» from an occurrence the split keeps is not refused as a clash with itself", async () => {
+    // 21:00–21:05 on Thursdays, held by no other test here.
+    const created = await call("POST", "/admin/course-schedules", superAdmin, {
+      subject_id: subjectId,
+      teaching_mode: "administrative_group",
+      target_id: groupA,
+      branch_id: branchA,
+      room_id: roomA,
+      start_time: "21:00",
+      end_time: "21:05",
+      recurrence: "weekly",
+      weekdays: ["thursday"],
+      academic_year_id: academicYearId,
+      staff: [{ user_id: teacherId, position: "teacher" }],
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = (created.body.schedule as { id: string }).id;
+    const sessions = await prisma.session.findMany({
+      where: { scheduleId: id, deletedAt: null },
+      select: { id: true, date: true },
+      orderBy: { date: "asc" },
+    });
+    expect(sessions.length).toBeGreaterThan(2);
+    // The occurrence the split starts at carries work of its own, so it stays
+    // with the original class (R43.6) — as one holding recordings does.
+    const kept = sessions[1]!;
+    await prisma.session.update({ where: { id: kept.id }, data: { overridden: true } });
+    const listed = await call("GET", `/admin/course-schedules/${id}/sessions?page_size=100`, superAdmin);
+    const split = await call("PATCH", `/admin/course-schedules/${id}`, superAdmin, {
+      version: listed.body.schedule_version as number,
+      scope: "this_and_future",
+      from_date: kept.date.toISOString().slice(0, 10),
+      room_id: roomB,
+    });
+    expect(split.status, JSON.stringify(split.body)).toBe(200);
+    const successorId = (split.body.schedule as { id: string }).id;
+    expect(successorId).not.toBe(id);
+    const onThatDate = await prisma.session.findMany({
+      where: { deletedAt: null, date: kept.date, scheduleId: { in: [id, successorId] } },
+      select: { id: true },
+    });
+    // Still one occurrence on that date — the kept one, never a duplicate.
+    expect(onThatDate.map((s) => s.id)).toEqual([kept.id]);
+  });
+
+  it("R255 — a room added to a class fills the occurrences resync skips that name none, and never one that names a room", async () => {
+    // 23:40–23:45 on Saturdays, held by no other test here. Cancelled
+    // occurrences stand for the ones resync does not reach (past or cancelled):
+    // the fill's rule is the same for both.
+    const created = await call("POST", "/admin/course-schedules", superAdmin, {
+      subject_id: subjectId,
+      teaching_mode: "administrative_group",
+      target_id: groupA,
+      branch_id: branchA,
+      start_time: "23:40",
+      end_time: "23:45",
+      recurrence: "weekly",
+      weekdays: ["saturday"],
+      academic_year_id: academicYearId,
+      staff: [{ user_id: teacherId, position: "teacher" }],
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = (created.body.schedule as { id: string }).id;
+    const sessions = await prisma.session.findMany({
+      where: { scheduleId: id, deletedAt: null },
+      select: { id: true },
+      orderBy: { date: "asc" },
+    });
+    expect(sessions.length).toBeGreaterThan(3);
+    const [blank, named] = [sessions[0]!, sessions[1]!];
+    await prisma.session.updateMany({ where: { id: { in: [blank.id, named.id] } }, data: { status: "cancelled" } });
+    // One already names a room: it must keep it.
+    await prisma.session.update({ where: { id: named.id }, data: { roomId: roomB } });
+
+    const patched = await call("PATCH", `/admin/course-schedules/${id}`, superAdmin, {
+      version: (created.body.schedule as { version: number }).version,
+      room_id: roomA,
+    });
+    expect(patched.status, JSON.stringify(patched.body)).toBe(200);
+    const rooms = new Map(
+      (
+        await prisma.session.findMany({ where: { scheduleId: id, deletedAt: null }, select: { id: true, roomId: true } })
+      ).map((r) => [r.id, r.roomId]),
+    );
+    expect(rooms.get(blank.id)).toBe(roomA);
+    expect(rooms.get(named.id)).toBe(roomB);
+    for (const s of sessions.slice(2)) expect(rooms.get(s.id)).toBe(roomA);
+  });
+
   it("an edit reports what it left alone as well as what it rewrote", async () => {
     const created = await call(
       "POST",

@@ -134,20 +134,11 @@ export function StudentLibraryPage(): ReactNode {
             {
               key: 'open',
               header: t('student.library.open'),
-              // **Deep-links straight to the item** (Owner request, 2026-09-10):
-              // `&content=${id}` is the SAME parameter `resources.tsx`'s own
-              // `LevelView` already reads to open `ContentPreviewDialog` on
-              // arrival — the identical mechanism `EventDetailsDialog`'s own
-              // materials links use. Reused, not reinvented: this page used to
-              // land on the bare Level shelf, leaving her to find the same item
-              // again by eye. `?level=` is kept alongside it so a reader who
-              // clears the dialog (or the id matches nothing — an id outside
-              // this Level's own server-scoped shelf opens nothing, never an
-              // error, exactly as `resources.tsx` already handles a stale or
-              // unauthorized id) still lands on her own Level's shelf rather
-              // than the bare library index.
+              // **Deep-links straight to the item** (Owner request, 2026-09-10).
+              // R255 — `?content=` opens it where it is read: on its Surah's
+              // page, else with its preview over the library.
               cell: (i: ContentItem) => (
-                <a href={`/resources?level=${levelId}&content=${i.id}`}>{t('content.openItem')}</a>
+                <a href={`/resources?content=${i.id}`}>{t('content.openItem')}</a>
               ),
             },
           ]}

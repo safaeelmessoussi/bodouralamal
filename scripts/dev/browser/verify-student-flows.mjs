@@ -173,9 +173,9 @@ check(
 /**
  * **`عرض المحتوى` deep-links to the exact item** (Owner request,
  * 2026-09-10). It used to land on the bare `/resources?level=` shelf; the
- * fix threads `&content=<id>` through — the SAME parameter
- * `resources.tsx`'s own `LevelView` already reads to open
- * `ContentPreviewDialog` on arrival. Proven here through the real screens:
+ * fix links `?content=<id>`, which `resources.tsx` opens in
+ * `ContentPreviewDialog` where the item is read (R255: its Surah's page,
+ * else the library). Proven here through the real screens:
  * the id clicked is read back from the dialog that actually opens, not
  * merely asserted from the URL, which is what would catch a param that
  * changed shape without the reader on the other end changing with it.

@@ -129,7 +129,21 @@ describe("a مؤطرة's own vocabulary", () => {
     expect(options.levels.map((l) => l.id).sort()).toEqual(
       [asStudent.levelId, asTeacher.levelId].sort(),
     );
+    // R255 — the branch she studies at as well as the one she teaches at.
+    expect(options.branches.map((b) => b.id).sort()).toEqual([branchA, branchB].sort());
 
     await clearTeachingContext(prisma, `${TAG} تدريس`);
+  });
+
+  it("R255 — a مؤطرة with no class to staff still gets the branch she is enrolled at", async () => {
+    // The Owner's case: «الفرع» empty in «الجدولة» while her calendar showed
+    // the occurrences of the Level she is enrolled in.
+    const branchId = await makeBranch("فرع");
+    const fixture = await createTeachingContext(prisma, TAG, branchId);
+    const personId = await person("مؤطرة دارسة");
+    await enrol(prisma, fixture, personId);
+
+    const options = await personalCalendarOptions(prisma, personId);
+    expect(options.branches.map((b) => b.id)).toEqual([branchId]);
   });
 });

@@ -27,6 +27,7 @@
     "ops:apply-holidays": "node dist/src/ops/apply-holidays.js",
     "ops:import-translations": "node dist/src/ops/import-translations.js",
     "ops:apply-programmes": "node dist/src/ops/apply-programmes.js",
+    "ops:fill-session-rooms": "node dist/src/ops/fill-session-rooms.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts"
   },
   "dependencies": {

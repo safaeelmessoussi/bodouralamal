@@ -1859,6 +1859,12 @@ export async function updateCourseSchedule(
       data.overwriteManuallyEdited,
     );
 
+    // R255 — the room reaches the past and cancelled occurrences that name none.
+    const pastRoomsFilled =
+      delivery.deliveryMode === "in_person" && delivery.roomId !== null
+        ? await fillBlankSessionRooms(tx, id, delivery.roomId, now)
+        : 0;
+
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -1867,6 +1873,7 @@ export async function updateCourseSchedule(
       targetId: id,
       detail: {
         sessions_created: materialized.created,
+        ...(pastRoomsFilled === 0 ? {} : { past_rooms_filled: pastRoomsFilled }),
         // Both numbers, because §4.4 makes reporting the untouched ones part of
         // the behaviour rather than a nicety.
         sessions_left_alone: materialized.protectedSessions.length,
@@ -2425,7 +2432,11 @@ async function splitCourseSchedule(
       undefined,
       [...removableIds],
     );
-    assertNoConflicts(conflicts);
+    // R255 — the successor never meets on a date a kept session holds (its
+    // materialization skips `retainedDates`), so a clash there is not its own:
+    // «هذه الحصة وكل ما بعدها» from an occurrence carrying recordings was
+    // refused for clashing with that very occurrence.
+    assertNoConflicts(conflicts.filter((conflict) => !retainedDates.has(conflict.date)));
 
     const successor = await tx.recurringCourseSchedule.create({
       // Revision 156 — added here rather than on `successorValues` itself,
@@ -3043,7 +3054,7 @@ export async function listCourseSchedules(
       })),
       targetSummary:
         row.teachingMode === "multi_dimension" ? dimensionSummary(row, levelsOfCategory) : null,
-      audienceNames: audienceNames(row),
+      audienceNames: audienceNames(row, levelsOfCategory),
       surahIds: row.surahs.map((r) => r.surahId),
       surahNames: row.surahs.map((r) => r.surah.nameArabic),
       /**
@@ -3119,19 +3130,61 @@ const DIMENSION_SCOPES_WITH_NAMES = {
 } as const;
 
 /**
+ * **R255 — a class's room fills the occurrences that name no room** (the
+ * Owner, 2026-10-28: a room added to a class left its earlier occurrences
+ * roomless in the calendar dialog; asked whether the past may change, «Fill
+ * blanks only»). Resync reaches only future, still-scheduled occurrences
+ * (§4.4); this reaches the rest — the past ones and the cancelled ones — and
+ * only where `room_id` is NULL and the occurrence is in person. An occurrence
+ * that names a room, its own or an earlier one, is never changed: that is the
+ * history R91 (8) keeps. Each changed row's `version` moves (TD-15).
+ */
+export async function fillBlankSessionRooms(
+  tx: Prisma.TransactionClient,
+  scheduleId: string,
+  roomId: string,
+  now: Date,
+): Promise<number> {
+  const { count } = await tx.session.updateMany({
+    where: {
+      scheduleId,
+      deletedAt: null,
+      roomId: null,
+      deliveryMode: "in_person",
+      OR: [{ date: { lt: now } }, { status: "cancelled" }],
+    },
+    data: { roomId, version: { increment: 1 } },
+  });
+  return count;
+}
+
+/**
  * **R254 — who a class is for, column by column** (the Owner: «replace the
  * column الهدف with 3 columns, level, circle, group»). Its Levels — named
  * directly, or through its groups and circles — its groups, and its circles,
  * from the single target and from a filter-built class's scopes alike.
+ *
+ * **R255 — a class for every Level of a Category reads «كل مستويات {الفئة}»**
+ * there too (R199 §9's rule, `dimensionSummary`'s), never the whole list.
  */
-function audienceNames(row: {
+export function audienceNames(
+  row: {
   level: { name: string } | null;
   administrativeGroup: { name: string; level: { name: string } } | null;
   teachingGroup: { name: string; level: { name: string } } | null;
-  levelScopes: { level: { name: string } }[];
+  levelScopes: { levelId: string; level: { name: string; categoryId: string; category: { name: string } } }[];
   administrativeGroupScopes: { administrativeGroup: { name: string; level: { name: string } } }[];
   teachingGroupScopes: { teachingGroup: { name: string; level: { name: string } } }[];
-}): { levels: string[]; groups: string[]; circles: string[] } {
+  },
+  levelsOfCategory: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
+): { levels: string[]; groups: string[]; circles: string[] } {
+  const chosen = new Set(row.levelScopes.map((r) => r.levelId));
+  const wholeCategories = new Set(
+    [...new Set(row.levelScopes.map((r) => r.level.categoryId))].filter((categoryId) => {
+      const all = levelsOfCategory.get(categoryId);
+      return all !== undefined && all.size > 1 && [...all].every((id) => chosen.has(id));
+    }),
+  );
   const levels = new Set<string>();
   const groups = new Set<string>();
   const circles = new Set<string>();
@@ -3146,7 +3199,11 @@ function audienceNames(row: {
     circles.add(c.name);
     levels.add(c.level.name);
   }
-  for (const r of row.levelScopes) levels.add(r.level.name);
+  for (const r of row.levelScopes) {
+    levels.add(
+      wholeCategories.has(r.level.categoryId) ? `${WHOLE_CATEGORY_WORDS} ${r.level.category.name}` : r.level.name,
+    );
+  }
   return { levels: [...levels], groups: [...groups], circles: [...circles] };
 }
 

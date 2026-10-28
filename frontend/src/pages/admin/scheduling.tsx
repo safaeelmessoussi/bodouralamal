@@ -571,6 +571,14 @@ export function SchedulingPage(): ReactNode {
           <span className="muted">{t('scheduling.untitled')}</span>
         ),
     },
+    {
+      // §8 — WHAT is taught, which the title is not: R57 gave a class its own
+      // name, so the two are different facts. R255 — right after the title.
+      key: 'subject',
+      header: t('admin.schedules.subject'),
+      fit: true,
+      cell: (r) => r.subjectName ?? <span className="muted">—</span>,
+    },
     // R254 — «الهدف» as three columns: Level, circle, group.
     ...audienceColumns(),
     {
@@ -597,14 +605,6 @@ export function SchedulingPage(): ReactNode {
         ) : (
           <span className="muted">{t('scheduling.allDay')}</span>
         ),
-    },
-    {
-      // §8 — WHAT is taught, which the title is not: R57 gave a class its own
-      // name, so the two are different facts.
-      key: 'subject',
-      header: t('admin.schedules.subject'),
-      fit: true,
-      cell: (r) => r.subjectName ?? <span className="muted">—</span>,
     },
     {
       key: 'recurrence',

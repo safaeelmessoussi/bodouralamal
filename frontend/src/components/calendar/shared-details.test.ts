@@ -65,8 +65,8 @@ describe('recordings and materials are two questions, answered separately', () =
 });
 
 describe('the canonical dialog has no dedicated-page escape hatch', () => {
-  it('materials carry both the shelf and the selected item', () => {
-    expect(code(DIALOG)).toContain('/resources?level=${item.level_id}&content=${item.id}');
+  it('materials link the item itself (R255 — it opens where it is read)', () => {
+    expect(code(DIALOG)).toContain('/resources?content=${item.id}');
   });
   it('offers no «فتح صفحة الحصة وموادها» from the dialog', () => {
     expect('detailsOpenSession' in (ar.calendar as Record<string, unknown>)).toBe(false);
