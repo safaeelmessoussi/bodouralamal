@@ -637,6 +637,10 @@
   .content-page .cal-filter--search {
     grid-column: 1 / -1;
   }
+  /* R249 — two to a row means each filter is exactly its column, never its 11rem floor. */
+  .content-page .cal-filter {
+    min-width: 0;
+  }
   .content-page .cal-filter__label {
     font-size: var(--font-size-xs);
   }

@@ -487,3 +487,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - رواد المجموعة and أعضاء الحلقة: `useUnsavedGuard` on an unsent pick; `ConfirmDialog` ignores the backdrop while a reason is typed.
 - `resources.tsx` «حسب المستوى» drops `slide_of` rows; `groupBySurah` never shelves a page under its own Surah.
 - Verified: frontend gates (1715), guards, browser «رفع ملف» 12/12 on Localhost (nothing uploaded), content integration + public-reader «حسب المستوى» check.
+
+## 2026-10-28 — SRS Revision 249: a long filter choice stays in its box
+- Phone: «المادة» («أحكام التجويد (برواية ورش)») ran under «السورة». `forms.css` `.dropdown-select`/`.dropdown-trigger` `min/max-inline-size` (the label's «…» now applies); `calendar.css` a filter's dropdown fills it, `max-inline-size: 18rem`; `content.css` phone filters `min-width: 0` (exactly their column).
+- Verified: browser 8/8 at 390/1366 on Localhost (longest real subject, and a forced long choice in every filter: no spill, no overlap, «…»); `shoot-pages.sh` 13 surfaces at viewport width; frontend gates, guards.

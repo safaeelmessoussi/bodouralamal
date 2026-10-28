@@ -252,6 +252,15 @@
   gap: var(--space-1);
   min-width: 11rem;
 }
+/* R249 — every filter's dropdown fills its filter, whatever its choice says. */
+.cal-filter .dropdown-select,
+.cal-filter .dropdown-trigger {
+  inline-size: 100%;
+}
+/* …and a long choice is cut at the filter's width rather than widening the row. */
+.cal-filter:not(.cal-filter--search) {
+  max-inline-size: 18rem;
+}
 .cal-filter__label {
   font-size: var(--font-size-xs);
   font-weight: 600;
