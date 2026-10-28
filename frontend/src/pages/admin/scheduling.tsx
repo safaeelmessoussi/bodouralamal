@@ -775,7 +775,6 @@ export function SchedulingPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.nav.scheduling')}
-      lede={t('scheduling.lede')}
       actions={
         <Button variant="add" onClick={() => setEditing('new')}>
           {t('scheduling.create')}

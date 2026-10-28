@@ -71,7 +71,6 @@ type Row = Category | SubjectRef;
 
 interface KindSpec {
   navKey: string;
-  ledeKey: string;
   createKey: string;
   editKey: string;
   deleteTitleKey: string;
@@ -104,7 +103,6 @@ interface KindSpec {
 const KINDS: Record<TaxonomyKind, KindSpec> = {
   category: {
     navKey: 'admin.nav.categories',
-    ledeKey: 'admin.taxonomy.categoriesLede',
     createKey: 'admin.taxonomy.createCategory',
     editKey: 'admin.taxonomy.editCategory',
     deleteTitleKey: 'admin.taxonomy.deleteCategoryTitle',
@@ -186,7 +184,6 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
   },
   subject: {
     navKey: 'admin.nav.subjects',
-    ledeKey: 'admin.taxonomy.subjectsLede',
     createKey: 'admin.taxonomy.createSubject',
     editKey: 'admin.taxonomy.editSubject',
     deleteTitleKey: 'admin.taxonomy.deleteSubjectTitle',
@@ -421,7 +418,6 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
   return (
     <AdminLayout
       title={t(spec.navKey)}
-      lede={t(spec.ledeKey)}
       actions={
         canWrite ? (
           <Button variant="add" onClick={() => setEditing('new')}>

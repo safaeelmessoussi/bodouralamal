@@ -164,7 +164,7 @@ export function TeachersPage(): ReactNode {
     );
 
   return (
-    <AdminLayout title={t('admin.nav.teachers')} lede={t('admin.teachers.lede')}>
+    <AdminLayout title={t('admin.nav.teachers')}>
       {notice ? <Feedback>{notice}</Feedback> : null}
 
       <DataTable

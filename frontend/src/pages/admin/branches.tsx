@@ -291,7 +291,6 @@ export function BranchesPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.nav.branches')}
-      lede={t('admin.branches.lede')}
       actions={
         canWrite ? (
           <Button variant="add" onClick={() => setEditing('new')}>

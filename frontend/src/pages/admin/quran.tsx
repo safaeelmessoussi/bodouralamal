@@ -34,7 +34,6 @@ export function AdminQuranPage({ studentId }: { studentId: string | null }): Rea
   return (
     <AdminLayout
       title={t('admin.nav.quran')}
-      lede={t('admin.quran.lede')}
       actions={
         studentId ? (
           <Button variant="secondary" onClick={() => (window.location.href = '/admin/quran')}>

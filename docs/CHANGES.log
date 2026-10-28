@@ -491,3 +491,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-28 — SRS Revision 249: a long filter choice stays in its box
 - Phone: «المادة» («أحكام التجويد (برواية ورش)») ran under «السورة». `forms.css` `.dropdown-select`/`.dropdown-trigger` `min/max-inline-size` (the label's «…» now applies); `calendar.css` a filter's dropdown fills it, `max-inline-size: 18rem`; `content.css` phone filters `min-width: 0` (exactly their column).
 - Verified: browser 8/8 at 390/1366 on Localhost (longest real subject, and a forced long choice in every filter: no spill, no overlap, «…»); `shoot-pages.sh` 13 surfaces at viewport width; frontend gates, guards.
+
+## 2026-10-28 — SRS Revision 250: open from the table, «النوع», «حسب الفئة», less text, PDFs right on phones
+- مكتبة المحتوى: `DataTable onOpenRow` + title button → `ContentPreviewDialog`; «النوع» → `GET /library?kind=` (service predicate on `mime_type`).
+- المحتوى التعليمي: `LibraryView scope`; «حسب المستوى» drops whole-Category shelves and recordings with a Surah; new «حسب الفئة» (`?view=categories`); a Level card toggles on any non-control click; phone tabs in 4 columns.
+- «خصائص السورة» section; 27 descriptive page subtitles, «السور» and the library ledes removed with their keys (rule-bearing ones kept); tests updated.
+- Phone PDF: canvases `dir="ltr"` (RTL `direction` broke pdf.js Arabic, proven on «الدليل الميسر»); pdf.js + worker loaded once, beside the mint and when idle; `disableAutoFetch` + observer; «جارٍ فتح الملف…». `verify-unsaved-guard` → «إدارة التسجيلات» (24/24).
+- Verified: gates, guards, browser 22/22 on Localhost, unsaved-guard 24/24, content + library integration with the public-reader checks.

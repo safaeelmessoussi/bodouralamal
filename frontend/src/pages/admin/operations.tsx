@@ -65,7 +65,7 @@ export function OperationsPage(): ReactNode {
   }, [load]);
 
   return (
-    <AdminLayout title={t('admin.nav.operations')} lede={t('admin.operations.lede')}>
+    <AdminLayout title={t('admin.nav.operations')}>
       {failed ? (
         <p className="state" role="alert">
           {t('common.loadFailed')}

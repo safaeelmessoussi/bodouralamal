@@ -1227,6 +1227,8 @@ document.paths['/admin/approvals'].get.description +=
 document.paths['/library'].get.description +=
   ' **R215 — who made each item:** `author_name` is that person\'s PUBLIC display name (§7; `null` when the item names nobody, or the account is gone), `author_role` the capacity (`teacher` | `assistant` | `admin` | `student`), and `author_id` their id for staff readers only (`null` otherwise).';
 document.paths['/library'].get.description +=
+  ' **R250 — `?kind=pdf|audio|video|image|document`** narrows to what the screens call the file: `application/pdf`, `audio/*`, `video/*`, `image/*`, or any other type.';
+document.paths['/library'].get.description +=
   ' **R247 — slides:** an image carries `slide_of` (the live recording it is a page of) and `slide_position`, `null` otherwise; every item carries `session_ids`, the live class sessions it is attached to (`[]` for none) — a session\'s images are the slides of its recordings.';
 document.paths['/uploads/initiate'].post.description +=
   ' **R215 —** `content_meta.author_id` (a live account; `null`/absent names nobody) and `author_role` (`teacher` | `assistant` | `admin` | `student`, only beside an author) record who made the item; bound into the ticket like every other scope fact. A class recording names its main teacher automatically. **R217 — with no `author_role`, the server reads it off the person\'s roles** (teacher → `teacher`, else admin/super admin → `admin`, else student → `student`, else parent → `guardian`).';

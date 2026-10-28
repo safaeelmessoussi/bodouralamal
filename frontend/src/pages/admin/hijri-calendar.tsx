@@ -163,7 +163,6 @@ export function HijriCalendarPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.hijri.title')}
-      lede={t('admin.hijri.lede')}
       actions={
         /* In reading order: fill what is missing, correct what differs from the
            Ministry's announcement, then publish. The baseline button is

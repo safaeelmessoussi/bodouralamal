@@ -701,7 +701,6 @@ export function ScheduleSessionsPage({
   return (
     <Layout
       title={t('admin.sessions.title')}
-      lede={t('admin.sessions.lede')}
       actions={
         <Button
           variant="secondary"

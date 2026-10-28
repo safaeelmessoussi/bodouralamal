@@ -3,13 +3,14 @@ import { BranchScopeField } from '../components/content/branch-scope-field.js';
 import { AuthorPicker, NO_AUTHOR, type AuthorValue } from '../components/content/author-picker.js';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { kindOf, type ContentKind } from '../adapters/content.js';
+import { kindOf, type ContentItem, type ContentKind } from '../adapters/content.js';
 import { deleteContent, updateContent } from '../adapters/uploads.js';
 import { MultiSelectField } from '../components/ui/multi-select.js';
 import { AdminLayout } from '../components/admin/admin-layout.js';
 import { ContentRecorderForm } from '../components/content/content-recorder-form.js';
 import { ContentUploadForm } from '../components/content/content-upload-form.js';
 import { RecordingSlidesDialog } from '../components/content/recording-slides-dialog.js';
+import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
 import { TeacherLayout } from '../components/teacher/teacher-layout.js';
 import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
 import { FormDialog } from '../components/ui/form-dialog.js';
@@ -350,6 +351,22 @@ interface LibraryRow {
   surah_name?: string | null;
 }
 
+/** R250 — a row as the shared previewer reads an item. */
+function previewItem(row: LibraryRow): ContentItem {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    kind: kindOf(row.mime_type),
+    mime_type: row.mime_type,
+    size_bytes: row.size_bytes,
+    published_on: row.created_at.slice(0, 10),
+    teacher_display_name: row.author_name ?? null,
+    subject_name: row.subject_name,
+    whole_category: row.whole_category,
+  };
+}
+
 /** `null` branch is the Global scope (§4.9) and needs a value a `<select>` can
  *  carry — `''` already means "no filter", so the two cannot share it. */
 /**
@@ -402,6 +419,10 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   /** R242 — «صاحب المحتوى» as a filter: a person, «بدون», or «الكل» (`NO_AUTHOR`). */
   const [author, setAuthor] = useState<AuthorValue>(NO_AUTHOR);
   const authorId = author.id ?? '';
+  /** R250 — «النوع», narrowed on the server (`?kind=`). */
+  const [kind, setKind] = useState<'' | ContentKind>('');
+  /** R250 — the item opened from its row, read here as a reader would. */
+  const [previewing, setPreviewing] = useState<LibraryRow | null>(null);
   const [rows, setRows] = useState<LibraryRow[]>([]);
   /** R76 — server-side: this list is paginated, so the DATABASE orders it. */
   const [sort, setSort] = useState<SortState | null>(null);
@@ -436,6 +457,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     if (branchId) params.set('branch_id', branchId);
     if (surahId) params.set('surah_id', surahId);
     if (authorId) params.set('author_id', authorId);
+    if (kind) params.set('kind', kind);
     try {
       const body = await api<{
         data: LibraryRow[];
@@ -452,7 +474,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     } catch {
       setStatus('error');
     }
-  }, [accessToken, levelId, subjectId, surahId, academicYearId, branchId, authorId, page, sort]);
+  }, [accessToken, levelId, subjectId, surahId, academicYearId, branchId, authorId, kind, page, sort]);
 
   useEffect(() => {
     void load();
@@ -462,7 +484,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   // shows an empty table that reads as "there is no content".
   useEffect(() => {
     setPage(1);
-  }, [levelId, subjectId, surahId, academicYearId, branchId, authorId]);
+  }, [levelId, subjectId, surahId, academicYearId, branchId, authorId, kind]);
 
   function refilter(apply: () => void): void {
     apply();
@@ -509,7 +531,17 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
    * one browser regression answer for two behaviours.
    */
   const columns: Column<LibraryRow>[] = [
-    { key: 'title', sortKey: 'title', header: t('content.col.title'), cell: (r) => r.title },
+    {
+      key: 'title',
+      sortKey: 'title',
+      header: t('content.col.title'),
+      // R250 — the title opens the item (the keyboard's way; a click on the row is the pointer's).
+      cell: (r) => (
+        <button type="button" className="admin-table__open" onClick={() => setPreviewing(r)}>
+          {r.title}
+        </button>
+      ),
+    },
     // R242 — who made it (the «الحجم» column withdrawn the same day).
     { key: 'author', sortKey: 'author', header: t('content.author.label'), cell: (r) => r.author_name ?? '' },
     {
@@ -671,7 +703,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   return (
     <Layout
       title={t(`${portal}.nav.content`)}
-      lede={t('content.lede')}
+      lede={null}
       actions={
         <>
           {/* **The same recorder as الجدولة**, from the library's own scope
@@ -702,11 +734,13 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         status={status}
         actions={actions}
         onRetry={() => void load()}
-        filtered={levelId !== '' || subjectId !== '' || surahId !== '' || branchId !== '' || authorId !== ''}
+        filtered={levelId !== '' || subjectId !== '' || surahId !== '' || branchId !== '' || authorId !== '' || kind !== ''}
+        onOpenRow={setPreviewing}
         onClearFilters={() =>
           refilter(() => {
             scope.setMany({ levelId: '', subjectId: '', surahId: '', branchId: '' });
             setAuthor(NO_AUTHOR);
+            setKind('');
           })
         }
         toolbar={
@@ -721,6 +755,16 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
               extraOptions={{ surahId: [{ value: NO_SURAH, label: t('common.noneChosen') }] }}
             />
             <AuthorPicker value={author} onChange={(next) => refilter(() => setAuthor(next))} token={accessToken} filter />
+            <SelectField
+              label={t('content.typeLabel')}
+              value={kind}
+              onChange={(next) => refilter(() => setKind(next as '' | ContentKind))}
+              placeholder={t('common.all')}
+              options={(['pdf', 'audio', 'video', 'image', 'document'] as const).map((k) => ({
+                value: k,
+                label: t(`content.kind.${k}`),
+              }))}
+            />
           </>
         }
         sort={sort}
@@ -796,6 +840,13 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           />
         ) : null}
       </Dialog>
+
+      <ContentPreviewDialog
+        item={previewing === null ? null : previewItem(previewing)}
+        onClose={() => setPreviewing(null)}
+        accessToken={accessToken}
+        activeChildId={null}
+      />
 
       {slidesOf === null ? null : (
         <RecordingSlidesDialog

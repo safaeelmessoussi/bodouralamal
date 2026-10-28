@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import SOURCE from './content-preview-dialog.tsx?raw';
+import PDF_RAW from './pdf-canvas-preview.tsx?raw';
 
 /**
  * **«تنزيل الملف» actually downloads, rather than opening the file in a new
@@ -18,6 +19,7 @@ import SOURCE from './content-preview-dialog.tsx?raw';
  * reasoning as `dashboard/library.test.tsx`'s own deep-link guard.
  */
 const source = SOURCE.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+const PDF_SOURCE = PDF_RAW.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
 describe('the download button mints its own attachment-disposed URL', () => {
   it('never reuses load.url for the download click', () => {
@@ -46,7 +48,9 @@ describe('the download button mints its own attachment-disposed URL', () => {
  */
 describe('a PDF on a device without an inline viewer is drawn in the page', () => {
   it('asks the browser (`pdfViewerEnabled === false`), never the user agent string', () => {
-    expect(source).toContain("navigator.pdfViewerEnabled === false");
+    // R250 — asked once, in `needsPdfCanvas` (pdf-canvas-preview.tsx), which the dialog calls.
+    expect(source).toContain("needsPdfCanvas()");
+    expect(PDF_SOURCE).toContain("navigator.pdfViewerEnabled === false");
     expect(source).not.toMatch(/userAgent|Android|iPhone/);
   });
 

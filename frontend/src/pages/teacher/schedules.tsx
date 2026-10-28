@@ -319,7 +319,6 @@ export function TeacherSchedulesPage(): ReactNode {
   return (
     <TeacherLayout
       title={t('teacher.nav.schedules')}
-      lede={t('teacher.schedules.lede')}
       actions={
         <Button variant="add" onClick={() => setComposing(true)}>
           {t('teacher.schedules.addItem')}

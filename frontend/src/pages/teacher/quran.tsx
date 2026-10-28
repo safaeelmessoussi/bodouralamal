@@ -30,7 +30,6 @@ export function TeacherQuranPage({ studentId }: { studentId: string | null }): R
       // **The title stays the page's own**, whichever مستفيدة is open — the rule
       // `نقاط الامتحانات` follows. Her name is stated in the block below, once.
       title={t('teacher.nav.quran')}
-      lede={t('teacher.quran.lede')}
       actions={
         studentId ? (
           <Button variant="secondary" onClick={() => (window.location.href = '/teacher/quran')}>

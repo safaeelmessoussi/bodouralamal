@@ -131,7 +131,7 @@ function TeacherHome(): ReactNode {
     // the lede already says. Future-placeholder copy is removed rather than
     // restyled; the string is gone from the catalogue too, so nothing can pick
     // it up again.
-    <TeacherLayout title={t('teacher.nav.dashboard')} lede={t('teacher.homeLede')}>
+    <TeacherLayout title={t('teacher.nav.dashboard')}>
       {null}
     </TeacherLayout>
   );

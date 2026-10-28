@@ -394,7 +394,6 @@ export function EnrollmentsPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.nav.enrollments')}
-      lede={t('admin.enrollments.lede')}
       /* **No ＋ تسجيل مستفيدة** (Owner, 2026-08-28). Enrolling starts from the
          مستفيدة, not from an empty form that asks who she is: every account with
          the Student role is already a row here, and تسجيل on her row places

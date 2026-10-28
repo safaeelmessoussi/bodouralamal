@@ -290,10 +290,6 @@ export const ar = {
     },
   },
   studentDashboard: {
-    // R86 — الصفحة تبقى فارغة عن قصد حتى تُصمَّم؛ التفاصيل انتقلت إلى «حسابي».
-    // 2026-08-20 — صارت وصفاً للصفحة تحت عنوانها، كما في مساحة التدريس، بعد أن
-    // كان العنوان يُطبع مرّتين وتحته روابط تكرّر القائمة نفسها.
-    landing: 'تتيح القائمة الوصول إلى التقويم ونقاط الاختبارات والمحتوى.',
     // R83.5 — تقويمها هي: حصص مستوياتها وأنشطة نطاقها، لا تقويم المنصّة كلّه.
     myCalendar: 'تقويمي',
     title: 'لوحة المستفيد(ة)',
@@ -1149,17 +1145,12 @@ export const ar = {
   teacher: {
     // R83.5 — تقويم المؤطرة الشخصي: حصصها وأنشطتها هي، لا تقويم المنصّة كلّه.
     myCalendar: 'تقويمي',
-    // مساحة التدريس تبقى بسيطة عن قصد حتى تُصمَّم؛ القائمة جانبها هي الطريق.
-    homeLede: 'من القائمة يمكن الوصول إلى التقويم والجداول ونقاط الاختبارات والمحتوى وإدخال الحفظ.',
     schedules: {
       // R72 — the one kind TD-2 grants a مؤطرة on this screen.
       // **«إضافة عنصر»** since the merge: the page now holds her calendar and
       // her classes as well as the activities she may author, and «نشاط جديد»
       // named only the third of those.
       addItem: 'إضافة عنصر',
-      // **Owner-reported, 2026-09-15 — حصصي حُذفت؛ قائمة تقويمي تعرض جداولها
-      // الآن.** لا تَعِد بعرض المستفيدات، الذي غادر معها (لا مكافئ له حالياً).
-      lede: 'تظهر الجداول المسندة إليك للتأطير في قائمة «تقويمي».',
       empty: 'لا توجد جداول مسندة إليك حالياً.',
     },
     nav: {
@@ -1191,7 +1182,6 @@ export const ar = {
     },
     /** R106 — «إدخال متى أنا متاحة»: her own availability page. */
     availability: {
-      lede: 'تسجيل الأوقات المناسبة لك أسبوعياً. تساعد هذه الأوقات الإدارة على اختيار الإسناد.',
       // **Said on the screen, not only in the specification.** R88.3 is the
       // reason this grant is safe, and a مؤطِّرة entering ranges must not
       // believe she has just claimed classes or given herself a timetable.
@@ -1214,7 +1204,6 @@ export const ar = {
     // Each names WHAT is missing. The schedules entry names a specification gap
     // rather than unbuilt UI, because that is the honest reason.
     quran: {
-      lede: 'تسجيل الحفظ والمراجعة لكل مستفيد(ة). النسبة تُحتسب باتحاد المقاطع، فلا يرفعها تكرار المقطع نفسه.',
       student: 'المستفيد(ة)',
       // The dropdown gate is gone: the page lists the مستفيدات in her scope
       // (2026-08-17). What remains is the TABLE's vocabulary.
@@ -1247,7 +1236,6 @@ export const ar = {
       invalidRange: 'الآية الأخيرة قبل الأولى.',
     },
     exams: {
-      lede: 'الاختبارات التي تدخل في نطاق تدريسك. يرجى فتح الاختبار لإدخال النقاط.',
       empty: 'لا توجد اختبارات في نطاق تدريسك.',
       backToList: 'العودة إلى قائمة الاختبارات',
     },
@@ -1682,7 +1670,6 @@ export const ar = {
       title: 'التواريخ الملغاة — {title}',
       none: 'لا توجد تواريخ ملغاة لهذا النشاط.',
     },
-    lede: 'كل ما يظهر في التقويم: الحصص والأنشطة. يُختار نوع العنصر ثم تُكمَل حقوله.',
     create: 'إضافة عنصر',
     editTitle: 'تعديل العنصر',
     allTypes: 'الكل',
@@ -1984,7 +1971,6 @@ export const ar = {
     // NEW N — شركاء بذور الأمل. الظهور سؤال مستقل عن الحذف.
     partners: {
       thisItem: 'هذا الشريك',
-      lede: 'الجهات الشريكة كما تظهر في الصفحة الرئيسية. الشريك اسم فقط: لا شعار ولا رابط ولا وصف.',
       caption: 'الشركاء',
       create: 'إضافة شريك',
       editTitle: 'تعديل الشريك',
@@ -2003,7 +1989,6 @@ export const ar = {
     },
     academicPeriods: {
       title: 'الفصول الدراسية',
-      lede: 'فصول كل سنة دراسية بتواريخ بدايتها ونهايتها. التسجيل يتم في فصل، ومنه تُعرف التسجيلات الجارية للمستفيدين والمستفيدات.',
       create: 'إضافة فصل',
       edit: 'تعديل الفصل',
       colYear: 'السنة الدراسية',
@@ -2047,7 +2032,6 @@ export const ar = {
     },
     schedulingTypes: {
       title: 'أنواع الجدولة',
-      lede: 'الأنواع التي تُعرض في «الجدولة» عند إضافة عنصر: اسمها، وترتيبها، وما إذا كان الحضور يُسجَّل فيها.',
       create: 'إضافة نوع',
       edit: 'تعديل النوع',
       colName: 'الاسم',
@@ -2097,10 +2081,7 @@ export const ar = {
       ageUpTo: 'حتى {max}',
       lede: 'الفئات تجمع المستويات، والمواد هي ما تُدرَّس فيها. القراءة متاحة للمسؤولات، والتعديل للمديرة العامة وحدها.',
       categoriesTitle: 'الفئات',
-      categoriesLede:
-        'مراحل تعليمية عامة: طفل، يافع، بالغ. لا تُذكر في اسم الفئة أي إشارة إلى الجنس — ذلك يُحدَّد في المستوى نفسه.',
       subjectsTitle: 'المواد',
-      subjectsLede: 'المواد المتاحة للإسناد إلى المستويات. المادة غير المسندة لا تُدرَّس في أي مستوى.',
       colName: 'الاسم',
       colLevels: 'المستويات',
       // NAMED rather than counted, because the reason to show the pairing is that
@@ -2247,7 +2228,6 @@ export const ar = {
       subjectHint: 'يخص هذه الحصة وحدها. اختيار «الوضع الافتراضي» يُرجعها إلى مادة الجدول.',
       subjectInherit: 'الوضع الافتراضي (مادة الجدول)',
       title: 'حصص الجدول',
-      lede: 'مواعيد هذا الجدول. أي تعديل يسأل أولًا: هذه الحصة وحدها، أم هي وما بعدها، أم كل الحصص.',
       caption: 'الحصص',
       backToSchedules: 'العودة إلى الجداول',
       colDate: 'التاريخ',
@@ -2474,7 +2454,6 @@ export const ar = {
     },
     // R88 — الملف التدريسي: بيانات تخطيط لا صلاحيات. الإسناد وحده يمنح الصلاحية.
     teachers: {
-      lede: 'المؤطِّرات وما تستطيع كلٌّ منهن تدريسه والأوقات التي تتاح فيها. بيانات تخطيط تُعين على اختيار الإسناد؛ الصلاحية تأتي من إسناد الحصة نفسه.',
       caption: 'المؤطِّرات',
       // عناوين الأعمدة موجزة عمدًا؛ الشرح الكامل داخل الملف التدريسي.
       colSubjects: 'المواد',
@@ -2509,15 +2488,6 @@ export const ar = {
       loadFailed: 'تعذّر تحميل الملف التدريسي.',
     },
     users: {
-      // **The pre-provisioning dialog's strings are gone with it** (2026-08-17):
-      // `create`, `created`, `emailHint`, `emailInvalid`, `noRole` and
-      // `createRoleHint`. The Document Owner removed staff-composed account
-      // creation from this screen, and a dead catalogue entry is not harmless —
-      // it ships in the bundle and is exactly what a future screen picks up and
-      // renders, which is how "do not create an alternative account-creation UI
-      // elsewhere" gets defeated by convenience. `POST /admin/users` and the
-      // `createUser` adapter are untouched.
-      lede: 'إدارة الحسابات: البحث والتصفية والإنشاء والتعديل وإسناد الأدوار والنطاقات وإيقاف الحسابات.',
       caption: 'المستخدمون',
       colEmail: 'البريد الإلكتروني',
       // §14.2 يعرض الاسم في عمودين (2026-08-28).
@@ -2627,14 +2597,6 @@ export const ar = {
       // NEW L — وصف المستوى.
       colDescription: 'الوصف',
       descriptionHint: 'جملة قصيرة تُعرّف بالمستوى — تظهر تحت الاسم. اختيارية.',
-      // **Corrected 2026-08-17: the old text described behaviour that no longer
-      // exists.** It promised that creating a Level also creates «المجموعة 1» in
-      // a chosen branch — true before R66 made the Administrative Group optional,
-      // and false since. `createLevel` creates a Level and nothing else, and the
-      // success notice already says what to do next. A description that overstates
-      // what an action does is worse than none: it teaches a rule the platform
-      // does not have.
-      lede: 'المستويات داخل كل فئة، وهي ما يُسجَّل فيه المستفيدون والمستفيدات. المستوى يُنشأ وحده؛ وتقسيمه إلى مجموعات أو حلقات خطوة مستقلة تُتخذ عند الحاجة إليها فقط.',
       caption: 'المستويات',
       create: 'إضافة مستوى',
       editTitle: 'تعديل المستوى',
@@ -2746,7 +2708,6 @@ export const ar = {
         refusedCertificateIssued: 'الشهادة ظاهرة للمستفيد(ة). يُرجى سحب الشهادة أولًا ثم إلغاء تسجيل الإتمام.',
       },
       enrolling: 'تسجيل {name}',
-      lede: 'تسجيل المستفيدين والمستفيدات في المستويات. المجموعة والحلقات اختيارية: المستوى غير المقسّم يُسجَّل فيه مباشرة.',
       // The `＋` is the shared Add button's now (`variant="add"`), not this
       // string's: a glyph typed into a label is a glyph one screen can forget.
       add: 'تسجيل مستفيد(ة)',
@@ -2929,7 +2890,6 @@ export const ar = {
         'إن أُدخلت نقطة لكل سؤال أعلاه فسيُستخدم مجموعها عند الحفظ، وتُتجاهل هذه الخانة. لإدخال نقطة إجمالية مباشرة بدل ذلك، تُترك نقاط الأسئلة كلها فارغة.',
     },
     quran: {
-      lede: 'تسجيل الحفظ والمراجعة للمستفيد(ة). السور المعروضة هي سور مقرّر المستوى.',
     },
     levelSurahs: {
       lede: 'السور المقرّرة على كل مستوى، وإتمام المستفيدين والمستفيدات لها. إتمام المستوى يعني تغطية كل سورة مقرّرة بنسبة 100%.',
@@ -2987,7 +2947,6 @@ export const ar = {
     },
     groups: {
       thisItem: 'هذه المجموعة',
-      lede: 'المجموعات الإدارية داخل كل مستوى. المجموعة تنظيمية فقط: لا قاعة ولا مؤطِّرة ولا سعة.',
       caption: 'المجموعات الإدارية',
       create: 'إضافة مجموعة',
       editTitle: 'تعديل المجموعة',
@@ -3035,13 +2994,6 @@ export const ar = {
       create: 'إضافة حلقة',
       editTitle: 'تعديل الحلقة',
 
-      // ── The flat table (2026-08-17) ─────────────────────────────────────
-      // The accordion showed its data but not as a list: there was no way to see
-      // what circles existed without opening Levels one at a time. The table
-      // answers that in one read; the Level's own breakdown — its groups, its
-      // subjects, BR-22's unassigned alarm — is what a row opens.
-      overviewLede:
-        'حلقات المواد في كل المستويات. الحلقة تقسيم للمادة داخل المستوى، ولا تُنشأ إلا عند الحاجة إلى تقسيمها؛ وبدونها تُدرَّس المادة للمستوى كاملاً.',
       caption: 'حلقات المواد',
       colCircle: 'الحلقة',
       colLevel: 'المستوى',
@@ -3236,10 +3188,8 @@ export const ar = {
     },
     dashboard: {
       title: 'لوحة التحكم',
-      lede: 'أقسام الإدارة المتاحة لحسابك.',
     },
     branches: {
-      lede: 'مقرات الجمعية وقاعاتها. البيانات المرجعية يحرّرها المشرف العام فقط.',
       create: 'إضافة مقر',
       editTitle: 'تعديل المقر',
       tableCaption: 'قائمة مقرات الجمعية',
@@ -3309,7 +3259,6 @@ export const ar = {
     // a scope the data does not carry.
     // القرار 169 §11 — ما يتعطّل بصمت، يُقال لمن تستطيع أن تفعل شيئًا بشأنه.
     operations: {
-      lede: 'ما يعمل في الخلفية ولا يظهر على الشاشات: نشر تسجيلات الحصص، حذف الملفات، التنظيف الدوري. إن تعطّل شيء منها بصمت فهنا يُقال.',
       quiet: 'لا شيء يحتاج إلى تدخّل الآن.',
       attention: 'يوجد ما يحتاج إلى متابعة. يُرجى إبلاغ المسؤول التقني بالأرقام أدناه.',
       checkedAt: '(آخر فحص: {at})',
@@ -3333,7 +3282,6 @@ export const ar = {
         'لا تظهر هذه الشاشة حالة النسخ الاحتياطي ولا تاريخ انتهاء شهادة الأمان (HTTPS): كلاهما يُراقَب على الخادم نفسه ولا يصل إليه التطبيق. الأصفار أعلاه لا تقول شيئًا عنهما.',
     },
     approvals: {
-      lede: 'طلبات التسجيل الجديدة وطلبات ربط الأبناء، في انتظار القرار.',
       tableCaption: 'طلبات الانضمام في انتظار القرار',
       colApplicants: 'المعنيّون بالطلب',
       colType: 'نوع الطلب',
@@ -3550,7 +3498,6 @@ export const ar = {
       errImmutable: 'هذه الصيغة سبق العمل بها فلا تُعدَّل. يُرجى إنشاء صيغة جديدة بالنصّ المعدَّل.',
     },
     settings: {
-      lede: 'إعدادات المنصة. يحرّرها المشرف العام وحده، ويُسجَّل كل تغيير في سجل المراجعة.',
       /**
        * **R119 retired `consentVersionLabel`/`consentVersionHint`.** They
        * labelled a free-text box holding a version *string* whose relationship
@@ -3569,9 +3516,6 @@ export const ar = {
     },
     hijri: {
       title: 'التقويم الهجري',
-      // Revision 32: the vocabulary is binding. RECORD the Ministry's official
-      // announcement — never choose, define or set it.
-      lede: 'تسجيل بدايات الأشهر الهجرية كما أعلنتها وزارة الأوقاف والشؤون الإسلامية.',
       yearLabel: 'السنة الهجرية',
       yearHint: 'من 1300 إلى 1600.',
       tableCaption: 'أشهر السنة الهجرية وتواريخ بدايتها الميلادية',
@@ -3794,7 +3738,6 @@ export const ar = {
     // The educational library (§5.2, §4.9).
 
     title: 'المحتوى التعليمي',
-    lede: 'كل الدروس والتسجيلات والملفات، مرتّبة بالفئة ثم المستوى ثم السنة الدراسية والفرع والمادة.',
     backToLibrary: 'كل المستويات',
     // القرار 167 §5 — ما أُعِدّ لكل مستويات الفئة، لا لمستوى واحد.
     wholeCategory: {
@@ -3943,6 +3886,8 @@ export const ar = {
       history: 'حسب الخط الزمني',
       bySurah: 'حسب السورة',
       byLevel: 'حسب المستوى',
+      // المراجعة 250 — ما وُجِّه إلى كل مستويات فئةٍ ما.
+      byCategory: 'حسب الفئة',
     },
     history: {
       timeline: 'الخط الزمني',
@@ -3990,9 +3935,7 @@ export const ar = {
       failed: 'تعذّر حفظ صفحات المطبوع. يُرجى إعادة المحاولة.',
     },
     bySurah: {
-      pageLede: 'عند اختيار سورة تُعرض دروس تفسيرها وملخصاتها ورسومها في مكان واحد، مرتّبةً لدراستها خطوة خطوة.',
       indexLabel: 'السور التي لها محتوى',
-      indexTitle: 'السور',
       empty: 'لا يوجد بعد محتوى مرتبط بسورة. يمكن الاطّلاع على المحتوى «حسب المستوى».',
       play: 'استماع',
       unavailable: 'تعذّر تشغيل هذا الدرس الآن. يُرجى إعادة المحاولة لاحقًا.',
@@ -4015,6 +3958,8 @@ export const ar = {
       slideNext: 'الصفحة التالية',
       // القرار 212 — صفحة السورة الواحدة، بالترتيب المطلوب. المراجعة 239 — «خطاطة السورة» عنوان واحد، و«مطبوع» بدل «شرائح».
       section: {
+        // المراجعة 250 — تفاصيل السورة قسمٌ يُفتح ويُطوى كسائر الأقسام.
+        profile: 'خصائص السورة',
         // المراجعة 243 — «خطاطات السورة» عنوان القسم؛ الخطاطة الأولى تبقى «خطاطة السورة».
         diagrams: 'خطاطات السورة',
         listen: 'تسجيلات الدروس',
@@ -4072,7 +4017,8 @@ export const ar = {
     previewUnsupported: 'متصفحك لا يدعم تشغيل هذا الملف — يمكن تنزيله.',
     // المراجعة 184 §6 — متصفحات الهاتف لا تعرض PDF داخل الصفحة؛ يُفتح في عارض الجهاز.
     // المراجعة 190 §5 — يُرسم الملف داخل الصفحة صفحةً صفحة (المراجعة 243: بلا «فتح الملف»).
-    previewPdfPages: 'تُرسم الصفحات… {done} من {total}',
+    // المراجعة 250 — ما يظهر إلى أن تظهر الصفحة الأولى.
+    previewPdfOpening: 'جارٍ فتح الملف…',
   },
 } as const;
 

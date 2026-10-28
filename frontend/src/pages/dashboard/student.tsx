@@ -62,7 +62,7 @@ export function StudentDashboard(): ReactNode {
   const awaitingChild = asParent && activeChildId === null;
 
   return (
-    <StudentLayout title={t('studentDashboard.title')} lede={t('studentDashboard.landing')}>
+    <StudentLayout title={t('studentDashboard.title')}>
           {/* R62.10 — persistent, and the first thing under the heading. */}
           {asParent ? (
             <p className="state" role="status">

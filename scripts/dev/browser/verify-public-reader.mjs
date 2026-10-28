@@ -118,6 +118,9 @@ try {
   const shelfTitles = `[...document.querySelectorAll('.content-card')].map((c) => c.textContent)`;
   check('«حسب المستوى» lists the session image', await waitFor(`${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.pageTitles[0])}))`));
   check("«حسب المستوى» leaves out a recording's page", await evaluate(`!${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.pageTitles[1])}))`));
+  // R250 — a recording about a Surah is read in «حسب السورة», not on a Level's shelf.
+  check('«حسب المستوى» leaves out a recording about a Surah', await evaluate(`!${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.lessonTitle)}))`));
+  check('«حسب المستوى» fits a phone with four views', await evaluate("document.querySelectorAll('.content-modes [role=tab]').length === 4") && await overflow());
   for (const [kind, id] of Object.entries(fixture.items)) {
     await open(shelf(id));
     check(`${kind}: preview opens anonymously`, await waitFor("!!document.querySelector('dialog[open] .preview__actions button')"));

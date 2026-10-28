@@ -183,7 +183,6 @@ export function TeacherAvailabilityPage(): ReactNode {
   return (
     <TeacherLayout
       title={t('teacher.nav.availability')}
-      lede={t('teacher.availability.lede')}
     >
       {loading ? (
         <LoadingState />

@@ -11,7 +11,7 @@ import { occurrenceHref } from '../../lib/occurrence-link.js';
 import { t } from '../../i18n/index.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
-import { PdfCanvasPreview } from './pdf-canvas-preview.js';
+import { needsPdfCanvas, PdfCanvasPreview, warmPdfPreview } from './pdf-canvas-preview.js';
 
 /**
  * The one content viewer. Every preview and every download in the platform goes
@@ -88,6 +88,8 @@ export function ContentPreviewDialog({
     }
     let cancelled = false;
     setLoad({ kind: 'loading' });
+    // R250 — pdf.js loads beside the mint, not after it.
+    if (item.kind === 'pdf') warmPdfPreview();
     void (async () => {
       try {
         const url = await fetchContentUrl(item.id, accessToken, activeChildId);
@@ -192,7 +194,7 @@ function PreviewSurface({ item, url, onError }: { item: ContentItem; url: string
       // says so itself (`pdfViewerEnabled === false`; a browser that does not
       // answer — Safari — still renders inline), so the document is DRAWN in
       // the page by pdf.js instead. The download button below stays.
-      if (typeof navigator !== 'undefined' && navigator.pdfViewerEnabled === false) {
+      if (needsPdfCanvas()) {
         // R243 — the document alone («فتح الملف في عارض الجهاز» withdrawn).
         return (
           <div className="preview__pdfInPage">

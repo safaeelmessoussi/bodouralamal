@@ -58,6 +58,9 @@ const me: Me = {
   self_attendance_allowed: false,
 };
 
+/** A sample subtitle — the layout's property, not any page's words. */
+const LEDE = 'جملة تجريبية تحت العنوان.';
+
 function render(body: React.ReactNode): string {
   return renderToStaticMarkup(
     <SessionContext.Provider
@@ -65,7 +68,7 @@ function render(body: React.ReactNode): string {
     >
       <ActiveRoleProvider>
         <ActiveChildProvider>
-          <StudentLayout title={t('studentDashboard.title')} lede={t('studentDashboard.landing')}>
+          <StudentLayout title={t('studentDashboard.title')} lede={LEDE}>
             {body}
           </StudentLayout>
         </ActiveChildProvider>
@@ -74,7 +77,6 @@ function render(body: React.ReactNode): string {
   );
 }
 
-const LEDE = 'تتيح القائمة الوصول إلى التقويم ونقاط الاختبارات والمحتوى.';
 
 /** How many times a string occurs in the rendered HTML. */
 function occurrences(html: string, needle: string): number {
@@ -82,10 +84,6 @@ function occurrences(html: string, needle: string): number {
 }
 
 describe('§7 — the lede is rendered once', () => {
-  it('is the catalogue sentence the Owner reported', () => {
-    expect(t('studentDashboard.landing')).toBe(LEDE);
-  });
-
   it('appears exactly once with the dashboard’s (empty) body', () => {
     // The real state: R85/R86 leave the body empty for an identified
     // beneficiary, so the page is its header plus nothing.
@@ -95,7 +93,7 @@ describe('§7 — the lede is rendered once', () => {
   it('would CATCH the defect — a body repeating it makes two', () => {
     // The assertion above is only protection if it can fail. This reintroduces
     // exactly what R86 left behind and proves the count moves.
-    expect(occurrences(render(<p className="muted">{t('studentDashboard.landing')}</p>), LEDE)).toBe(
+    expect(occurrences(render(<p className="muted">{LEDE}</p>), LEDE)).toBe(
       2,
     );
   });

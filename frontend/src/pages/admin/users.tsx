@@ -320,7 +320,6 @@ export function UsersPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.nav.users')}
-      lede={t('admin.users.lede')}
       /**
        * **No create button, by the Document Owner's decision (2026-08-17).**
        *

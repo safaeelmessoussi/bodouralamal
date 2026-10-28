@@ -222,7 +222,6 @@ export function SchedulingTypesPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.schedulingTypes.title')}
-      lede={t('admin.schedulingTypes.lede')}
       actions={
         canWrite ? (
           <Button variant="add" onClick={() => setEditing('new')}>

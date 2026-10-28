@@ -325,7 +325,8 @@ describe('R203 — the page', () => {
     expect(html).toContain('سورة الفاتحة');
     // R216 — al-Fatiha's «أم القرآن والسبع المثاني» is not what is taught here.
     expect(html).not.toContain('أم القرآن والسبع المثاني');
-    expect(html).toContain('نوع السورة');
+    // R250 — the traits are their own section, closed on arrival like the rest.
+    expect(html).toContain(t('content.bySurah.section.profile'));
     expect(html).toContain(t('content.bySurah.section.diagrams'));
     expect(html).not.toContain('href="/resources?surah=1"');
     expect(html).not.toContain('humanity__hero');

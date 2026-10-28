@@ -440,7 +440,6 @@
  "content.unavailableTitle": "Tbddl tzmmar n ukcam s ugbur ad",
  "content.unavailableBody": "Tbddl tzmmar n ukcam s ugbur ad — ilaq akcam niɣ annmyaq d tnbaḍt n tsga.",
  "content.title": "Agbur n uslmd",
- "content.lede": "Ilmuden d isklasn d ifuyla akkʷ, ttusmmasn s tggayt, ukan s uswir, ukan s useggʷas n tɣuri d tsga d tsnalt.",
  "content.backToLibrary": "Iswirn akkʷ",
  "content.wholeCategory.title": "Iswirn akkʷ n tggayt",
  "content.wholeCategory.lede": "Isklasn d tsnalin ttuɣudanin i iswirn akkʷ n {category}.",
@@ -561,9 +560,7 @@
  "content.history.today.empty": "Ur llin lwqqat ɣ uwitay n wass-a — yat tasna ihdan ɣ ubrid.",
  "content.history.today.allDay": "Ass kullu",
  "content.history.today.calendar": "Arẓam n uwitay kullu",
- "content.bySurah.pageLede": "Iɣ ittustay yat ssurt, ar bayyann ilmuden n ttafsir nns d imsgadn nns d isunɣn nns ɣ yan udɣar, ttusmmasn bac ad ttuɣrn tasurift s tsurift.",
  "content.bySurah.indexLabel": "Ssur lli dars agbur",
- "content.bySurah.indexTitle": "Ssur",
  "content.bySurah.empty": "Ur ta illi ugbur iqqnn s yat ssurt. Izḍar ad ittwaẓṛ ugbur «s uswir».",
  "content.bySurah.play": "Asflid",
  "content.bySurah.unavailable": "Ur izḍar ulmud ad ad ittusnkkr ɣilad. Ilaq ad ittuɛawd urmmu ukan.",
@@ -602,7 +599,6 @@
  "content.usedInSessions": "Tiɣimitin lli ismrasn agbur ad",
  "content.previewDownloadOnly": "Anaw ad n ifuyla ar ittusidr, ur ar ittbayyan ɣ ugensu n tɣrrit.",
  "content.previewUnsupported": "Amsnud ur izḍar ad isnkkr afaylu ad — izḍar ad ittusidr.",
- "content.previewPdfPages": "Ar ttyaranin tisniwin… {done} zɣ {total}",
  "nav.language": "Tutlayt",
  "calendar.hijriMonths": [
   "Lmuḥarram",
@@ -700,5 +696,8 @@
  "content.slides.later": "Sggʷry",
  "content.slides.remove": "Asitti",
  "content.slides.removeHint": "Asitti ar ittbḍa tawlaft d usklas; ar tqqimi ɣ tsdlist.",
- "content.slides.failed": "Ur izḍar uḥḍu n tsniwin n usnyil. Ilaq ad ittuɛawd."
+ "content.slides.failed": "Ur izḍar uḥḍu n tsniwin n usnyil. Ilaq ad ittuɛawd.",
+ "content.previewPdfOpening": "Ar ittyarẓam ufaylu…",
+ "content.views.byCategory": "S tggayt",
+ "content.bySurah.section.profile": "Tiflisin n tsurt"
 }

@@ -308,6 +308,7 @@ Not under `/admin/`: TD-2 gives a Teacher write access to sessions they staff; s
 | `hidden` | Admins and Teachers only |
 
 - No `X-Active-Child-ID` needed here (one shared reading surface, §5.2).
+- R250: `?kind=pdf|audio|video|image|document` — what the screens call the file (`application/pdf`, `audio/*`, `video/*`, `image/*`, any other).
 - R247: an image carries `slide_of`/`slide_position` (its live recording, else `null`); every item `session_ids` (live sessions it is attached to) — a session's images are its recordings' pages.
 - Listing is not the download gate: items carry `visibility`; `GET /content/{id}/download-url` (TD-3.5) checks §4.9 before minting; the DTO omits `storage_bucket`, `storage_key`, `original_filename`; `media_consent_missing` is projected for staff, `null` otherwise (R170 §3).
 

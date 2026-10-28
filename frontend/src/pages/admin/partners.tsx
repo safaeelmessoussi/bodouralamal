@@ -110,7 +110,6 @@ export function PartnersPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.nav.partners')}
-      lede={t('admin.partners.lede')}
       /* **The shared header slot, like every other management page.** This was
          a `register-form__actions` row of its own between the lede and the
          table — the same drift `FormDialog` exists to end, one screen deciding

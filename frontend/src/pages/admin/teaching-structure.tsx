@@ -377,7 +377,6 @@ export function TeachingStructurePage({
   return (
     <AdminLayout
       title={t('admin.nav.teachingGroups')}
-      lede={t('admin.subjectOrg.overviewLede')}
       actions={
         openLevel ? (
           <Button

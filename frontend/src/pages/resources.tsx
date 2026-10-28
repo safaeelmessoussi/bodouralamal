@@ -19,6 +19,7 @@ import {
   type ContentFilterState,
 } from '../components/content/content-filters.js';
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
+import { useWarmPdfPreview } from '../components/content/pdf-canvas-preview.js';
 import { byTitle, groupBySurah, SurahLibrary } from '../components/content/surah-library.js';
 import { HumanityTimeline } from '../components/history/humanity-timeline.js';
 import { Button } from '../components/ui/button.js';
@@ -97,12 +98,14 @@ export function ResourcesPage(): ReactNode {
  * not a navigation node — §20 rule 16), and a link naming a Level or a
  * Category opens the Level view, as it always did.
  */
-type LibraryMode = 'history' | 'surah' | 'level';
+type LibraryMode = 'history' | 'surah' | 'level' | 'category';
 
 function LibraryPage({ levelId, categoryId }: { levelId: string | null; categoryId: string | null }): ReactNode {
   const [mode, setMode] = useState<LibraryMode>(() => {
     const param = new URLSearchParams(window.location.search).get('view');
-    if (param === 'levels' || levelId !== null || categoryId !== null) return 'level';
+    // R250 — «حسب الفئة»: what is addressed to a whole Category.
+    if (param === 'categories' || (categoryId !== null && levelId === null)) return 'category';
+    if (param === 'levels' || levelId !== null) return 'level';
     if (param === 'history') return 'history';
     return 'surah';
   });
@@ -111,10 +114,16 @@ function LibraryPage({ levelId, categoryId }: { levelId: string | null; category
   const shown: LibraryMode = mode;
   const tabs = <ModeTabs mode={shown} onMode={setMode} />;
   if (shown === 'history') return <HistoryView tabs={tabs} />;
-  return shown === 'surah' ? (
-    <SurahView tabs={tabs} />
-  ) : (
-    <LibraryView initialLevel={levelId} initialCategory={categoryId} tabs={tabs} />
+  if (shown === 'surah') return <SurahView tabs={tabs} />;
+  // Keyed: each view starts with its own filters.
+  return (
+    <LibraryView
+      key={shown}
+      scope={shown === 'category' ? 'whole_category' : 'level'}
+      initialLevel={levelId}
+      initialCategory={categoryId}
+      tabs={tabs}
+    />
   );
 }
 
@@ -125,7 +134,7 @@ function ModeTabs({
   mode: LibraryMode;
   onMode: (next: LibraryMode) => void;
 }): ReactNode {
-  const modes: LibraryMode[] = ['history', 'surah', 'level'];
+  const modes: LibraryMode[] = ['history', 'surah', 'level', 'category'];
   return (
     <div className="cal-segmented content-modes" role="tablist" aria-label={t('content.views.label')}>
       {modes.map((m) => (
@@ -140,13 +149,22 @@ function ModeTabs({
             const url = new URL(window.location.href);
             url.searchParams.delete('node');
             if (m === 'level') url.searchParams.set('view', 'levels');
+            else if (m === 'category') url.searchParams.set('view', 'categories');
             else if (m === 'history') url.searchParams.set('view', 'history');
             else url.searchParams.delete('view');
             window.history.replaceState(null, '', url);
           }}
         >
           <Icon name={m === 'surah' ? 'book' : m === 'history' ? 'calendar' : 'folder'} size={16} />
-          {t(m === 'surah' ? 'content.views.bySurah' : m === 'history' ? 'content.views.history' : 'content.views.byLevel')}
+          {t(
+            m === 'surah'
+              ? 'content.views.bySurah'
+              : m === 'history'
+                ? 'content.views.history'
+                : m === 'category'
+                  ? 'content.views.byCategory'
+                  : 'content.views.byLevel',
+          )}
         </Button>
       ))}
     </div>
@@ -182,6 +200,7 @@ function HistoryView({ tabs }: { tabs: ReactNode }): ReactNode {
 /** The library's rows (`GET /library`), as the caller may see them. */
 function useLibraryEntries(accessToken: string | null): Load<LibraryEntry[]> {
   const [load, setLoad] = useState<Load<LibraryEntry[]>>({ kind: 'loading' });
+  useWarmPdfPreview(load.kind === 'ready' && load.data.some((e) => e.item.kind === 'pdf'));
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -210,7 +229,7 @@ function SurahView({ tabs }: { tabs: ReactNode }): ReactNode {
     return Number.isInteger(raw) && raw >= 1 && raw <= 114 ? raw : null;
   }, []);
   return (
-    <Shell title={t('content.title')} lede={t('content.bySurah.pageLede')} tabs={tabs}>
+    <Shell title={t('content.title')} lede={null} tabs={tabs}>
       {load.kind === 'loading' ? <YearSkeletons /> : null}
       {load.kind === 'error' ? <ErrorState /> : null}
       {load.kind === 'ready' ? (
@@ -281,10 +300,13 @@ const GLOBAL_BRANCH = '__global__';
 const NO_SUBJECT = '__none__';
 
 function LibraryView({
+  scope,
   initialLevel,
   initialCategory,
   tabs,
 }: {
+  /** R250 — «حسب المستوى» holds the Levels' shelves, «حسب الفئة» what is addressed to a whole Category. */
+  scope: 'level' | 'whole_category';
   initialLevel: string | null;
   initialCategory: string | null;
   tabs: ReactNode;
@@ -335,7 +357,18 @@ function LibraryView({
   }, [accessToken]);
   // R248 — a recording's page («صفحات المطبوع») is shown beside its recording
   // in «حسب السورة» and nowhere else.
-  const entries = useMemo(() => (load.kind === 'ready' ? load.data.filter((e) => !e.item.slide_of) : []), [load]);
+  // R250 — a recording about a Surah is read in «حسب السورة», where its
+  // lessons are in order; here it was hard to use among everything else.
+  const entries = useMemo(
+    () =>
+      load.kind === 'ready'
+        ? load.data.filter(
+            (e) => e.shelf_kind === scope && !e.item.slide_of && !(e.item.kind === 'audio' && e.surah_id !== null),
+          )
+        : [],
+    [load, scope],
+  );
+  useWarmPdfPreview(entries.some((e) => e.item.kind === 'pdf'));
 
   /**
    * The options are what EXISTS, so no filter offers an empty answer — and
@@ -547,7 +580,7 @@ function LibraryView({
   );
 
   return (
-    <Shell title={t('content.title')} lede={t('content.lede')} tabs={tabs}>
+    <Shell title={t('content.title')} lede={null} tabs={tabs}>
       <div className="cal-toolbar" role="group" aria-label={t('content.filtersLabel')}>
         <div className="cal-filter cal-filter--search">
           <label className="cal-filter__label" htmlFor="lib-query">
@@ -563,7 +596,9 @@ function LibraryView({
           />
         </div>
         {select('categoryId', t('content.categoryLabel'), options.categories)}
-        {select('shelfKey', t('content.levelFilterLabel'), options.shelves.map(([k, v]) => [k, v.label] as [string, string]))}
+        {scope === 'level'
+          ? select('shelfKey', t('content.levelFilterLabel'), options.shelves.map(([k, v]) => [k, v.label] as [string, string]))
+          : null}
         {select('yearId', t('content.yearLabel'), options.years)}
         {select('branchId', t('content.branchLabel'), options.branches)}
         {select('subjectId', t('content.subjectLabel'), options.subjects)}
@@ -588,7 +623,18 @@ function LibraryView({
             {cat.name}
           </h2>
           {cat.shelves.map((shelf) => (
-            <section key={shelf.key} className="content-shelf" aria-labelledby={`shelf-${shelf.key}`}>
+            <section
+              key={shelf.key}
+              className="content-shelf"
+              aria-labelledby={`shelf-${shelf.key}`}
+              // R250 — a click anywhere on the card that is not a control or an
+              // item opens it, or folds it again; «فتح»/«طيّ» stay the keyboard's.
+              onClick={(event) => {
+                if ((event.target as Element).closest('button, a, input, select, textarea, label, .content-card')) return;
+                if (window.getSelection()?.toString()) return;
+                toggleShelf(shelf.key);
+              }}
+            >
               <h3 id={`shelf-${shelf.key}`} className="content-shelf__title">
                 {shelf.kind === 'whole_category' ? t('content.wholeCategory.title') : shelf.name}
                 <span className="content-year__badge">{counted('content.itemCount', shelf.count)}</span>

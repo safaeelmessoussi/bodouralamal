@@ -114,6 +114,12 @@ export interface DataTableProps<T> {
   /** TD-10 pagination, when the caller has more than one page. */
   pagination?: PaginationProps;
   /**
+   * R250 — a click anywhere on a row (not on one of its controls) opens it:
+   * «مكتبة المحتوى» shows the item. The caller still offers a keyboard way
+   * (a button in a cell); this is the pointer's shortcut.
+   */
+  onOpenRow?: (row: T) => void;
+  /**
    * **Manual ordering** (R76.4) — submits the complete sequence of row keys and
    * resolves when the server has accepted it.
    *
@@ -187,6 +193,7 @@ export function DataTable<T>({
   onSort,
   pagination,
   onReorder,
+  onOpenRow,
 }: DataTableProps<T>): ReactNode {
   const hasActions = actions.length > 0;
   // The platform's one ordering rule — see `orderActions`.
@@ -333,7 +340,20 @@ export function DataTable<T>({
                     onDragOver={reorder.onDragOver(rowIndex)}
                     onDrop={reorder.onDrop}
                     onDragEnd={reorder.onDragEnd}
-                    className={reorder.draggingId === id ? 'is-dragging' : undefined}
+                    className={
+                      [reorder.draggingId === id ? 'is-dragging' : '', onOpenRow ? 'is-openable' : '']
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
+                    onClick={
+                      onOpenRow
+                        ? (event) => {
+                            // A control in the row keeps its own meaning.
+                            if ((event.target as Element).closest('button, a, input, select, textarea, label')) return;
+                            onOpenRow(row);
+                          }
+                        : undefined
+                    }
                   >
                     {showGrip ? (
                       <td className="admin-table__grip">

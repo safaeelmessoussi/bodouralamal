@@ -336,6 +336,19 @@
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-sm);
 }
+/* R250 — until the first page is drawn: a page-shaped placeholder that says it is opening. */
+.preview__pdfOpening {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-2);
+}
+.preview__pdfSkeleton {
+  display: block;
+  inline-size: min(100%, 22rem);
+  aspect-ratio: 1 / 1.414;
+  border-radius: var(--radius-sm);
+}
 .preview__pdfStatus {
   margin: 0;
   padding: var(--space-2);
@@ -708,6 +721,13 @@
 .content-shelf__fold:focus-visible {
   background: var(--color-primary-soft);
 }
+/* R250 — the whole card opens and folds it. */
+.content-page .content-shelf {
+  cursor: pointer;
+}
+.content-page .content-shelf .content-card {
+  cursor: auto;
+}
 .content-page .content-shelf + .content-shelf {
   margin-block-start: var(--space-5);
 }
@@ -795,6 +815,24 @@
   align-items: center;
   gap: var(--space-2);
 }
+/* R250 — four views on a phone: four equal columns, each word under the other. */
+@media (max-width: 44rem) {
+  .content-modes {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    inline-size: 100%;
+  }
+  .content-modes .btn {
+    justify-content: center;
+    padding: var(--space-2) var(--space-1);
+    text-align: center;
+    line-height: 1.25;
+  }
+  .content-modes .btn .btn__icon,
+  .content-modes .btn svg {
+    display: none;
+  }
+}
 
 .surah-library {
   display: grid;
@@ -812,13 +850,6 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-sm);
-}
-.surah-library__indexTitle {
-  margin: 0 0 var(--space-2);
-  padding-inline: var(--space-2);
-  font-family: var(--font-family-display);
-  font-weight: 700;
-  color: var(--color-primary-strong);
 }
 .surah-library__list {
   display: grid;

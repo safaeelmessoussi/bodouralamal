@@ -341,7 +341,6 @@ export function AcademicPeriodsPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.academicPeriods.title')}
-      lede={t('admin.academicPeriods.lede')}
       actions={
         canWrite ? (
           <>

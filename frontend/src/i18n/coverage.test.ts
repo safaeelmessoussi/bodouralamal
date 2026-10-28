@@ -84,7 +84,6 @@ describe('interpolated keys resolve for every value their enum can take', () => 
 
   it('the scheduling screen’s own vocabulary', () => {
     for (const key of [
-      'scheduling.lede',
       'scheduling.create',
       'scheduling.editTitle',
       'scheduling.itemType',

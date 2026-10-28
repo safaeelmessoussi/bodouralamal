@@ -73,6 +73,8 @@ export interface LibraryFilters extends PageParams {
   authorId?: string | null;
   /** R167 §5 — only (or never) the items addressed to a whole Category. */
   wholeCategory?: boolean;
+  /** R250 — «النوع»: what the screens call the file (`kindOf` in the client). */
+  kind?: 'pdf' | 'audio' | 'video' | 'image' | 'document';
   sortBy?: string | undefined;
   sortDir?: string | undefined;
 }
@@ -442,6 +444,12 @@ export async function listLibrary(
   if (filters.wholeCategory !== undefined) {
     conditions.push(Prisma.sql`c."whole_category" = ${filters.wholeCategory}`);
   }
+  // R250 — the same five kinds the client derives from the MIME type.
+  if (filters.kind === 'pdf') conditions.push(Prisma.sql`c."mime_type" = 'application/pdf'`);
+  else if (filters.kind === 'document') {
+    conditions.push(Prisma.sql`c."mime_type" <> 'application/pdf' AND c."mime_type" NOT LIKE 'audio/%'
+      AND c."mime_type" NOT LIKE 'video/%' AND c."mime_type" NOT LIKE 'image/%'`);
+  } else if (filters.kind !== undefined) conditions.push(Prisma.sql`c."mime_type" LIKE ${`${filters.kind}/%`}`);
   if (filters.academicYearId) {
     conditions.push(Prisma.sql`c."academic_year_id" = ${filters.academicYearId}::uuid`);
   }

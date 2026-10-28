@@ -291,7 +291,6 @@ export function GroupsPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.nav.groups')}
-      lede={t('admin.groups.lede')}
       // **The page's primary action lives in the layout's slot, not in the
       // table's toolbar.** The toolbar is for narrowing what is listed; creating
       // a record is not a filter, and mixing the two put the same button in two

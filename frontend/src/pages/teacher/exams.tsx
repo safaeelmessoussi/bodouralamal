@@ -151,7 +151,7 @@ export function TeacherExamsPage(): ReactNode {
   ];
 
   return (
-    <TeacherLayout title={t('teacher.nav.exams')} lede={t('teacher.exams.lede')}>
+    <TeacherLayout title={t('teacher.nav.exams')}>
       <DataTable
         caption={t('admin.grades.caption')}
         columns={columns}

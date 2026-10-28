@@ -322,7 +322,6 @@ export function LevelsPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.nav.levels')}
-      lede={t('admin.levels.lede')}
       actions={
         canWrite ? (
           <Button variant="add" onClick={() => setEditing('new')}>

@@ -440,7 +440,6 @@
  "content.unavailableTitle": "Access to this content has changed",
  "content.unavailableBody": "Access to this content has changed — please sign in or contact the branch administration.",
  "content.title": "Learning content",
- "content.lede": "All the lessons, recordings and files, organised by category, then level, then school year, branch and subject.",
  "content.backToLibrary": "All levels",
  "content.wholeCategory.title": "All levels of the category",
  "content.wholeCategory.lede": "Recordings and materials for all levels of {category}.",
@@ -561,9 +560,7 @@
  "content.history.today.empty": "Nothing on today's schedule — a quiet page of the journey.",
  "content.history.today.allDay": "All day",
  "content.history.today.calendar": "Open the full schedule",
- "content.bySurah.pageLede": "Choosing a Surah shows its tafsir lessons, summaries and drawings in one place, arranged for studying it step by step.",
  "content.bySurah.indexLabel": "Surahs with content",
- "content.bySurah.indexTitle": "Surahs",
  "content.bySurah.empty": "No content is linked to a Surah yet. The content can be browsed “By level”.",
  "content.bySurah.play": "Listen",
  "content.bySurah.unavailable": "This lesson cannot be played right now. Please try again later.",
@@ -602,7 +599,6 @@
  "content.usedInSessions": "Classes that use this content",
  "content.previewDownloadOnly": "This type of file is downloaded, not displayed within the platform.",
  "content.previewUnsupported": "This browser cannot play this file — it can be downloaded.",
- "content.previewPdfPages": "Drawing the pages… {done} of {total}",
  "nav.language": "Language",
  "calendar.hijriMonths": [
   "Muharram",
@@ -700,5 +696,8 @@
  "content.slides.later": "Move down",
  "content.slides.remove": "Remove",
  "content.slides.removeHint": "Removing detaches the image from the recording; it stays in the library.",
- "content.slides.failed": "Could not save the handout pages. Please try again."
+ "content.slides.failed": "Could not save the handout pages. Please try again.",
+ "content.previewPdfOpening": "Opening the file…",
+ "content.views.byCategory": "By category",
+ "content.bySurah.section.profile": "The Surah's features"
 }

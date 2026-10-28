@@ -296,7 +296,7 @@ if (sched === 'ready') {
     const filters = ['فروع', 'فئات', 'مستويات', 'مجموعات', 'حلقات'].filter((name) =>
       labels.some((l) => l.startsWith(name)));
     const allCount = (dlg.textContent.match(/الكل/g) ?? []).length;
-    const close = [...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'إغلاق');
+    const close = dlg.querySelector('.dialog__close');
     if (!close) return { noCloseButton: true };
     close.click();
     await new Promise((r) => setTimeout(r, 800));
@@ -338,8 +338,9 @@ if (sched === 'ready') {
 const enrolPage = await goto('/admin/enrollments');
 if (enrolPage === 'ready') {
   const opened = await evaluate(`(async () => {
+    // R167 §3 — «تسجيل» and «تعديل» became ONE door, «إدارة التسجيلات».
     const enrol = [...document.querySelectorAll('.admin-table tbody button')].find((b) =>
-      b.textContent.trim() === 'تسجيل');
+      b.textContent.trim() === 'إدارة التسجيلات');
     if (!enrol) return { noRowAction: true };
     enrol.click();
     await new Promise((r) => setTimeout(r, 1500));
@@ -353,11 +354,11 @@ if (enrolPage === 'ready') {
   })()`);
 
   if (opened.closed !== true) {
-    check('PRISTINE تسجيل: the enrolment form could be opened', false, JSON.stringify(opened));
+    check('PRISTINE إدارة التسجيلات: the placements dialog could be opened', false, JSON.stringify(opened));
   } else {
     const after = await state();
     check(
-      'PRISTINE: an untouched تسجيل مستفيد(ة) closes with no discard question',
+      'PRISTINE: an untouched «إدارة التسجيلات» closes with no discard question',
       after.confirming === false && after.open === 0,
       JSON.stringify(after),
     );

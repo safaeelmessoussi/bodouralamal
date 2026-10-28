@@ -440,7 +440,6 @@
  "content.unavailableTitle": "Les droits d'accès à ce contenu ont changé",
  "content.unavailableBody": "Les droits d'accès à ce contenu ont changé — merci de se connecter ou de contacter la direction de l'antenne.",
  "content.title": "Contenu pédagogique",
- "content.lede": "Tous les cours, enregistrements et fichiers, classés par catégorie, puis par niveau, puis par année scolaire, antenne et matière.",
  "content.backToLibrary": "Tous les niveaux",
  "content.wholeCategory.title": "Tous les niveaux de la catégorie",
  "content.wholeCategory.lede": "Enregistrements et supports destinés à tous les niveaux de {category}.",
@@ -561,9 +560,7 @@
  "content.history.today.empty": "Aucun rendez-vous au programme du jour — une page paisible du parcours.",
  "content.history.today.allDay": "Toute la journée",
  "content.history.today.calendar": "Ouvrir le calendrier complet",
- "content.bySurah.pageLede": "En choisissant une sourate, ses cours de tafsir, ses résumés et ses illustrations s'affichent en un seul endroit, ordonnés pour l'étudier pas à pas.",
  "content.bySurah.indexLabel": "Sourates disposant de contenu",
- "content.bySurah.indexTitle": "Sourates",
  "content.bySurah.empty": "Aucun contenu n'est encore lié à une sourate. Le contenu peut être consulté « Par niveau ».",
  "content.bySurah.play": "Écouter",
  "content.bySurah.unavailable": "Impossible de lire ce cours pour le moment. Merci de réessayer plus tard.",
@@ -602,7 +599,6 @@
  "content.usedInSessions": "Séances utilisant ce contenu",
  "content.previewDownloadOnly": "Ce type de fichier se télécharge et ne s'affiche pas dans la plateforme.",
  "content.previewUnsupported": "Ce navigateur ne peut pas lire ce fichier — il peut être téléchargé.",
- "content.previewPdfPages": "Rendu des pages… {done} sur {total}",
  "nav.language": "Langue",
  "calendar.hijriMonths": [
   "Mouharram",
@@ -700,5 +696,8 @@
  "content.slides.later": "Descendre",
  "content.slides.remove": "Retirer",
  "content.slides.removeHint": "Retirer détache l’image de l’enregistrement ; elle reste dans la bibliothèque.",
- "content.slides.failed": "Impossible d’enregistrer les pages du polycopié. Merci de réessayer."
+ "content.slides.failed": "Impossible d’enregistrer les pages du polycopié. Merci de réessayer.",
+ "content.previewPdfOpening": "Ouverture du fichier…",
+ "content.views.byCategory": "Par catégorie",
+ "content.bySurah.section.profile": "Caractéristiques de la sourate"
 }

@@ -85,7 +85,8 @@ describe('SurahLibrary', () => {
     const out = html(2);
     const order = [
       'class="surah-library__head"',
-      'نوع السورة',
+      // R250 — the traits are a section of their own, «خصائص السورة».
+      ar.content.bySurah.section.profile,
       ar.content.bySurah.section.diagrams,
       ar.content.bySurah.section.listen,
       ar.content.bySurah.section.slides,
@@ -103,6 +104,8 @@ describe('SurahLibrary', () => {
     expect(out).not.toContain('surah-library__lede');
     expect(out).not.toContain('surah-library__sectionHint');
     expect(out).not.toContain('surah-library__more');
+    // R250 — closed on arrival, like every section: the traits show on a click.
+    expect(out).not.toContain('نوع السورة');
   });
 
   it('R212/R239 — a handout is what its title calls «مطبوع» (or «شرائح»), or a presentation file', () => {
@@ -154,7 +157,10 @@ describe('SurahLibrary', () => {
 
 describe('the page', () => {
   it('opens on «حسب السورة» unless ?view=levels or a Level/Category is named', () => {
-    expect(RESOURCES_SOURCE).toContain("if (param === 'levels' || levelId !== null || categoryId !== null) return 'level';");
+    expect(RESOURCES_SOURCE).toContain("if (param === 'levels' || levelId !== null) return 'level';");
+    // R250 — «حسب الفئة», what is addressed to a whole Category.
+    expect(RESOURCES_SOURCE).toContain("if (param === 'categories' || (categoryId !== null && levelId === null)) return 'category';");
+    expect(ar.content.views.byCategory).toBe('حسب الفئة');
     expect(RESOURCES_SOURCE).toContain("return 'surah';");
     expect(ar.content.views.bySurah).toBe('حسب السورة');
     expect(ar.content.views.byLevel).toBe('حسب المستوى');

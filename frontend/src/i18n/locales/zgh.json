@@ -440,7 +440,6 @@
  "content.unavailableTitle": "ⵜⵜⵓⵙⵏⴼⵍ ⵜⵓⵔⴰⴳⵜ ⵏ ⵓⴽⵛⴰⵎ ⵖⵔ ⵓⴳⴱⵓⵔ ⴰⴷ",
  "content.unavailableBody": "ⵜⵜⵓⵙⵏⴼⵍ ⵜⵓⵔⴰⴳⵜ ⵏ ⵓⴽⵛⴰⵎ ⵖⵔ ⵓⴳⴱⵓⵔ ⴰⴷ — ⵉⵜⵜⵓⵜⵜⵔ ⵓⴽⵛⴰⵎ ⵏⵖ ⴰⵎⵢⴰⵡⴰⴹ ⴷ ⵓⵙⵡⵓⴷⴷⵓ ⵏ ⵍⴼⵔⵄ.",
  "content.title": "ⴰⴳⴱⵓⵔ ⴰⵙⵍⵎⴰⴷ",
- "content.lede": "ⴰⴽⴽⵯ ⵜⵉⵖⵓⵔⵉⵡⵉⵏ ⴷ ⵉⵙⵊⵊⵉⵍⵏ ⴷ ⵉⴼⴰⵢⵍⵓⵜⵏ, ⵙⵙⵓⴷⵙⵏ ⵙ ⵜⴳⴳⴰⵢⵜ, ⴷⴼⴼⵉⵔⵙ ⴰⵙⵡⵉⵔ, ⴷⴼⴼⵉⵔⵙ ⴰⵙⴳⴳⵯⴰⵙ ⴰⵙⵍⵎⴰⴷ ⴷ ⵍⴼⵔⵄ ⴷ ⵜⵏⴳⵎⵉⵜ.",
  "content.backToLibrary": "ⴰⴽⴽⵯ ⵉⵙⵡⵉⵔⵏ",
  "content.wholeCategory.title": "ⴰⴽⴽⵯ ⵉⵙⵡⵉⵔⵏ ⵏ ⵜⴳⴳⴰⵢⵜ",
  "content.wholeCategory.lede": "ⵉⵙⵊⵊⵉⵍⵏ ⴷ ⵜⵏⴳⵎⵉⵡⵉⵏ ⵉⵜⵜⵓⵙⵙⵓⴷⵙⵏ ⵉ ⴰⴽⴽⵯ ⵉⵙⵡⵉⵔⵏ ⵏ {category}.",
@@ -561,9 +560,7 @@
  "content.history.today.empty": "ⵓⵔ ⵍⵍⵉⵏ ⵉⴽⵓⴷⴰⵏ ⴳ ⵓⵡⵜⴰⵙⵙ ⵏ ⵡⴰⵙⵙⴰ — ⵜⴰⵙⵏⴰ ⵉⵙⵓⵙⵎⵏ ⵙⴳ ⵓⵎⵓⴷⴷⵓ.",
  "content.history.today.allDay": "ⴰⴽⴽⵯ ⴰⵙⵙ",
  "content.history.today.calendar": "ⴰⵕⵥⵥⵓⵎ ⵏ ⵓⵡⵜⴰⵙⵙ ⵙ ⵓⵎⴰⵜⴰ ⵏⵏⵙ",
- "content.bySurah.pageLede": "ⵎⵔ ⵜⵜⵓⵙⵜⴰⵢ ⵢⴰⵜ ⵜⵙⵓⵕⵜ, ⴰⴷ ⴱⴰⵢⵏⵏⵜ ⵜⵉⵖⵓⵔⵉⵡⵉⵏ ⵏ ⵜⴰⴼⵙⵉⵔ ⵏⵏⵙ ⴷ ⵜⵉⴳⵣⵓⵍⵉⵏ ⵏⵏⵙ ⴷ ⵉⵙⴽⵉⵍⵏ ⵏⵏⵙ ⴳ ⵢⴰⵏ ⵓⴷⵖⴰⵔ, ⵙⵙⵓⴷⵙⵏⵜ ⵃⵎⴰ ⴰⴷ ⵜⵜⵓⵖⵔⴰⵏⵜ ⴰⵙⵓⵔⵉⴼ ⵙ ⵓⵙⵓⵔⵉⴼ.",
  "content.bySurah.indexLabel": "ⵜⵉⵙⵓⵕⵉⵏ ⵍⵍⴰⵏ ⵖⵓⵔⵙⵏⵜ ⴰⴳⴱⵓⵔ",
- "content.bySurah.indexTitle": "ⵜⵉⵙⵓⵕⵉⵏ",
  "content.bySurah.empty": "ⵓⵔ ⵉⵍⵍⵉ ⴰⵔ ⴷⵖⴰ ⴽⵔⴰ ⵏ ⵓⴳⴱⵓⵔ ⵉⵜⵜⵓⵙⵖⵏⵏ ⴷ ⵢⴰⵜ ⵜⵙⵓⵕⵜ. ⵉⵣⵎⵔ ⵓⵙⵎⵓⵇⵇⵍ ⵏ ⵓⴳⴱⵓⵔ «ⵙ ⵓⵙⵡⵉⵔ».",
  "content.bySurah.play": "ⴰⵙⴼⵙⴰⵢ",
  "content.bySurah.unavailable": "ⵓⵔ ⵢⵓⴼⵉ ⴰⴷ ⵜⵜⵓⵙⵙⵏⵜⵉ ⵜⵖⵓⵔⵉ ⴰⴷ ⴷⵖⴰ. ⵉⵜⵜⵓⵜⵜⵔ ⵓⵄⴰⵡⴷ ⵏ ⵓⵔⵎⵎⵓⵙ ⴷⴼⴼⵉⵔ.",
@@ -602,7 +599,6 @@
  "content.usedInSessions": "ⵜⵉⵎⵍⵉⵍⵉⵏ ⵉⵙⵎⵔⴰⵙⵏ ⴰⴳⴱⵓⵔ ⴰⴷ",
  "content.previewDownloadOnly": "ⴰⵏⴰⵡ ⴰⴷ ⵏ ⵉⴼⴰⵢⵍⵓⵜⵏ ⵉⵜⵜⵓⵣⴷⴰⵎ, ⵓⵔ ⵉⵜⵜⵓⵙⵎⴰⵍ ⴳ ⵜⵙⵏⵙⵜ.",
  "content.previewUnsupported": "ⴰⵏⴰⵣⵔⴰⴳ ⴰⴷ ⵓⵔ ⵉⵣⵎⵉⵔ ⴰⴷ ⵉⵙⵙⵏⵜⵉ ⴰⴼⴰⵢⵍⵓ ⴰⴷ — ⵉⵣⵎⵔ ⴰⴷ ⵉⵜⵜⵓⵣⴷⴰⵎ.",
- "content.previewPdfPages": "ⵜⵜⵓⵙⵓⵏⵖⴰⵏⵜ ⵜⵙⵏⵉⵡⵉⵏ… {done} ⵙⴳ {total}",
  "nav.language": "ⵜⵓⵜⵍⴰⵢⵜ",
  "calendar.hijriMonths": [
   "ⵎⵓⵃⴰⵔⵔⴰⵎ",
@@ -700,5 +696,8 @@
  "content.slides.later": "ⵙⵎⴹⴼⴰⵕ",
  "content.slides.remove": "ⴰⴽⴽⵙ",
  "content.slides.removeHint": "ⴰⴽⴽⵙ ⵉⵜⵜⴱⴹⴰ ⵜⴰⵡⵍⴰⴼⵜ ⴷ ⵓⵙⵊⵊⵉⵍ; ⵜⵇⵇⵉⵎ ⴳ ⵜⵙⴷⵍⵉⵙⵜ.",
- "content.slides.failed": "ⵓⵔ ⵢⵓⴼⵉ ⴰⴷ ⵜⵜⵓⵃⵔⵣⵏⵜ ⵜⵙⵏⵉⵡⵉⵏ ⵏ ⵓⵙⵏⵢⵉⵍ. ⴰⵍⵙ ⵜⵉⵔⵎⵉⵜ."
+ "content.slides.failed": "ⵓⵔ ⵢⵓⴼⵉ ⴰⴷ ⵜⵜⵓⵃⵔⵣⵏⵜ ⵜⵙⵏⵉⵡⵉⵏ ⵏ ⵓⵙⵏⵢⵉⵍ. ⴰⵍⵙ ⵜⵉⵔⵎⵉⵜ.",
+ "content.previewPdfOpening": "ⴰⵔ ⵉⵜⵜⵓⵔⵥⴰⵎ ⵓⴼⴰⵢⵍⵓ…",
+ "content.views.byCategory": "ⵙ ⵜⴳⴳⴰⵢⵜ",
+ "content.bySurah.section.profile": "ⵜⵉⴼⵍⵉⵙⵉⵏ ⵏ ⵜⵙⵓⵕⵜ"
 }

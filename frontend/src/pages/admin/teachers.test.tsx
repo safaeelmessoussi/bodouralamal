@@ -85,7 +85,6 @@ describe('المؤطِّرات is a node of its own', () => {
     // («المستخدمون», not «إدارة المستخدمين»), and every entry in this menu is a
     // management screen, so the word distinguished nothing.
     expect(ar.admin.nav.teachers).toBe('المؤطِّرات');
-    expect(ar.admin.teachers.lede.length).toBeGreaterThan(0);
   });
 });
 

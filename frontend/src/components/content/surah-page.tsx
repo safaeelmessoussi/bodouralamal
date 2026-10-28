@@ -59,7 +59,18 @@ export function SurahPage({
     items: items.filter((item) => !pages.ids.has(item.id) && section.holds(item)),
   })).filter((section) => section.items.length > 0);
   const diagrams = profile?.diagrams ?? [];
-  const keys = [...(diagrams.length > 0 ? ['diagrams'] : []), ...shelves.map((section) => section.key)];
+  // R250 — the Surah's details are a section of their own, «خصائص السورة», closed like the rest.
+  const profileLines =
+    profile && profile.lines.length > 0
+      ? profile.lines
+      : revelation
+        ? [`${t('content.bySurah.typeLabel')}: ${t(`content.bySurah.revelation.${revelation}`)}`]
+        : [];
+  const keys = [
+    ...(profileLines.length > 0 ? ['profile'] : []),
+    ...(diagrams.length > 0 ? ['diagrams'] : []),
+    ...shelves.map((section) => section.key),
+  ];
   // R239 — every section opens and closes.
   // R240 — every section closed on arrival (the Owner: «by default, طيّ الكل»).
   const [open, setOpen] = useState<Set<string>>(() => new Set(startOpen ? keys : []));
@@ -144,17 +155,15 @@ export function SurahPage({
         ) : null}
       </header>
 
-      {profile && profile.lines.length > 0 ? (
-        <div className="surah-library__profile">
-          <Details lines={profile.lines} />
-        </div>
-      ) : revelation ? (
-        // R240 — until its «مطبوع» is uploaded, a Surah says where it was revealed.
-        <div className="surah-library__profile">
-          <Details
-            lines={[`${t('content.bySurah.typeLabel')}: ${t(`content.bySurah.revelation.${revelation}`)}`]}
-          />
-        </div>
+      {profileLines.length > 0 ? (
+        <section id="surah-profile" className="surah-library__section surah-library__section--profile" aria-labelledby="surah-profile-title">
+          {heading('profile', 'book', t('content.bySurah.section.profile'))}
+          {open.has('profile') ? (
+            <div id="surah-profile-body" className="surah-library__profile">
+              <Details lines={profileLines} />
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {diagrams.length > 0 ? (

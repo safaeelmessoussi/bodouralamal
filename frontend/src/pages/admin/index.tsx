@@ -317,7 +317,7 @@ function AdminDashboard(): ReactNode {
   const modules = dashboardCards(activeRole === null ? [] : [activeRole]);
 
   return (
-    <AdminLayout title={t('admin.dashboard.title')} lede={t('admin.dashboard.lede')}>
+    <AdminLayout title={t('admin.dashboard.title')}>
       <ul className="level-grid">
         {modules.map((module) => (
           <li key={module.path}>

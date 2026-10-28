@@ -44,6 +44,7 @@ export function list(prisma: PrismaClient, storage: StorageClients) {
       ...(filters.surah_id !== undefined ? { surahId: filters.surah_id === 'none' ? null : filters.surah_id } : {}),
       ...(filters.author_id !== undefined ? { authorId: filters.author_id === 'none' ? null : filters.author_id } : {}),
       ...(filters.branch_id !== undefined ? { branchId: filters.branch_id } : {}),
+      ...(filters.kind !== undefined ? { kind: filters.kind } : {}),
       ...(filters.whole_category !== undefined
         ? { wholeCategory: filters.whole_category === 'true' }
         : {}),

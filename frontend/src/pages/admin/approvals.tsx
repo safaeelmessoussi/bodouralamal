@@ -507,7 +507,7 @@ export function ApprovalsPage(): ReactNode {
   );
 
   return (
-    <AdminLayout title={t('admin.nav.approvals')} lede={t('admin.approvals.lede')}>
+    <AdminLayout title={t('admin.nav.approvals')}>
       {notice ? (
         <Feedback>
           {notice}

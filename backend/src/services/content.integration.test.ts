@@ -1609,6 +1609,17 @@ describe("R247 — a recording's slides", () => {
     expect(after.find((r) => r.id === first)).toMatchObject({ slideOfId: null });
     expect(await setRecordingSlides(prisma, admin(), recording, [])).toEqual([]);
     await prisma.sessionContent.deleteMany({ where: { contentId: recording } });
+
+    // R250 — «النوع» narrows on the server, by what the screens call the file.
+    const ofKind = async (kind: 'pdf' | 'audio' | 'image' | 'document') =>
+      (await listLibrary(prisma, null, { levelId, kind, pageSize: 100 })).data.map((r) => r.id);
+    expect(await ofKind('image')).toEqual(expect.arrayContaining([first, second]));
+    expect(await ofKind('image')).not.toContain(handout);
+    expect(await ofKind('pdf')).toContain(handout);
+    expect(await ofKind('audio')).toContain(recording);
+    expect(await ofKind('audio')).not.toContain(first);
+    const documents = await ofKind('document');
+    for (const id of [handout, recording, first]) expect(documents).not.toContain(id);
   });
 });
 
@@ -1821,6 +1832,7 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
             years: years.map((y) => y.label).sort().reverse(),
             lessonYear: (await prisma.academicYear.findUniqueOrThrow({ where: { id: academicYearId } })).label,
             pageTitles: [`${TAG} image`, `${TAG} الحصة page`],
+            lessonTitle: `${TAG} الحصة lesson`,
             lesson: surahItems['lesson'],
             page: surahItems['page'],
             sessionPage: items['image'],

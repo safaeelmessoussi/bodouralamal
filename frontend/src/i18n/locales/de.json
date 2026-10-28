@@ -440,7 +440,6 @@
  "content.unavailableTitle": "Die Zugriffsberechtigung für diesen Inhalt hat sich geändert",
  "content.unavailableBody": "Die Zugriffsberechtigung für diesen Inhalt hat sich geändert – bitte anmelden oder die Leitung der Zweigstelle kontaktieren.",
  "content.title": "Lerninhalte",
- "content.lede": "Alle Unterrichtseinheiten, Aufnahmen und Dateien, geordnet nach Kategorie, dann Stufe, dann Schuljahr, Zweigstelle und Fach.",
  "content.backToLibrary": "Alle Stufen",
  "content.wholeCategory.title": "Alle Stufen der Kategorie",
  "content.wholeCategory.lede": "Aufnahmen und Materialien für alle Stufen von {category}.",
@@ -561,9 +560,7 @@
  "content.history.today.empty": "Heute keine Termine im Zeitplan – eine ruhige Seite des Weges.",
  "content.history.today.allDay": "Ganztägig",
  "content.history.today.calendar": "Vollständigen Zeitplan öffnen",
- "content.bySurah.pageLede": "Nach Auswahl einer Sure erscheinen ihre Tafsir-Lektionen, Zusammenfassungen und Schaubilder an einem Ort, geordnet zum Lernen Schritt für Schritt.",
  "content.bySurah.indexLabel": "Suren mit Inhalten",
- "content.bySurah.indexTitle": "Suren",
  "content.bySurah.empty": "Es gibt noch keine Inhalte, die einer Sure zugeordnet sind. Die Inhalte können „Nach Stufe“ eingesehen werden.",
  "content.bySurah.play": "Anhören",
  "content.bySurah.unavailable": "Diese Lektion kann gerade nicht abgespielt werden. Bitte später erneut versuchen.",
@@ -602,7 +599,6 @@
  "content.usedInSessions": "Stunden, die diesen Inhalt verwenden",
  "content.previewDownloadOnly": "Dateien dieses Typs werden heruntergeladen und nicht in der Plattform angezeigt.",
  "content.previewUnsupported": "Dieser Browser kann die Datei nicht abspielen – sie kann heruntergeladen werden.",
- "content.previewPdfPages": "Seiten werden gerendert … {done} von {total}",
  "nav.language": "Sprache",
  "calendar.hijriMonths": [
   "Muharram",
@@ -700,5 +696,8 @@
  "content.slides.later": "Nach unten",
  "content.slides.remove": "Entfernen",
  "content.slides.removeHint": "Entfernen löst das Bild von der Aufnahme; es bleibt in der Bibliothek.",
- "content.slides.failed": "Die Seiten des Skripts konnten nicht gespeichert werden. Bitte erneut versuchen."
+ "content.slides.failed": "Die Seiten des Skripts konnten nicht gespeichert werden. Bitte erneut versuchen.",
+ "content.previewPdfOpening": "Datei wird geöffnet …",
+ "content.views.byCategory": "Nach Kategorie",
+ "content.bySurah.section.profile": "Merkmale der Sure"
 }

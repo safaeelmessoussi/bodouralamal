@@ -942,6 +942,33 @@
   opacity: 0.35;
   cursor: default;
 }
+/* R250 — a row that opens its item on a click says so under the pointer. */
+.admin-table tbody tr.is-openable {
+  cursor: pointer;
+}
+.admin-table tbody tr.is-openable:hover > * {
+  background: var(--color-primary-soft);
+}
+/* …and its title is the keyboard's way in, read as the title it is. */
+.admin-table__open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.admin-table__open:hover,
+.admin-table__open:focus-visible {
+  color: var(--color-primary-strong);
+  text-decoration: underline;
+}
+.admin-table__open:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-radius: var(--radius-sm);
+}
 .admin-table tbody tr[draggable='true'] {
   touch-action: none;
 }

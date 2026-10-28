@@ -86,7 +86,7 @@ export function SettingsPage(): ReactNode {
   }, [load]);
 
   return (
-    <AdminLayout title={t('admin.nav.settings')} lede={t('admin.settings.lede')}>
+    <AdminLayout title={t('admin.nav.settings')}>
       {notice ? (
         <Feedback>
           {notice}

@@ -174,7 +174,6 @@ export function SurahLibrary({
   return (
     <div className="surah-library">
       <nav className="surah-library__index" aria-label={t('content.bySurah.indexLabel')}>
-        <p className="surah-library__indexTitle">{t('content.bySurah.indexTitle')}</p>
         <ol className="surah-library__list">
           {surahs.map((surah) => (
             <li key={surah.id}>
