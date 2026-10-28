@@ -318,7 +318,8 @@ function AdminDashboard(): ReactNode {
 
   return (
     <AdminLayout title={t('admin.dashboard.title')}>
-      <ul className="level-grid">
+      {/* R251 — the sections as compact tiles, icon beside the name (`level-grid--modules`). */}
+      <ul className="level-grid level-grid--modules">
         {modules.map((module) => (
           <li key={module.path}>
             <a className="level-card" href={module.path}>

@@ -236,6 +236,8 @@ export function DataTable<T>({
     [localSortable, localSort, reorder.rows, columns],
   );
   const showGrip = onReorder !== undefined;
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const edges = useScrollEdges(scroller, rows.length + columns.length);
 
   return (
     <div className="datatable">
@@ -249,186 +251,192 @@ export function DataTable<T>({
       ) : status === 'loading' ? (
         <TableSkeleton columns={columns.length + (hasActions ? 1 : 0) + (showGrip ? 1 : 0)} />
       ) : (
-        <div className="datatable__scroll">
-          <table className="admin-table">
-            <caption className="visually-hidden">{caption}</caption>
-            <thead>
-              <tr>
-                {showGrip ? (
-                  <th scope="col" className="admin-table__grip-head">
-                    <span className="visually-hidden">{t('common.reorder.column')}</span>
-                  </th>
-                ) : null}
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    scope="col"
-                    className={cellClass(column)}
-                    /**
-                     * **`aria-sort` on the header, not on the button** — it is a
-                     * property of the column, and a screen reader announces it
-                     * when the reader enters the cell rather than only when they
-                     * reach the control inside it.
-                     */
-                    aria-sort={
-                      localSortable && localSort?.by === column.key
-                        ? localSort.dir === 'asc'
-                          ? 'ascending'
-                          : 'descending'
-                        : column.sortKey && sort?.by === column.sortKey
-                        ? sort.dir === 'asc'
-                          ? 'ascending'
-                          : 'descending'
-                        : column.sortKey && !draggable
-                          ? 'none'
-                          : undefined
-                    }
-                  >
-                    {renderHeader(column, sort, draggable ? undefined : onSort, {
-                      offered: !draggable && localSortable && offersLocalSort(column, rows),
-                      active: localSort,
-                      onToggle: setLocalSort,
-                    })}
-                  </th>
-                ))}
-                {hasActions ? (
-                  <th scope="col" className="admin-table__actions-head">
-                    <span className="visually-hidden">{t('common.actions')}</span>
-                  </th>
-                ) : null}
-              </tr>
-            </thead>
-            <tbody>
-              {/**
-                * **Zero rows keeps the columns** (Owner, 2026-08-30).
-                *
-                * The empty and no-results states used to be rendered *instead
-                * of* the table, so a management page with nothing in it showed
-                * a paragraph and no columns at all — and the reader could not
-                * see what the page would hold, could not sort, and on a
-                * filtered table could not tell an empty dataset from a filter
-                * that excluded everything.
-                *
-                * The message now lives in a full-width cell in the body, which
-                * is also what makes it correct for a screen reader: it is
-                * announced as part of the table it describes rather than as
-                * loose prose beside one. `colSpan` counts every column the
-                * header renders, the grip and actions columns included, or the
-                * cell would not span the row.
-                */}
-              {displayed.length === 0 ? (
-                <tr className="admin-table__empty-row">
-                  <td colSpan={columns.length + (hasActions ? 1 : 0) + (showGrip ? 1 : 0)}>
-                    {filtered ? (
-                      <NoResultsState {...(onClearFilters ? { onClear: onClearFilters } : {})} />
-                    ) : (
-                      <EmptyState />
-                    )}
-                  </td>
-                </tr>
-              ) : null}
-              {displayed.map((row, rowIndex) => {
-                // Ordered before filtering, so a row whose contextual action is
-                // unavailable still shows the remaining two in the same places.
-                const available = ordered.filter((a) => (a.available ? a.available(row) : true));
-                const id = rowKey(row);
-                return (
-                  <tr
-                    key={id}
-                    draggable={reorder.enabled}
-                    onDragStart={reorder.onDragStart(id)}
-                    onDragOver={reorder.onDragOver(rowIndex)}
-                    onDrop={reorder.onDrop}
-                    onDragEnd={reorder.onDragEnd}
-                    className={
-                      [reorder.draggingId === id ? 'is-dragging' : '', onOpenRow ? 'is-openable' : '']
-                        .filter(Boolean)
-                        .join(' ') || undefined
-                    }
-                    onClick={
-                      onOpenRow
-                        ? (event) => {
-                            // A control in the row keeps its own meaning.
-                            if ((event.target as Element).closest('button, a, input, select, textarea, label')) return;
-                            onOpenRow(row);
-                          }
-                        : undefined
-                    }
-                  >
-                    {showGrip ? (
-                      <td className="admin-table__grip">
-                        {/* **The handle is a button, and the keyboard path is
-                            the same control.** Native drag-and-drop is
-                            mouse-only; a grip that only responded to a pointer
-                            would put a persisted business decision out of reach
-                            of a keyboard user. ↑/↓ move the row, which is also
-                            the only way to reorder on a touch screen. */}
-                        <button
-                          type="button"
-                          className="admin-table__grip-btn"
-                          disabled={!reorder.enabled}
-                          aria-label={t('common.reorder.handle')}
-                          onKeyDown={reorder.onHandleKey(rowIndex)}
-                        >
-                          <span aria-hidden="true">⠿</span>
-                        </button>
-                      </td>
-                    ) : null}
-                    {columns.map((column, index) =>
-                      // The first column is the row's identity, so it is a
-                      // `<th scope="row">` — a screen reader then announces it
-                      // with every other cell in the row.
-                      index === 0 ? (
-                        <th key={column.key} scope="row" className={cellClass(column)}>
-                          {column.cell(row)}
-                        </th>
-                      ) : (
-                        <td key={column.key} className={cellClass(column)}>
-                          {column.cell(row)}
-                        </td>
-                      ),
-                    )}
-                    {hasActions ? (
+        // R251 — a table wider than its box says so: a shade on each edge that
+        // hides columns (`data-more`), so nothing is missed off the side.
+        <div className="datatable__frame" data-more={edges}>
+          <div className="datatable__scroll" ref={scroller}>
+            <table className="admin-table">
+              <caption className="visually-hidden">{caption}</caption>
+              <thead>
+                <tr>
+                  {showGrip ? (
+                    <th scope="col" className="admin-table__grip-head">
+                      <span className="visually-hidden">{t('common.reorder.column')}</span>
+                    </th>
+                  ) : null}
+                  {columns.map((column) => (
+                    <th
+                      key={column.key}
+                      scope="col"
+                      className={cellClass(column)}
                       /**
-                       * **The row actions render through the shared `Button`**
-                       * (2026-08-17). They used to be a hand-written
-                       * `btn btn--ghost` element — the one exemption the atomic
-                       * guard carried — and it showed: `ghost` has no border and
-                       * no background at rest, so «تعديل» and «حذف» read as
-                       * ordinary text in a cell full of ordinary text. A reader
-                       * had no way to tell an action from a value.
-                       *
-                       * They are `secondary` now — bordered, so they look like
-                       * the controls they are — with `danger` for the
-                       * destructive one, the same variant every irreversible
-                       * action on the platform uses. `row-action` sizes them for
-                       * a table row and nothing else; the palette stays the
-                       * button system's, so a future change to it reaches here
-                       * automatically.
+                       * **`aria-sort` on the header, not on the button** — it is a
+                       * property of the column, and a screen reader announces it
+                       * when the reader enters the cell rather than only when they
+                       * reach the control inside it.
                        */
-                      <td className="admin-table__actions">
-                        {/* The cell stays a table cell so its height and
-                            border follow the row; the flex layout is the
-                            group's (2026-09-25). */}
-                        <span className="admin-table__actions-group">
-                          {available.map((action) => (
-                            <Button
-                              key={action.label}
-                              variant={action.danger ? 'danger' : 'secondary'}
-                              className="row-action"
-                              onClick={() => action.onSelect(row)}
-                            >
-                              {action.label}
-                            </Button>
-                          ))}
-                        </span>
-                      </td>
-                    ) : null}
+                      aria-sort={
+                        localSortable && localSort?.by === column.key
+                          ? localSort.dir === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                          : column.sortKey && sort?.by === column.sortKey
+                          ? sort.dir === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                          : column.sortKey && !draggable
+                            ? 'none'
+                            : undefined
+                      }
+                    >
+                      {renderHeader(column, sort, draggable ? undefined : onSort, {
+                        offered: !draggable && localSortable && offersLocalSort(column, rows),
+                        active: localSort,
+                        onToggle: setLocalSort,
+                      })}
+                    </th>
+                  ))}
+                  {hasActions ? (
+                    <th scope="col" className="admin-table__actions-head">
+                      <span className="visually-hidden">{t('common.actions')}</span>
+                    </th>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody>
+                {/**
+                  * **Zero rows keeps the columns** (Owner, 2026-08-30).
+                  *
+                  * The empty and no-results states used to be rendered *instead
+                  * of* the table, so a management page with nothing in it showed
+                  * a paragraph and no columns at all — and the reader could not
+                  * see what the page would hold, could not sort, and on a
+                  * filtered table could not tell an empty dataset from a filter
+                  * that excluded everything.
+                  *
+                  * The message now lives in a full-width cell in the body, which
+                  * is also what makes it correct for a screen reader: it is
+                  * announced as part of the table it describes rather than as
+                  * loose prose beside one. `colSpan` counts every column the
+                  * header renders, the grip and actions columns included, or the
+                  * cell would not span the row.
+                  */}
+                {displayed.length === 0 ? (
+                  <tr className="admin-table__empty-row">
+                    <td colSpan={columns.length + (hasActions ? 1 : 0) + (showGrip ? 1 : 0)}>
+                      {filtered ? (
+                        <NoResultsState {...(onClearFilters ? { onClear: onClearFilters } : {})} />
+                      ) : (
+                        <EmptyState />
+                      )}
+                    </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ) : null}
+                {displayed.map((row, rowIndex) => {
+                  // Ordered before filtering, so a row whose contextual action is
+                  // unavailable still shows the remaining two in the same places.
+                  const available = ordered.filter((a) => (a.available ? a.available(row) : true));
+                  const id = rowKey(row);
+                  return (
+                    <tr
+                      key={id}
+                      draggable={reorder.enabled}
+                      onDragStart={reorder.onDragStart(id)}
+                      onDragOver={reorder.onDragOver(rowIndex)}
+                      onDrop={reorder.onDrop}
+                      onDragEnd={reorder.onDragEnd}
+                      className={
+                        [reorder.draggingId === id ? 'is-dragging' : '', onOpenRow ? 'is-openable' : '']
+                          .filter(Boolean)
+                          .join(' ') || undefined
+                      }
+                      onClick={
+                        onOpenRow
+                          ? (event) => {
+                              // A control in the row keeps its own meaning.
+                              if ((event.target as Element).closest('button, a, input, select, textarea, label')) return;
+                              onOpenRow(row);
+                            }
+                          : undefined
+                      }
+                    >
+                      {showGrip ? (
+                        <td className="admin-table__grip">
+                          {/* **The handle is a button, and the keyboard path is
+                              the same control.** Native drag-and-drop is
+                              mouse-only; a grip that only responded to a pointer
+                              would put a persisted business decision out of reach
+                              of a keyboard user. ↑/↓ move the row, which is also
+                              the only way to reorder on a touch screen. */}
+                          <button
+                            type="button"
+                            className="admin-table__grip-btn"
+                            disabled={!reorder.enabled}
+                            aria-label={t('common.reorder.handle')}
+                            onKeyDown={reorder.onHandleKey(rowIndex)}
+                          >
+                            <span aria-hidden="true">⠿</span>
+                          </button>
+                        </td>
+                      ) : null}
+                      {columns.map((column, index) =>
+                        // The first column is the row's identity, so it is a
+                        // `<th scope="row">` — a screen reader then announces it
+                        // with every other cell in the row.
+                        index === 0 ? (
+                          <th key={column.key} scope="row" className={cellClass(column)}>
+                            {column.cell(row)}
+                          </th>
+                        ) : (
+                          // R251 — a phone reads each row as a block, every value after
+                          // its column's name (`admin.css`, *A row as a block*).
+                          <td key={column.key} className={cellClass(column)} data-label={column.header}>
+                            {column.cell(row)}
+                          </td>
+                        ),
+                      )}
+                      {hasActions ? (
+                        /**
+                         * **The row actions render through the shared `Button`**
+                         * (2026-08-17). They used to be a hand-written
+                         * `btn btn--ghost` element — the one exemption the atomic
+                         * guard carried — and it showed: `ghost` has no border and
+                         * no background at rest, so «تعديل» and «حذف» read as
+                         * ordinary text in a cell full of ordinary text. A reader
+                         * had no way to tell an action from a value.
+                         *
+                         * They are `secondary` now — bordered, so they look like
+                         * the controls they are — with `danger` for the
+                         * destructive one, the same variant every irreversible
+                         * action on the platform uses. `row-action` sizes them for
+                         * a table row and nothing else; the palette stays the
+                         * button system's, so a future change to it reaches here
+                         * automatically.
+                         */
+                        <td className="admin-table__actions">
+                          {/* The cell stays a table cell so its height and
+                              border follow the row; the flex layout is the
+                              group's (2026-09-25). */}
+                          <span className="admin-table__actions-group">
+                            {available.map((action) => (
+                              <Button
+                                key={action.label}
+                                variant={action.danger ? 'danger' : 'secondary'}
+                                className="row-action"
+                                onClick={() => action.onSelect(row)}
+                              >
+                                {action.label}
+                              </Button>
+                            ))}
+                          </span>
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -930,3 +938,33 @@ export function Pagination({ page, pageSize, total, onPage }: PaginationProps): 
 
 /** Exported for the comparator's own test; application code uses `DataTable`. */
 export const sortLocallyForTest = sortLocally;
+
+/**
+ * R251 — which edges of a scrolling table hide columns: `'start'`, `'end'`,
+ * `'both'` or `undefined`. Measured on scroll and on resize; in a right-to-left
+ * page `scrollLeft` runs from 0 to negative, so its magnitude is the distance
+ * from the start edge.
+ */
+function useScrollEdges(ref: { current: HTMLDivElement | null }, key: number): 'start' | 'end' | 'both' | undefined {
+  const [edges, setEdges] = useState<'start' | 'end' | 'both' | undefined>(undefined);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const measure = (): void => {
+      const from = Math.abs(node.scrollLeft);
+      const rest = node.scrollWidth - node.clientWidth - from;
+      const start = from > 1;
+      const end = rest > 1;
+      setEdges(start && end ? 'both' : start ? 'start' : end ? 'end' : undefined);
+    };
+    measure();
+    node.addEventListener('scroll', measure, { passive: true });
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(node);
+    return () => {
+      node.removeEventListener('scroll', measure);
+      observer?.disconnect();
+    };
+  }, [ref, key]);
+  return edges;
+}

@@ -220,27 +220,32 @@ export function HijriCalendarPage(): ReactNode {
 
       {state === 'ready' && data ? (
         <>
-          <table className="admin-table">
-            <caption className="visually-hidden">{t('admin.hijri.tableCaption')}</caption>
-            <thead>
-              <tr>
-                <th scope="col">{t('admin.hijri.colMonth')}</th>
-                <th scope="col">{t('admin.hijri.colStart')}</th>
-                <th scope="col">{t('admin.hijri.colStatus')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.data.map((month) => (
-                <MonthRow
-                  key={month.hijri_month}
-                  month={month}
-                  busy={busyMonth === month.hijri_month}
-                  isLastRecorded={lastRecorded?.hijri_month === month.hijri_month}
-                  onRecord={(value) => void record(month, value)}
-                />
-              ))}
-            </tbody>
-          </table>
+          {/* R251 — the shared table frame, so a phone reads each month as a block. */}
+          <div className="datatable">
+            <div className="datatable__scroll">
+              <table className="admin-table">
+                <caption className="visually-hidden">{t('admin.hijri.tableCaption')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t('admin.hijri.colMonth')}</th>
+                    <th scope="col">{t('admin.hijri.colStart')}</th>
+                    <th scope="col">{t('admin.hijri.colStatus')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.data.map((month) => (
+                    <MonthRow
+                      key={month.hijri_month}
+                      month={month}
+                      busy={busyMonth === month.hijri_month}
+                      isLastRecorded={lastRecorded?.hijri_month === month.hijri_month}
+                      onRecord={(value) => void record(month, value)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {lastRecorded ? (
             <p className="admin-panel__hint">{t('admin.hijri.tailWarning')}</p>
@@ -275,7 +280,7 @@ export function MonthRow({
         {month.month_name_ar}
         <span className="admin-table__ordinal">{month.hijri_month}</span>
       </th>
-      <td>
+      <td data-label={t('admin.hijri.colStart')}>
         <DatePicker
           value={value}
           onChange={setValue}

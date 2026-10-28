@@ -35,16 +35,24 @@
   --color-certificate-gold-soft: var(--cert-gold-200);
   --color-certificate-ink: var(--cert-ink-blue);
 
-  --color-background: var(--neutral-50);
+  /* R251 (the Owner: «make the background color of container a bit darker to
+     make it visually easier to scan different components») — a step deeper, so
+     every white card, field and table stands off it (1.17:1 against white, was
+     1.08). Muted text on it measures 4.89:1, secondary 8.7:1. */
+  --color-background: var(--neutral-100);
   --color-surface: var(--neutral-0);
   --color-surface-raised: var(--neutral-0);
-  /* A recessed panel inside a surface — a table head, a disabled field. */
-  --color-surface-sunken: var(--neutral-100);
+  /* A recessed panel inside a surface — a table head, a disabled field; a step
+     under the ground itself (muted text 4.57:1 on it). */
+  --color-surface-sunken: var(--neutral-150);
 
-  --color-border: var(--neutral-200);
+  /* R251 — «clean and solid border frame»: a container's edge a step firmer. */
+  --color-border: var(--neutral-250);
   /* The hairline between rows and list items — lighter than a container's edge. */
   --color-border-subtle: var(--neutral-100);
   --color-border-strong: var(--neutral-300);
+  /* R251 — the shade on a table's edge that hides more columns (direction by gradient). */
+  --color-shadow-edge: rgb(7 56 38 / 14%);
 
   --color-text: var(--neutral-900);
   --color-text-secondary: var(--neutral-700);

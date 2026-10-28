@@ -138,6 +138,7 @@ export function StudentCalendarPage(): ReactNode {
         fields={['levelId', 'type', 'subjectId', 'groupId', 'circleId']}
         columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'room']}
         heading={t('studentDashboard.myCalendar')}
+        headingHidden
       />
     </StudentLayout>
   );

@@ -11,17 +11,22 @@
 
 .admin {
   display: grid;
-  gap: var(--space-8);
+  /* R251 — on a phone the «أقسام» control sits right above the page it opens. */
+  gap: var(--space-3);
   width: min(100% - 2 * var(--gutter), 96rem);
   margin-inline: auto;
-  padding-block: var(--space-6) var(--space-10);
+  padding-block: var(--space-3) var(--space-8);
   align-items: start;
+  /* R251 — on a short page the rows keep their own height: stretched to the
+     screen (the main grows into the slack), they put the title halfway down. */
+  align-content: start;
 }
 @media (width >= 60rem) {
   .admin {
     /* The sidebar is a fixed reading width; the module takes the rest. */
     grid-template-columns: 17rem 1fr;
-    padding-block: var(--space-8) var(--space-12);
+    gap: var(--space-8);
+    padding-block: var(--space-5) var(--space-10);
   }
   /* **R138 correction #3** — a portal whose final, permission-filtered
      module list is empty (`PortalShell`'s `sidebar` prop is `null`) reclaims
@@ -94,6 +99,15 @@
      sidebar is simply there (the Owner, 2026-09-25). */
   .admin-nav-toggle {
     display: none;
+  }
+}
+/* R251 — below the sidebar breakpoint the «أقسام» control is a compact button
+   at the start of the row, labelled, not a bar across the page. */
+@media (width < 60rem) {
+  .admin-nav-toggle {
+    align-self: flex-start;
+    min-block-size: var(--tap-min);
+    padding-block: var(--space-1);
   }
 }
 /* Below the two-column breakpoint the sidebar is not sticky, so it must not be
@@ -429,11 +443,11 @@
      always, so the action's row cannot be pushed by a taller sibling. */
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: var(--space-4) var(--space-6);
+  gap: var(--space-2) var(--space-4);
   align-items: start;
-  padding-block-end: var(--space-4);
-  margin-block-end: var(--space-6);
-  border-block-end: 1px solid var(--color-border);
+  /* R251 — the page's name is a tool, not the data: no rule under it, and the
+     space it took goes to what the page holds. */
+  margin-block-end: var(--space-4);
 }
 .admin__heading {
   /* The free column. `min-inline-size: 0` is still required: a grid item's
@@ -442,7 +456,8 @@
   min-inline-size: 0;
 }
 .admin__title {
-  font-size: var(--font-size-xl);
+  /* R251 — a step down (it names the page; the data under it is what is read). */
+  font-size: var(--font-size-lg);
   text-wrap: balance;
   color: var(--color-primary-strong);
 }
@@ -502,8 +517,44 @@
    belongs under the text because there is no room beside it. Stated explicitly
    rather than left to `grid-template-columns` collapsing by accident. */
 @media (max-width: 44rem) {
+  /* R251 — the main action on the title's row; the trail above and the
+     description below run the full width (the heading's own box steps aside,
+     `display: contents`, so its children take the header's grid). */
   .admin__head {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    margin-block-end: var(--space-3);
+  }
+  .admin__heading {
+    display: contents;
+  }
+  .admin__heading > .breadcrumb,
+  .admin__heading > .lede {
+    grid-column: 1 / -1;
+  }
+  /* Rows stated, so the action never follows the description: trail (when
+     there is one), then title beside action, then the description. */
+  .admin__heading > .breadcrumb {
+    grid-row: 1;
+  }
+  .admin__title {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .admin__actions {
+    grid-column: 2;
+    grid-row: 1;
+    padding-block-start: 0;
+  }
+  .admin__heading > .lede {
+    grid-row: 2;
+  }
+  .admin__head:has(.breadcrumb) .admin__title,
+  .admin__head:has(.breadcrumb) .admin__actions {
+    grid-row: 2;
+  }
+  .admin__head:has(.breadcrumb) .lede {
+    grid-row: 3;
   }
 }
 
@@ -560,7 +611,8 @@
 }
 .admin-table th,
 .admin-table td {
-  padding: var(--space-3) var(--space-4);
+  /* R251 — denser rows: more of the list in one screen. */
+  padding: var(--space-2) var(--space-3);
   text-align: start;
   vertical-align: middle;
   border-block-end: 1px solid var(--color-border-subtle);
@@ -834,8 +886,19 @@
 .admin-list > li {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding-block-end: var(--space-2);
+  border-block-end: 1px solid var(--color-border-subtle);
+}
+/* A row holding a labelled field lines its buttons up with the field's control. */
+.admin-list > li:has(.field) {
   align-items: end;
-  gap: var(--space-3);
+}
+/* R251 — the name takes the line; its buttons stay together after it. */
+.admin-list > li > :first-child {
+  flex: 1 1 10rem;
+  min-inline-size: 0;
 }
 
 .admin-list__label {
@@ -1337,6 +1400,20 @@
   white-space: normal;
 }
 
+/* R251 — on a wide screen a row's name keeps room to read on one or two
+   lines; the shorter columns share what is left. */
+@media (width >= 44rem) {
+  .admin-table tbody th[scope='row'] {
+    min-inline-size: 14rem;
+  }
+}
+
+/* R251 — two actions sit side by side (stacked, they doubled the row); three
+   or more may still wrap rather than crowd the columns beside them. */
+.admin-table__actions-group:not(:has(> :nth-child(3))) {
+  flex-wrap: nowrap;
+}
+
 /* R224 §2 — an activity's dates a holiday cancelled, each with «إعادة البرمجة». */
 .cancelled-dates {
   list-style: none;
@@ -1359,4 +1436,102 @@
 .cancelled-dates__reason {
   flex: 1 1 12rem;
   font-size: var(--font-size-sm);
+}
+
+/* ── R251 — A row as a block, on a phone ─────────────────────────────────────
+ *
+ * A table squeezed to a phone wrapped every title a word per line and hid its
+ * other columns off the side. Below 44rem each row of a `DataTable` reads as
+ * one block instead: what it IS in bold across the top, then each value after
+ * its column's name (`data-label`), then its actions in one row. The headings
+ * stay, as one wrapped row of sort buttons, so nothing a laptop can do is lost.
+ * The reorder grip keeps its column at the row's start.
+ */
+@media (max-width: 44rem) {
+  .datatable__scroll {
+    overflow-x: visible;
+  }
+  .datatable .admin-table,
+  .datatable .admin-table thead,
+  .datatable .admin-table tbody {
+    display: block;
+  }
+  .datatable .admin-table thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-sunken);
+    border-block-end: 1px solid var(--color-border);
+  }
+  .datatable .admin-table thead th {
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+  .datatable .admin-table thead th.admin-table__grip-head,
+  .datatable .admin-table thead th.admin-table__actions-head {
+    display: none;
+  }
+  /* The values flow side by side — «label: value», wrapping only when the line
+     is full — so a row is as short as its content allows. */
+  .datatable .admin-table tbody tr {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border-block-end: 1px solid var(--color-border-subtle);
+  }
+  .datatable .admin-table tbody tr:has(> .admin-table__grip) {
+    padding-inline-end: calc(var(--tap-min) + var(--space-2));
+  }
+  .datatable .admin-table tbody tr:last-child {
+    border-block-end: 0;
+  }
+  .datatable .admin-table tbody th,
+  .datatable .admin-table tbody td {
+    display: block;
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    text-align: start;
+  }
+  .datatable .admin-table tbody th {
+    flex-basis: 100%;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+  }
+  .datatable .admin-table tbody td[data-label]::before {
+    content: attr(data-label) ': ';
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
+  .datatable .admin-table tbody td[data-label]:empty {
+    display: none;
+  }
+  /* The reorder grip at the row's edge, level with the row. */
+  .datatable .admin-table tbody td.admin-table__grip {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: var(--space-1);
+    display: flex;
+    align-items: center;
+    width: auto;
+  }
+  .datatable .admin-table tbody td.admin-table__actions {
+    flex-basis: 100%;
+    padding-block-start: var(--space-1);
+  }
+  .datatable .admin-table__actions-group {
+    justify-content: start;
+  }
+  .datatable .admin-table tr.admin-table__empty-row {
+    display: block;
+  }
 }

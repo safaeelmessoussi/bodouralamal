@@ -17,7 +17,8 @@
      must not size to a nowrap summary's max-content either. `.field--choice`
      is a flex row and unaffected. */
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-2);
+  /* R251 — a label sits right on its control. */
+  gap: var(--space-1);
   min-width: 0;
 }
 /* The label is read BEFORE the box, so it is body-sized and dark — a small
@@ -153,13 +154,14 @@
      `minmax(0, 1fr)` caps the track at the dialog and lets the summary's own
      ellipsis do its work. */
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
+  /* R251 — 12 px between fields (was 16): a long form shows more of itself. */
+  gap: var(--space-3);
 }
 /* Two fields side by side where they are genuinely a pair — phone and email,
    start date and order. Collapses on a phone. */
 .form__row {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
   /* **`start`, and for the same reason `.datatable__toolbar` needs it.** A grid
      item stretches by default, so two fields of unequal height distribute their
      rows differently and their CONTROLS stop lining up — which is what put
@@ -198,8 +200,63 @@
 .datatable__toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-3);
   align-items: start;
+}
+/* R251 — filters are tools: on a phone two to a row (the search across both),
+   their names small, so the list they filter starts on the first screen. */
+@media (max-width: 44rem) {
+  .datatable__toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2) var(--space-2);
+  }
+  .datatable__toolbar > .field--search,
+  .datatable__toolbar > .field:has(input[type='search']) {
+    grid-column: 1 / -1;
+  }
+  .datatable__toolbar .field__label {
+    font-size: var(--font-size-xs);
+  }
+  .datatable__toolbar .field__hint {
+    font-size: var(--font-size-xs);
+  }
+}
+/* R251 — a table that continues past its box shades the edge it continues
+   behind (`data-more`, measured by `DataTable`), so a column off the side is
+   seen to be there. The shade is drawn over the table and lets clicks through. */
+.datatable__frame {
+  position: relative;
+  min-inline-size: 0;
+}
+.datatable__frame::before,
+.datatable__frame::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  z-index: 1;
+  inline-size: 2rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.datatable__frame::before {
+  inset-inline-start: 0;
+  border-start-start-radius: var(--radius-lg);
+  border-end-start-radius: var(--radius-lg);
+  background: linear-gradient(to left, var(--color-shadow-edge), transparent);
+}
+.datatable__frame::after {
+  inset-inline-end: 0;
+  border-start-end-radius: var(--radius-lg);
+  border-end-end-radius: var(--radius-lg);
+  background: linear-gradient(to right, var(--color-shadow-edge), transparent);
+}
+.datatable__frame[data-more='start']::before,
+.datatable__frame[data-more='both']::before,
+.datatable__frame[data-more='end']::after,
+.datatable__frame[data-more='both']::after {
+  opacity: 1;
 }
 /* Wide tables scroll in their own container, so the page body never scrolls
    sideways. */

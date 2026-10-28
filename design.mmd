@@ -62,9 +62,10 @@ the values are what they are; changing a value means re-measuring.
 
 | Pair | Ratio |
 |---|---|
-| `--color-text` on white / on ground | 16.9 / 15.6 |
+| `--color-text` on white / on ground | 16.9 / 14.5 |
 | `--color-text-secondary` on white | 10.1 |
-| `--color-text-muted` on white / on ground | 5.7 / 5.3 — the floor for small text; never lighter |
+| `--color-text-muted` on white / on ground / on sunken | 5.7 / 4.9 / 4.6 — the floor for small text; never lighter |
+| White against the ground (R251, a step deeper so every card stands off it) | 1.17 (was 1.08) |
 | white on `--color-primary` | 7.9 |
 | `--color-primary-emphasis` on white | 5.6 |
 | `--color-accent` on white | 6.6 |
@@ -115,7 +116,7 @@ No uppercase (Arabic has none; Latin labels stay as typed). Digits that line up 
 
 - **Rhythm** is the 0.25 rem scale (`--space-1` … `--space-16`). Layout does the spacing:
   flex/grid with `gap`, never per-element margins that collapse or double.
-- **Gutter**: one side gutter at every width, `--gutter` (16 px on a phone, 32 px wide),
+- **Gutter**: one side gutter at every width, `--gutter` (12 px on a phone, 32 px wide, R251),
   set once on `.container`, `.admin` and `.cal-page__inner`.
 - **Radius says what a thing is**: `--radius-sm` (8) on things you type in · `--radius-md`
   (12) on things you press · `--radius-lg` (18) on things that contain · `--radius-xl`
@@ -153,12 +154,18 @@ flowchart LR
   because in RTL a scroller that is not its content's containing block lets the table's
   start-side overflow reach the document, and the whole page could be panned sideways on
   a phone (found 2026-09-24; it pre-dated the redesign). The page body never scrolls
-  sideways.
-- **Filters** share a toolbar row evenly (`flex: 1 1 13rem`); on a phone they stack.
+  sideways. **A table that continues past its box shades the hidden edge**
+  (`.datatable__frame[data-more]`, R251). **On a phone each row is a block** (R251): what
+  it is in bold, then «label: value» side by side (`data-label`), then its actions in one
+  row; the headings stay as a row of sort buttons. Two row actions sit side by side; a
+  row's name keeps 14 rem on a wide screen.
+- **Filters** share a toolbar row evenly (`flex: 1 1 13rem`); on a phone two to a row,
+  the search across both, their names `--font-size-xs` (R251).
 - **Segmented controls** (calendar/list) are a sunken track with a raised white tab.
 - **Dialogs** rise into place, carry the largest radius and the deepest shadow, scroll
   their body only, and on a phone read as a bottom sheet — full width, actions at the
-  foot, each action full width.
+  foot, each action full width; a slim head and 12 px body there (R251). Fields stand
+  12 px apart, their label 4 px above.
 
 ## 7 · Motion — everything settles, nothing winds up
 
@@ -210,6 +217,10 @@ width on a phone.
 
 **Back office / teacher / student pages** — the shell in §8; every list page renders its
 data on arrival and filters narrow it (rule A); an empty table keeps its columns (rule BD).
+**R251 — business first:** the page title is `--font-size-lg` (it names the page; the data
+is read), no rule under it, its main action on the same row on a phone too; «أقسام» is a
+compact labelled button above the page, not a bar; the home's sections are compact tiles,
+two to a row on a phone (`level-grid--modules`).
 
 **Calendar** — the dual title in El Messiri (Gregorian in orange, Hijri in green), the
 segmented view switch, filters, then the month as one rounded surface with hairline

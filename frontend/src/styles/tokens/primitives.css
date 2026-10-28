@@ -79,7 +79,10 @@
   --neutral-0: #ffffff;
   --neutral-50: #f3f7f4;
   --neutral-100: #e9efeb;
+  /* R251 — the recessed step under the page ground, and a container's firmer edge. */
+  --neutral-150: #e0e8e3;
   --neutral-200: #d6e0da;
+  --neutral-250: #c9d6cf;
   --neutral-300: #bfcdc5;
   --neutral-600: #5b6a62;
   --neutral-700: #35453d;

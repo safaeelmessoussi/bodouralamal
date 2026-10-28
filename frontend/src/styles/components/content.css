@@ -11,13 +11,14 @@
 
 .content-page__head {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   justify-items: start;
-  /* R212 — the page's content starts close under its tabs. */
-  margin-block-end: var(--space-5);
+  /* R212 — the page's content starts close under its tabs (R251 — closer). */
+  margin-block-end: var(--space-3);
 }
 .content-page__title {
-  font-size: var(--font-size-xl);
+  /* R251 — a step down: it names the page; the lessons under it are the point. */
+  font-size: var(--font-size-lg);
   color: var(--color-primary-strong);
 }
 /* A quiet back affordance above the heading — the drill-down's only way out, so
@@ -126,6 +127,41 @@
 .level-card__count strong {
   color: var(--color-primary);
   font-variant-numeric: tabular-nums;
+}
+/* R251 — the portal home's sections: compact tiles, the icon beside the name,
+   two to a row on a phone, so every section shows on one or two screens. */
+.level-grid--modules {
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+}
+.level-grid--modules .level-card {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+}
+.level-grid--modules .level-card__icon {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+.level-grid--modules .level-card__title {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+}
+.level-grid--modules .level-card__description {
+  grid-column: 1 / -1;
+  font-size: var(--font-size-xs);
+}
+@media (max-width: 44rem) {
+  .level-grid--modules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .level-grid--modules .level-card {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+    padding: var(--space-3) var(--space-2);
+  }
 }
 .level-card--skeleton {
   gap: var(--space-3);
@@ -831,6 +867,18 @@
   .content-modes .btn .btn__icon,
   .content-modes .btn svg {
     display: none;
+  }
+  /* «حسب» is the same on every tab: read by a screen reader, not shown. */
+  .content-modes__by {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .content-modes .btn {
+    white-space: nowrap;
   }
 }
 

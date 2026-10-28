@@ -104,10 +104,10 @@ async function measureAt(width) {
 }
 
 /**
- * The header is two columns at and above 44rem (704px) and ONE column below it,
- * where the action belongs under the text because there is no room beside it. So
- * the expectation differs by breakpoint, and asserting the wide rule on a narrow
- * viewport would be asserting a layout the stylesheet deliberately does not have.
+ * The header is two columns at and above 44rem (704px). Below it (R251) the
+ * action stays beside the title and the description runs the full width under
+ * both, so the narrow assertion is that the action is level with the title and
+ * above the description, however long the description is.
  */
 const TWO_COLUMN_MIN = 704;
 const out = [];
@@ -121,10 +121,10 @@ for (const width of [1440, 1280, 1200, 1024, 900, 800, 720, 600, 420]) {
     ok = m.shortBtnOffset === m.longBtnOffset && m.shortBtnVsTitle === m.longBtnVsTitle && wrapped;
     note = `offset ${m.shortBtnOffset} vs ${m.longBtnOffset} · from title ${m.shortBtnVsTitle} vs ${m.longBtnVsTitle}`;
   } else {
-    // Stacked, by design: the action follows the text. What is asserted is that
-    // it IS stacked — i.e. below the description — rather than that it is pinned.
-    ok = m.longBtnOffset > m.longLedeHeight && wrapped;
-    note = `stacked by design — action at ${m.longBtnOffset}, below a ${m.longLedeHeight}px description`;
+    // R251 — on a phone too the action stays beside the title (the description
+    // runs the full width under both): it must not move with the description.
+    ok = m.shortBtnVsTitle === m.longBtnVsTitle && m.longBtnOffset < m.longLedeHeight && wrapped;
+    note = `beside the title — from title ${m.shortBtnVsTitle} vs ${m.longBtnVsTitle}, above a ${m.longLedeHeight}px description`;
   }
   out.push(
     `${ok ? 'PASS' : 'FAIL'}  ${String(width).padStart(4)}px  ` +

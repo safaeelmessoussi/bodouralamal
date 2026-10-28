@@ -25,7 +25,8 @@
 }
 
 .card {
-  padding: clamp(1.25rem, 3vw, 1.75rem);
+  /* R251 — 14 px on a phone (was 20): the room goes to what the card holds. */
+  padding: clamp(0.875rem, 3vw, 1.5rem);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);

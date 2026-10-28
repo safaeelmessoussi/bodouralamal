@@ -38,7 +38,8 @@
 }
 .cal-page__eyebrow {
   font-family: var(--font-family-display);
-  font-size: var(--font-size-xl);
+  /* R251 — the page's name a step down, so the month and the days lead. */
+  font-size: var(--font-size-lg);
   font-weight: 700;
   line-height: var(--line-height-tight);
   color: var(--color-primary-strong);

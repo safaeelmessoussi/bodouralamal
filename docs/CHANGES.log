@@ -498,3 +498,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - «خصائص السورة» section; 27 descriptive page subtitles, «السور» and the library ledes removed with their keys (rule-bearing ones kept); tests updated.
 - Phone PDF: canvases `dir="ltr"` (RTL `direction` broke pdf.js Arabic, proven on «الدليل الميسر»); pdf.js + worker loaded once, beside the mint and when idle; `disableAutoFetch` + observer; «جارٍ فتح الملف…». `verify-unsaved-guard` → «إدارة التسجيلات» (24/24).
 - Verified: gates, guards, browser 22/22 on Localhost, unsaved-guard 24/24, content + library integration with the public-reader checks.
+
+## 2026-10-28 — SRS Revision 251: design pass — phones first, nothing removed
+- Tokens: ground `--neutral-100`, sunken `--neutral-150`, border `--neutral-250` (new), `--gutter` 12 px on a phone, `--color-shadow-edge`; base `h1` `--font-size-lg`; `.admin__title`, `.content-page__title`, `.cal-page__eyebrow` a step down; `.admin` `align-content: start` (short pages opened with the title mid-screen).
+- `DataTable`: `data-label` per cell, phone rows as blocks (`admin.css` *A row as a block*), `.datatable__frame[data-more]` + `useScrollEdges` shade, two row actions nowrap, name column 14 rem; Hijri table in the frame. Toolbar two-per-row on a phone; dialogs/forms tighter; `level-grid--modules` tiles; profile flattened; library tabs `ModeLabel`; `PersonalCalendar headingHidden`.
+- Phone header: a grid (title | action, description full width); `measure-page-header` asserts it (9/9).
+- Verified: crawl of every route at 360/390/1366 (public, student, teacher, super admin) and 16 dialogs — no overflow, no wide element, no console error; frontend 1714, guards, sorting 17/17, unsaved 24/24, admin-navigation 37/42 (same 5 stale expectations as HEAD), shoot-pages 13/13.

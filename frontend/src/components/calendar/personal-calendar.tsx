@@ -54,6 +54,7 @@ export function PersonalCalendar({
   fields = [],
   columns,
   heading,
+  headingHidden = false,
   catalogList,
 }: {
   token: string | null;
@@ -62,6 +63,8 @@ export function PersonalCalendar({
   /** Which columns the list shows — the same authorization question (rule O). */
   columns: readonly OccurrenceColumn[];
   heading: string;
+  /** R251 — the page's own title already says it: kept for a screen reader only. */
+  headingHidden?: boolean;
   /**
    * **Owner-reported, 2026-09-15 — تقويمي's قائمة, for a مؤطرة, is not a
    * month's occurrences at all** (matching الجدولة's own قائمة, R84's SAME
@@ -172,7 +175,9 @@ export function PersonalCalendar({
 
   return (
     <section className="card" aria-labelledby="my-calendar-heading">
-      <h2 id="my-calendar-heading">{heading}</h2>
+      <h2 id="my-calendar-heading" className={headingHidden ? 'visually-hidden' : undefined}>
+        {heading}
+      </h2>
 
       <CalendarHeader
         view={view}

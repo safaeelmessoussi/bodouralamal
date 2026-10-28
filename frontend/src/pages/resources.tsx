@@ -127,6 +127,22 @@ function LibraryPage({ levelId, categoryId }: { levelId: string | null; category
   );
 }
 
+/**
+ * R251 — on a phone a tab shows the word that tells it apart: «حسب» is the
+ * same on all four, so it is kept for a screen reader and hidden from sight
+ * there (`.content-modes__by`). Other languages read whole.
+ */
+function ModeLabel({ text }: { text: string }): ReactNode {
+  const [first, ...rest] = text.split(' ');
+  if (first !== 'حسب' || rest.length === 0) return text;
+  return (
+    <>
+      <span className="content-modes__by">{first} </span>
+      {rest.join(' ')}
+    </>
+  );
+}
+
 function ModeTabs({
   mode,
   onMode,
@@ -156,15 +172,17 @@ function ModeTabs({
           }}
         >
           <Icon name={m === 'surah' ? 'book' : m === 'history' ? 'calendar' : 'folder'} size={16} />
-          {t(
-            m === 'surah'
-              ? 'content.views.bySurah'
-              : m === 'history'
-                ? 'content.views.history'
-                : m === 'category'
-                  ? 'content.views.byCategory'
-                  : 'content.views.byLevel',
-          )}
+          <ModeLabel
+            text={t(
+              m === 'surah'
+                ? 'content.views.bySurah'
+                : m === 'history'
+                  ? 'content.views.history'
+                  : m === 'category'
+                    ? 'content.views.byCategory'
+                    : 'content.views.byLevel',
+            )}
+          />
         </Button>
       ))}
     </div>

@@ -33,6 +33,10 @@ body {
 
 /* Headings wear the display face. Weight carries them, not tracking:
    Arabic letters connect, and a negative track breaks the joins. */
+/* R251 — one page-title size everywhere (a bare <h1> was the browser's 2em). */
+h1 {
+  font-size: var(--font-size-lg);
+}
 h1,
 h2,
 h3 {

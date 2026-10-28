@@ -801,6 +801,10 @@
   .journey__show,
   .journey__text {
     flex: 1 1 calc(50% - var(--space-2));
+    /* R251 — each label on one line, side by side. */
+    padding-inline: var(--space-2);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
   }
   .journey__chips {
     flex: 1 1 auto;

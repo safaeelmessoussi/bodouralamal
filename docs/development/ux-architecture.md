@@ -40,6 +40,7 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 
 ## F · Filters
 - The «no filter» option of every dropdown is the one word **«الكل»** (the Owner, 2026-09-25) — never «كل المستويات», «كل الفروع» or a per-field phrase; the field's label already says what «all» is of.
+- R251 — on a phone two filters to a row, the search across both, their labels small: the data starts on the first screen.
 - Filters narrow visible data, never gate it; every API filter parameter is optional (`GET /admin/teaching-groups`: `level_id`, `subject_id`, `category_id`, `q`); no matches under a filter is `NoResultsState`, not `EmptyState` (§14.4).
 
 ## G · Add buttons
@@ -47,6 +48,7 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 
 ## H · Tables
 - Use `DataTable` (§14.2, §14.4, once); columns, actions, labels, empty copy, sorting and reordering are configuration.
+- R251 — below 44rem a row is a block (bold name, «label: value» from `data-label`, actions in one row; headings as sort buttons); wider, a table that continues past its box shades the hidden edge (`data-more`, `useScrollEdges`). A hand-built table inside `.datatable` gets the same phone layout when its cells carry `data-label` (Hijri months).
 - Exception: cells holding live form controls bound to per-row draft state — grade sheet, Quran log editor, Hijri month editor — allowlisted in the guard; a fourth means build an editable-table primitive. A calendar month grid is a `<table>`, not a list.
 
 ## AF · Ordering a list: sort is a question, drag is a decision
@@ -181,7 +183,7 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 | Required | marked `*` (`ScopeSelectors` `required`); no «choose X first» |
 
 ## T · The page header is one block
-- Title, description and action are one two-column grid: heading takes the free space (description up to `--measure-lede`, `min-inline-size: 0`), action as wide as its buttons with `align-self: start`; never a flex row (`flex-wrap: wrap` drops the action under the heading); below 44rem one column.
+- Title, description and action are one two-column grid: heading takes the free space (description up to `--measure-lede`, `min-inline-size: 0`), action as wide as its buttons with `align-self: start`; never a flex row on a wide screen (`flex-wrap: wrap` drops the action under the heading); **below 44rem (R251) a wrapping row**: the action stays beside the title while both fit and only then moves under it. The title is `--font-size-lg`, with no rule under the head.
 - Canonical: `.admin__head` / `.admin__heading` / `.admin__actions` in [`admin.css`](../../frontend/src/styles/components/admin.css), rendered by [`PortalShell`](../../frontend/src/components/portal/portal-shell.tsx); never per page, never `<br>`; measured by `scripts/dev/browser/measure-page-header.sh` (nine widths); `scripts/ci/check-shared-layout.sh` refuses a page stylesheet redefining it.
 
 ## U · Unsaved work is never lost to a stray click

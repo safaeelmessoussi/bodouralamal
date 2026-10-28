@@ -61,7 +61,8 @@
    section takes between sections only pushed a page's content down. */
 main > .section:first-child,
 main.section {
-  padding-block-start: var(--space-6);
+  /* R251 — a step closer still on a phone. */
+  padding-block-start: clamp(var(--space-3), 2.5vw, var(--space-6));
 }
 /* R212 — a link to a section («#programs») lands on its title, just under the
    sticky header: on a phone the section's own top room is shorter than the

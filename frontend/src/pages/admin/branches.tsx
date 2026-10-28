@@ -555,7 +555,8 @@ function RoomsDialog({
                       >
                         {t('common.edit')}
                       </Button>
-                      <Button variant="secondary" disabled={busy} onClick={() => setConfirming(room)}>
+                      {/* R251 — a delete looks like every other delete. */}
+                      <Button variant="danger" disabled={busy} onClick={() => setConfirming(room)}>
                         {t('common.delete')}
                       </Button>
                     </>
