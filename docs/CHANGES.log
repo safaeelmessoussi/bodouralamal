@@ -480,4 +480,4 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `recording_slide` (PK `slide_id`, trigger `recording_slide_kinds`), `GET/PUT /content/{id}/slides` (`recording-slides.service.ts`, the edit rule on recording and images); library rows carry `slide_of`, `slide_position`, `session_ids`.
 - «مكتبة المحتوى»: row action «صفحات المطبوع» (`RecordingSlidesDialog`: order, remove, pick, upload images); `FileUploader accept`; 20 keys in ar + 6 locales.
 - `overview/lesson-follow-up-plan.md`: the Telegram channel/group workflow once sign-in opens, Owner decisions D-a…D-f, today's read-only «أسئلة الحصة» option; TASKS D15.
-- Verified: backend/frontend gates, guards, content integration (+ the public-reader browser checks of the Surah page at 390/1366).
+- Verified: gates, guards, content + library HTTP integration (its exact-key list gains the 3 fields), the public-reader browser checks of the Surah page at 390/1366.

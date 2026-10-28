@@ -80,7 +80,12 @@ const ITEM_KEYS = [
      not updated with it, so the gate was red on develop before R119 touched
      anything. It states what the file IS, never consent state. */
   "origin",
+  // R247 — the live sessions it is attached to (a session's images are its recordings' pages).
+  "session_ids",
   "size_bytes",
+  // R247 — on an image: the recording it is a page of, and its place; `null` otherwise.
+  "slide_of",
+  "slide_position",
   // R223 — a public audio's stable address; `null` for everything else.
   "stream_url",
   "subject_id",
