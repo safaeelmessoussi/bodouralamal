@@ -35,6 +35,8 @@ const SCHEDULE_KEYS = [
   // R55.1 — resolved labels, so a timetable can be rendered without five
   // further requests. Labels only; the ids above stay the identifiers.
   "branch_name",
+  // R254 — who it is for, named per dimension, for the list's three columns.
+  "circle_names",
   "day_of_month",
   // **R97 — طريقة الحضور.** The pair is listed together because the server
   // refuses one without the other: `online_media_mode` is non-null exactly when
@@ -48,11 +50,13 @@ const SCHEDULE_KEYS = [
   // R55 — R50's bound reaches the contract; `null` is open-ended.
   "effective_until",
   "end_time",
+  "group_names",
   "id",
   // Which Level the class is for, whatever the mode names. For a Group-taught
   // class the row's own `level_id` is NULL, so this is resolved through the
   // target — the fact the edit form had no way to reach.
   "level_id",
+  "level_names",
   "month_of_year",
   "online_media_mode",
   "recurrence",
@@ -629,6 +633,47 @@ describe("the write boundary refuses what would re-point history", () => {
     );
     expect(stale.status).toBe(409);
     expect(stale.body.error?.code).toBe("VERSION_CONFLICT");
+  });
+
+  it("R254 — the sessions read carries the schedule's version, and a later «هذه الحصة وكل ما بعدها» with it is accepted", async () => {
+    // Not `scheduleBody()`: its `slot()` would move every later test's slot onto
+    // a time another test pins. 23:00–23:35 is held by no other test here.
+    const created = await call("POST", "/admin/course-schedules", superAdmin, {
+      subject_id: subjectId,
+      teaching_mode: "administrative_group",
+      target_id: groupA,
+      branch_id: branchA,
+      room_id: roomA,
+      start_time: "23:00",
+      end_time: "23:05",
+      recurrence: "weekly",
+      weekdays: ["tuesday"],
+      academic_year_id: academicYearId,
+      staff: [{ user_id: teacherId, position: "teacher" }],
+    });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    const id = (created.body.schedule as { id: string }).id;
+    // An earlier edit raises the version past 0 — what every once-edited schedule has.
+    const first = await call("PATCH", `/admin/course-schedules/${id}`, superAdmin, {
+      version: (created.body.schedule as { version: number }).version,
+      start_time: "23:10",
+      end_time: "23:15",
+    });
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    const listed = await call("GET", `/admin/course-schedules/${id}/sessions?page_size=100`, superAdmin);
+    expect(listed.status).toBe(200);
+    const version = listed.body.schedule_version as number;
+    expect(version).toBe((first.body.schedule as { version: number }).version);
+    expect(version).toBeGreaterThan(0);
+    const dates = (listed.body.data as { date: string }[]).map((s) => s.date);
+    const split = await call("PATCH", `/admin/course-schedules/${id}`, superAdmin, {
+      version,
+      scope: "this_and_future",
+      from_date: dates[Math.min(1, dates.length - 1)],
+      start_time: "23:25",
+      end_time: "23:35",
+    });
+    expect(split.status, JSON.stringify(split.body)).toBe(200);
   });
 
   it("an edit reports what it left alone as well as what it rewrote", async () => {

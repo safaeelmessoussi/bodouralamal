@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ComponentProps, type ReactNode } from 'react';
 
 import { fetchCalendarBootstrap } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
@@ -31,16 +31,19 @@ export function FramingPreferenceEditor({
   framing,
   onSave,
   controlled,
+  capabilities,
 }: {
   framing: FramingPreferenceView | null;
   onSave?: (payload: FramingPayload) => Promise<FramingPreferenceView | null>;
   controlled?: { value: TeachingSectionValue; onChange: (next: TeachingSectionValue) => void; showErrors: boolean };
+  /** R254 — subjects and Categories among these fields (see `TeachingSectionFields`). */
+  capabilities?: ComponentProps<typeof TeachingSectionFields>['capabilities'];
 }): ReactNode {
   const [own, setOwn] = useState<TeachingSectionValue>(() => teachingSectionFrom(framing));
   const value = controlled ? controlled.value : own;
   const setValue = controlled ? controlled.onChange : setOwn;
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
-  const [levels, setLevels] = useState<{ id: string; label: string }[]>([]);
+  const [levels, setLevels] = useState<{ id: string; label: string; categoryId: string }[]>([]);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -97,6 +100,7 @@ export function FramingPreferenceEditor({
         levels={levels}
         errors={(controlled ? controlled.showErrors : touched) ? errors : {}}
         notice={false}
+        capabilities={capabilities}
       />
       {controlled ? null : (
         <div className="form__actions">

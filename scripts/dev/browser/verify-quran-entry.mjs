@@ -456,10 +456,12 @@ const salmaView = await evaluate(`(() => ({
   error: document.querySelector('[role="alert"]')?.textContent?.trim() ?? null,
 }))()`);
 check(
-  '22 · حفظي groups two Levels under «{الفئة} — {المستوى}» and keeps them apart',
+  // R254 — each card is titled by the Level name alone (the Owner: «ضياء الأمل»
+  // not «النساء — ضياء الأمل»).
+  '22 · حفظي shows two Levels as two cards, each titled by its Level name alone',
   salmaView.error === null &&
     salmaView.headings.filter((h) => h.includes('المستوى')).length === 2 &&
-    salmaView.headings.some((h) => h.includes('—')),
+    !salmaView.headings.some((h) => h.includes('—')),
   JSON.stringify(salmaView.headings).slice(0, 300),
 );
 check(

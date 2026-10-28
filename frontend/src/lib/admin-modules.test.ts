@@ -421,9 +421,10 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     '/admin/subjects', // المواد
     '/admin/level-subjects', // مواد المستوى
     '/admin/level-surahs', // مقرر الحفظ
-    '/admin/branches', // الفروع والقاعات
     '/admin/scheduling-types', // أنواع الجدولة (R110)
     '/admin/academic-periods', // الفصول الدراسية (R122)
+    // R254 — the Owner moved الفروع والقاعات after الفصول الدراسية.
+    '/admin/branches', // الفروع والقاعات
     /**
      * الشركاء (NEW N) — beside the other catalogue it belongs with, and **before**
      * the platform-operations tail (سلة المحذوفات · التقويم الهجري · الإعدادات).

@@ -146,10 +146,10 @@ describe('§C15/§C16 — the shared meter, and no percentage computed in the cl
 });
 
 describe('§C17 — حفظي groups by Level and keeps the curricula apart', () => {
-  it('renders each Level as its own section, through the shared label', () => {
+  it('renders each Level as its own section, titled by the Level name alone (R254)', () => {
     const body = stripComments(studentPage);
     expect(body).toContain('levels.map');
-    expect(body).toContain('levelLabel');
+    expect(body).toContain('{level.level_name}');
     // Rule D — never a hand-written em dash between category and level.
     expect(body).not.toMatch(/category_name\}\s*—/);
   });

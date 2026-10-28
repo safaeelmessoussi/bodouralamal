@@ -59,9 +59,10 @@ const MAIN = [
   ['مجموعات المستويات', '/admin/groups'],
   ['حلقات المواد', '/admin/teaching-groups'],
   ['إدخال الحفظ', '/admin/quran'],
-  ['نقاط الامتحانات', '/admin/exam-grades'],
   ['الجدولة', '/admin/schedules'],
   ['مكتبة المحتوى', '/admin/content'],
+  ['بناء الاختبارات', '/admin/assessments'],
+  ['نقاط الاختبارات', '/admin/exam-grades'],
 ];
 /**
  * **What an ADMIN sees: the main list minus المستخدمون** (Owner clarification,
@@ -78,20 +79,21 @@ const MAIN = [
  */
 const MAIN_FOR_ADMIN = MAIN.filter(([, href]) => href !== '/admin/users');
 
+// R254 — the Owner's menu, restated 2026-10-28 (الفروع والقاعات after الفصول الدراسية).
 const ADMINISTRATION = [
   ['الفئات', '/admin/categories'],
   ['المستويات', '/admin/levels'],
   ['المواد', '/admin/subjects'],
   ['مواد المستوى', '/admin/level-subjects'],
   ['مقرر الحفظ', '/admin/level-surahs'],
-  ['الفروع والقاعات', '/admin/branches'],
   ['أنواع الجدولة', '/admin/scheduling-types'],
-  // الشركاء (R113) — beside the other catalogue, before the platform-operations
-  // tail. R105's sequence is extended, not reinterpreted.
+  ['الفصول الدراسية', '/admin/academic-periods'],
+  ['الفروع والقاعات', '/admin/branches'],
   ['الشركاء', '/admin/partners'],
   ['سلة المحذوفات', '/admin/trash'],
   ['التقويم الهجري', '/superadmin/hijri-calendar'],
   ['إعدادات المنصة', '/superadmin/settings'],
+  ['حالة النظام', '/admin/operations'],
 ];
 
 const { send, evaluate, close } = await connect(process.env.PORT ?? '9247');
@@ -253,7 +255,7 @@ check(
 
 const superNav = await readSidebar();
 check(
-  'Super Admin — the main list is exactly the eleven, in order, with no heading',
+  'Super Admin — the main list is exactly the twelve, in order, with no heading',
   same(superNav?.flat, labelled(MAIN)),
   JSON.stringify(superNav?.flat?.map((i) => i.text)),
 );

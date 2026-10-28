@@ -2714,12 +2714,15 @@ export async function listScheduleSessions(
   actor: Actor,
   id: string,
   params: PageParams = {},
-): Promise<Page<ScheduleSessionRow>> {
+): Promise<Page<ScheduleSessionRow> & { scheduleVersion: number }> {
   assertCanRead(actor);
 
   const schedule = await prisma.recurringCourseSchedule.findFirst({
     where: { id, deletedAt: null, ...readableScope(actor) },
-    select: { id: true },
+    // R254 — its version too: the screen's «هذه الحصة وكل ما بعدها» / «كل حصص
+    // هذا الجدول» edit the schedule, and sent `0` refused every schedule once
+    // edited (TD-15).
+    select: { id: true, version: true },
   });
   // Out of reach answers 404, never 403 (§20 rule 17) — the scope is expressed
   // in the lookup rather than as a check afterwards.
@@ -2789,21 +2792,24 @@ export async function listScheduleSessions(
     prisma,
     rows.map((r) => r.id),
   );
-  return page(
-    rows.map((r) => ({
-      ...r,
-      title: titles.get(r.id) ?? "",
-      surahIds: r.surahs.map((row) => row.surahId),
-      staff: r.staff.map((s) => ({
-        userId: s.userId,
-        position: s.position,
-        name: s.user.nameArabic,
+  return {
+    ...page(
+      rows.map((r) => ({
+        ...r,
+        title: titles.get(r.id) ?? "",
+        surahIds: r.surahs.map((row) => row.surahId),
+        staff: r.staff.map((s) => ({
+          userId: s.userId,
+          position: s.position,
+          name: s.user.nameArabic,
+        })),
+        protectedReasons: reasons.get(r.id) ?? [],
       })),
-      protectedReasons: reasons.get(r.id) ?? [],
-    })),
-    window,
-    total,
-  );
+      window,
+      total,
+    ),
+    scheduleVersion: schedule.version,
+  };
 }
 
 export interface ScheduleSessionRow {
@@ -2992,8 +2998,8 @@ export async function listCourseSchedules(
         level: { select: { name: true } },
         // `levelId` beside the name: §2.2 scopes both to one Level, and
         // `level_id` on the DTO is what a client seeds a Level selector from.
-        administrativeGroup: { select: { name: true, levelId: true } },
-        teachingGroup: { select: { name: true, levelId: true } },
+        administrativeGroup: { select: { name: true, levelId: true, level: { select: { name: true } } } },
+        teachingGroup: { select: { name: true, levelId: true, level: { select: { name: true } } } },
         // Revision 155 — a `multi_dimension` row's real target; empty
         // arrays (never included at all) for every other mode's rows.
         ...DIMENSION_SCOPES_WITH_NAMES,
@@ -3037,6 +3043,7 @@ export async function listCourseSchedules(
       })),
       targetSummary:
         row.teachingMode === "multi_dimension" ? dimensionSummary(row, levelsOfCategory) : null,
+      audienceNames: audienceNames(row),
       surahIds: row.surahs.map((r) => r.surahId),
       surahNames: row.surahs.map((r) => r.surah.nameArabic),
       /**
@@ -3100,13 +3107,48 @@ const DIMENSION_SCOPES_WITH_NAMES = {
   administrativeGroupScopes: {
     select: {
       administrativeGroupId: true,
-      administrativeGroup: { select: { name: true, levelId: true } },
+      administrativeGroup: { select: { name: true, levelId: true, level: { select: { name: true } } } },
     },
   },
   teachingGroupScopes: {
-    select: { teachingGroupId: true, teachingGroup: { select: { name: true, levelId: true } } },
+    select: {
+      teachingGroupId: true,
+      teachingGroup: { select: { name: true, levelId: true, level: { select: { name: true } } } },
+    },
   },
 } as const;
+
+/**
+ * **R254 — who a class is for, column by column** (the Owner: «replace the
+ * column الهدف with 3 columns, level, circle, group»). Its Levels — named
+ * directly, or through its groups and circles — its groups, and its circles,
+ * from the single target and from a filter-built class's scopes alike.
+ */
+function audienceNames(row: {
+  level: { name: string } | null;
+  administrativeGroup: { name: string; level: { name: string } } | null;
+  teachingGroup: { name: string; level: { name: string } } | null;
+  levelScopes: { level: { name: string } }[];
+  administrativeGroupScopes: { administrativeGroup: { name: string; level: { name: string } } }[];
+  teachingGroupScopes: { teachingGroup: { name: string; level: { name: string } } }[];
+}): { levels: string[]; groups: string[]; circles: string[] } {
+  const levels = new Set<string>();
+  const groups = new Set<string>();
+  const circles = new Set<string>();
+  if (row.level) levels.add(row.level.name);
+  for (const g of [row.administrativeGroup, ...row.administrativeGroupScopes.map((r) => r.administrativeGroup)]) {
+    if (!g) continue;
+    groups.add(g.name);
+    levels.add(g.level.name);
+  }
+  for (const c of [row.teachingGroup, ...row.teachingGroupScopes.map((r) => r.teachingGroup)]) {
+    if (!c) continue;
+    circles.add(c.name);
+    levels.add(c.level.name);
+  }
+  for (const r of row.levelScopes) levels.add(r.level.name);
+  return { levels: [...levels], groups: [...groups], circles: [...circles] };
+}
 
 /**
  * **Who a filter-built class is for, in one line** (SRS Revision 163 §5).

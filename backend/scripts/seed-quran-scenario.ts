@@ -102,6 +102,11 @@ async function wipe(): Promise<void> {
   await prisma.levelSurah.deleteMany({ where: { levelId: { in: lids } } });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: lids } } });
   await prisma.level.deleteMany({ where: { id: { in: lids } } });
+  // A Subject offered to a Category (`category_subject`, RESTRICT) blocked
+  // these deletes once a tagged one had been linked; its links go first.
+  await prisma.categorySubject.deleteMany({
+    where: { OR: [{ subject: { name: { startsWith: TAG } } }, { category: { name: { startsWith: TAG } } }] },
+  });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });

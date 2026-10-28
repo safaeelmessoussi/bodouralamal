@@ -142,6 +142,6 @@ describe('§2 — /teacher/schedules offers class creation through the canonical
   });
 
   it('reuses the shared SchedulingDialog — no teacher-specific scheduler component', () => {
-    expect(source).toContain("import { SchedulingDialog } from '../admin/scheduling.js'");
+    expect(source).toMatch(/import \{[^}]*\bSchedulingDialog\b[^}]*\} from '\.\.\/admin\/scheduling\.js'/);
   });
 });

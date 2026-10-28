@@ -92,8 +92,10 @@ export async function listScheduleSessions(
   scheduleId: string,
   token: string | null,
   page = 1,
-): Promise<Page<ScheduleSession>> {
-  return api<Page<ScheduleSession>>(
+): Promise<Page<ScheduleSession> & { schedule_version: number }> {
+  // R254 — `schedule_version`: the schedule's own TD-15 version, which the
+  // scoped edits («هذه الحصة وكل ما بعدها», «كل حصص هذا الجدول») send.
+  return api<Page<ScheduleSession> & { schedule_version: number }>(
     `/admin/course-schedules/${scheduleId}/sessions?page=${page}&page_size=100`,
     { token },
   );

@@ -6,7 +6,7 @@ import type { CategoryRef } from '../../adapters/calendar.js';
 import { fetchCircleSlots, type CircleSlots } from '../../adapters/registrations.js';
 import { t } from '../../i18n/index.js';
 import { BranchSelector } from '../ui/branch-selector.js';
-import { CheckboxField, DateField, SelectField } from '../ui/field.js';
+import { DateField, SelectField } from '../ui/field.js';
 import type { FramingPreferenceView } from '../../types/framing.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { CircleRanking } from './circle-ranking.js';
@@ -241,17 +241,36 @@ export function TeachingSectionFields({
   levels = [],
   errors,
   notice = true,
+  capabilities,
 }: {
   value: TeachingSectionValue;
   onChange: (next: TeachingSectionValue) => void;
   branches: Pick<PublicBranch, 'id' | 'name'>[];
   /** R215 — the Levels she may name, labelled `{Category} — {Level}`. */
-  levels?: { id: string; label: string }[];
+  levels?: { id: string; label: string; categoryId?: string }[];
+  /**
+   * R254 — «المواد التي يمكنها تدريسها» and «الفئات» among these fields (the
+   * مؤطِّرة's own page); the Categories chosen narrow the Levels offered.
+   */
+  capabilities?: {
+    subjects: { id: string; name: string }[];
+    categories: { id: string; name: string }[];
+    subjectIds: string[];
+    categoryIds: string[];
+    onSubjects: (ids: string[]) => void;
+    onCategories: (ids: string[]) => void;
+    disabled?: boolean;
+  };
   /** Keys: `framingMode`, `framingBranches`, `framingPeriod`, `framingLevels`. */
   errors: Record<string, string>;
   /** The «asks for something a person grants» line — a request's, not an edit's. */
   notice?: boolean;
 }): ReactNode {
+  const chosenCategories = capabilities?.categoryIds ?? [];
+  const offeredLevels =
+    chosenCategories.length > 0
+      ? levels.filter((level) => level.categoryId === undefined || chosenCategories.includes(level.categoryId))
+      : levels;
   return (
     <>
       {/* Said plainly rather than implied: submitting this asks for
@@ -285,29 +304,26 @@ export function TeachingSectionFields({
         error={errors['framingMode'] ?? null}
       />
 
+      {/* R254 — no «كل المقرات» box: «تحديد الكل» in the list says it. Every
+          branch chosen is stored as «all» (`allBranches`), which keeps a branch
+          opened later included, as the box promised. */}
       {value.mode === 'in_person' || value.mode === 'both' ? (
-        <>
-          <CheckboxField
-            label={t('register.framingAllBranches')}
-            checked={value.allBranches}
-            onChange={(checked) =>
-              onChange({ ...value, allBranches: checked, branchIds: checked ? [] : value.branchIds })
-            }
-            hint={t('register.framingAllBranchesHint')}
-          />
-          {value.allBranches ? null : (
-            <MultiSelectField
-              label={t('register.framingBranchesLabel')}
-              options={branches.map((branch) => ({ value: branch.id, label: branch.name }))}
-              selected={value.branchIds}
-              onChange={(branchIds) => onChange({ ...value, branchIds })}
-              required
-              hint={t('register.framingBranchesHint')}
-              emptyLabel={t('register.framingBranchesEmpty')}
-              error={errors['framingBranches'] ?? null}
-            />
-          )}
-        </>
+        <MultiSelectField
+          label={t('register.framingBranchesLabel')}
+          options={branches.map((branch) => ({ value: branch.id, label: branch.name }))}
+          selected={value.allBranches ? branches.map((branch) => branch.id) : value.branchIds}
+          onChange={(branchIds) =>
+            onChange(
+              branches.length > 0 && branchIds.length === branches.length
+                ? { ...value, allBranches: true, branchIds: [] }
+                : { ...value, allBranches: false, branchIds },
+            )
+          }
+          required
+          hint={t('register.framingBranchesHint')}
+          emptyLabel={t('register.framingBranchesEmpty')}
+          error={errors['framingBranches'] ?? null}
+        />
       ) : null}
 
       {/* R215 — when, in which position, for which Levels. Each optional. */}
@@ -346,21 +362,41 @@ export function TeachingSectionFields({
           { value: 'both', label: t('framing.position_both') },
         ]}
       />
-      <CheckboxField
-        label={t('framing.allLevels')}
-        checked={value.allLevels}
-        onChange={(checked) => onChange({ ...value, allLevels: checked, levelIds: checked ? [] : value.levelIds })}
+      {capabilities ? (
+        <>
+          <MultiSelectField
+            label={t('admin.teachingProfile.subjects')}
+            options={capabilities.subjects.map((x) => ({ value: x.id, label: x.name }))}
+            selected={capabilities.subjectIds}
+            onChange={capabilities.onSubjects}
+            disabled={capabilities.disabled ?? false}
+          />
+          <MultiSelectField
+            label={t('admin.teachingProfile.categories')}
+            options={capabilities.categories.map((x) => ({ value: x.id, label: x.name }))}
+            selected={capabilities.categoryIds}
+            onChange={capabilities.onCategories}
+            disabled={capabilities.disabled ?? false}
+          />
+        </>
+      ) : null}
+      {/* R254 — no «كل المستويات» box, as for the branches: every Level chosen
+          is stored as «all». With Categories chosen above, only their Levels
+          are offered. */}
+      <MultiSelectField
+        label={t('framing.levelsLabel')}
+        options={offeredLevels.map((level) => ({ value: level.id, label: level.label }))}
+        selected={value.allLevels ? offeredLevels.map((level) => level.id) : value.levelIds}
+        onChange={(levelIds) =>
+          onChange(
+            levels.length > 0 && levelIds.length === levels.length
+              ? { ...value, allLevels: true, levelIds: [] }
+              : { ...value, allLevels: false, levelIds },
+          )
+        }
+        required
+        error={errors['framingLevels'] ?? null}
       />
-      {value.allLevels ? null : (
-        <MultiSelectField
-          label={t('framing.levelsLabel')}
-          options={levels.map((level) => ({ value: level.id, label: level.label }))}
-          selected={value.levelIds}
-          onChange={(levelIds) => onChange({ ...value, levelIds })}
-          required
-          error={errors['framingLevels'] ?? null}
-        />
-      )}
     </>
   );
 }
@@ -452,10 +488,12 @@ export function AdministrationSectionFields({
 export function framingLevelOptions(bootstrap: {
   levels: { id: string; name: string; category_id: string }[];
   categories: { id: string; name: string }[];
-}): { id: string; label: string }[] {
+}): { id: string; label: string; categoryId: string }[] {
   const category = new Map(bootstrap.categories.map((c) => [c.id, c.name]));
   return bootstrap.levels.map((level) => ({
     id: level.id,
     label: category.has(level.category_id) ? `${category.get(level.category_id)} — ${level.name}` : level.name,
+    // R254 — so a Category chosen beside it can narrow the list.
+    categoryId: level.category_id,
   }));
 }

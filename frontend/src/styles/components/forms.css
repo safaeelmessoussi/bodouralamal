@@ -198,10 +198,16 @@
   gap: var(--space-4);
 }
 .datatable__toolbar {
-  display: flex;
-  flex-wrap: wrap;
+  /* R254 — equal columns: a filter left alone on its row («النوع») no longer
+     stretches across it while its neighbours stay narrow. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
   gap: var(--space-3);
   align-items: start;
+}
+.datatable__toolbar > .field--search,
+.datatable__toolbar > .field:has(input[type='search']) {
+  grid-column: span 2;
 }
 /* R251 — filters are tools: on a phone two to a row (the search across both),
    their names small, so the list they filter starts on the first screen. */
@@ -297,6 +303,18 @@
 /* R199 §9 — running text (an audience) keeps a readable width. */
 .admin-table .is-wide {
   min-inline-size: 14rem;
+}
+/* R254 — a column as wide as its widest value or heading, on one line. */
+@media (width >= 44rem) {
+  .admin-table .is-fit {
+    inline-size: 1%;
+    white-space: nowrap;
+  }
+  /* Not R251's 14rem floor for a row's name: a fitted first column (the
+     scheduling list's «نوع العنصر») is as narrow as its chips. */
+  .admin-table tbody th[scope='row'].is-fit {
+    min-inline-size: 0;
+  }
 }
 
 .admin-table .is-numeric {

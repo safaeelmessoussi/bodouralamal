@@ -81,6 +81,10 @@ export interface CourseSchedule {
    *  Mushaf order). Optional: a narrower projection reads as "none". */
   surah_ids?: number[];
   surah_names?: string[];
+  /** R254 — who the class is for, by name (absent from a server older than it). */
+  level_names?: string[];
+  group_names?: string[];
+  circle_names?: string[];
   /**
    * **Which Level the class is for**, resolved server-side whatever the mode
    * names — for `entire_level` it equals `target_id`, and for the other two it

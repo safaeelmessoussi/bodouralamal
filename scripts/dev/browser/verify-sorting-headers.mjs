@@ -180,7 +180,7 @@ if (whenHeader) {
 
 /**
  * **R198 §6 — every header sorts** (the Owner: «headers sort except on drag
- * tables»), derived ones included («الهدف», «التكرار»); the action column
+ * tables»), derived ones included («المستوى»/«الحلقة»/«المجموعة», «التكرار»); the action column
  * never does.
  */
 const headers = JSON.parse(await evaluate(`JSON.stringify([...document.querySelectorAll('thead th')].map((h) => ({ label: h.textContent.trim(), sortable: !!h.querySelector('button') })))`));

@@ -515,3 +515,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `teacher/availability.tsx`: one `.card.teacher-availability`, one `saveAll` (only changed parts: framing → capabilities → availability; an incomplete framing saves nothing); `FramingPreferenceEditor controlled` (the admin dialog keeps its own button); `allSaved`/`framingIncomplete` replace `saved`/`capabilitiesSaved`.
 - `verify-teacher-capabilities` brought to the shared multi-select (it failed on HEAD too) and to the one «حفظ»: 6/6, incl. a time slot + a Subject saved by one press and surviving a reload.
 - Verified: frontend 1715, guards; screenshots at 390/1366 (a two-Level beneficiary; the مؤطِّرة page), no overflow.
+
+## 2026-10-28 — SRS Revision 254: menu order, «حفظي» titles, teacher filters, framing fields, scheduling columns + «السورة», wide-edit 409
+- Backend: `listScheduleSessions` → `schedule_version` (the wide edit sent 0 → `VERSION_CONFLICT`); schedule rows carry `level_names`/`group_names`/`circle_names`; `personalCalendarOptions` branches = taught ∪ staffed schedules ∪ session/event staff. Integration test pins the version round-trip.
+- Frontend: الفروع والقاعات after الفصول الدراسية; «حفظي» card = Level name; single-choice personal-calendar filters preselected; `TeachingSectionFields` without the «all» boxes (all chosen ⇒ `all_*`), optional `capabilities` (Categories narrow Levels); `DataTable` `fit` (`.is-fit`); three audience columns + «السورة» on «الجدولة»; library toolbar one grid.
+- Harnesses: admin-navigation, platform-owner-framing (steps 6–9 via «تحديد الكل»), quran-entry check 22; `seed-quran-scenario` cleanup deletes tagged `category_subject` links first.
+- Verified: integration course-schedule+calendar 80/80, content 89/89; browser probes 21/21 (columns, «السورة», teacher filters, Categories→Levels, «حفظي», wide edit twice = 200); sorting 17/17, capabilities 6/6, admin-nav 44/44, unsaved 24/24, calendar-filters 11/11, quran-entry 23/24, framing 1–9.
+- Pre-existing (same on HEAD): teaching-profile 5/6/9–11, teacher-scheduling 12, quran-entry 2 (Localhost data), framing registration submit after step 9.

@@ -81,7 +81,12 @@ const framingState = () => evaluate(`(async () => {
     (node.querySelector('legend')?.textContent ?? '').includes('تفضيلات التأطير')
   );
   if (!group) return null;
-  const multi = group.querySelector('.multi-select');
+  // R254 — the branch list by its label: the Levels list is always shown now
+  // (no «كل المستويات» box hides it), and it follows the branches.
+  const branchField = [...group.querySelectorAll('.field')].find((field) =>
+    (field.querySelector('label, .field__label')?.textContent ?? '').includes('المقرات التي يمكنني التأطير فيها')
+  );
+  const multi = branchField?.querySelector('.multi-select') ?? null;
   if (multi && !multi.querySelector('.dropdown-select__panel')) {
     multi.querySelector('.dropdown-trigger')?.click();
     await new Promise((r) => setTimeout(r, 200));
@@ -92,10 +97,8 @@ const framingState = () => evaluate(`(async () => {
     chosen: boxes.filter((box) => box.checked).length,
     offers: boxes.length,
     multiPresent: multi !== null,
-    allPresent: [...group.querySelectorAll('label')].some((label) => label.textContent.includes('كل المقرات')),
-    allChecked: [...group.querySelectorAll('label')].some((label) =>
-      label.textContent.includes('كل المقرات') && label.closest('.field')?.querySelector('input')?.checked
-    ),
+    // R254 — no «كل المقرات» box any more: «تحديد الكل» in the list says it.
+    allBox: [...group.querySelectorAll('label')].some((label) => label.textContent.includes('كل المقرات')),
   };
 })()`);
 
@@ -117,12 +120,22 @@ const chooseFramingOffer = (index) => evaluate(`(async () => {
   return true;
 })()`);
 
-const setAllBranches = (checked) => evaluate(`(() => {
-  const label = [...document.querySelectorAll('label')].find((node) => node.textContent.includes('كل المقرات'));
-  const input = label?.closest('.field')?.querySelector('input[type=checkbox]');
-  if (!input) return false;
-  if (input.checked !== ${checked}) input.click();
-  return input.checked;
+/** R254 — «تحديد الكل» in the branch list: every branch, stored as «all». */
+const selectAllBranches = () => evaluate(`(async () => {
+  const group = [...document.querySelectorAll('fieldset')].find((node) =>
+    (node.querySelector('legend')?.textContent ?? '').includes('تفضيلات التأطير')
+  );
+  const multi = group?.querySelector('.multi-select');
+  if (!multi) return false;
+  if (!multi.querySelector('.dropdown-select__panel')) {
+    multi.querySelector('.dropdown-trigger')?.click();
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const all = multi.querySelector('.multi-select__all-on');
+  if (!all) return false;
+  all.click();
+  await new Promise((r) => setTimeout(r, 150));
+  return true;
 })()`);
 
 /* Registration: every framing shape is operated, not inferred from source. */
@@ -133,10 +146,10 @@ check('2 · choosing هيئة التدريس reveals the planning-only framing s
 check('3 · in-person framing requires an explicit physical scope', (await setSelect('طريقة التأطير', 'in_person')) === 'in_person' && (await framingState())?.multiPresent === true);
 check('4 · one physical branch can be selected', (await chooseFramingOffer(0)) === true && (await framingState())?.chosen === 1);
 check('5 · several physical branches can be selected', (await chooseFramingOffer(0)) === true && (await framingState())?.chosen === 2);
-check('6 · future-inclusive all branches replaces the explicit branch set', (await setAllBranches(true)) === true && (await framingState())?.multiPresent === false);
-check('7 · online framing exposes no physical branch control', (await setSelect('طريقة التأطير', 'online')) === 'online' && (await framingState())?.allPresent === false && (await framingState())?.multiPresent === false);
-check('8 · switching away clears stale physical choices', (await setSelect('طريقة التأطير', 'in_person')) === 'in_person' && (await framingState())?.chosen === 0 && (await framingState())?.allChecked === false);
-check('9 · both mode accepts the durable all-branches statement', (await setSelect('طريقة التأطير', 'both')) === 'both' && (await setAllBranches(true)) === true);
+check('6 · «تحديد الكل» chooses every branch, with no separate «كل المقرات» box', (await selectAllBranches()) === true && (await framingState())?.chosen === (await framingState())?.offers && (await framingState())?.allBox === false);
+check('7 · online framing exposes no physical branch control', (await setSelect('طريقة التأطير', 'online')) === 'online' && (await framingState())?.multiPresent === false);
+check('8 · switching away clears stale physical choices', (await setSelect('طريقة التأطير', 'in_person')) === 'in_person' && (await framingState())?.chosen === 0);
+check('9 · both mode accepts the durable all-branches statement', (await setSelect('طريقة التأطير', 'both')) === 'both' && (await selectAllBranches()) === true);
 
 await setInput('الاسم الشخصي', '[r115-browser]');
 await setInput('الاسم العائلي', 'طالبة التأطير');

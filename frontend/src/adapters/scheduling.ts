@@ -113,6 +113,10 @@ export interface SchedulingItem {
   subjectName: string | null;
   /** §8 — the Level, where the kind has one. `null` for an activity. */
   levelName: string | null;
+  /** R254 — «المستوى», «المجموعة», «الحلقة»: who it is for, by name; `[]` where none. */
+  levelNames: string[];
+  groupNames: string[];
+  circleNames: string[];
   /**
    * **The stored visibility tier, carried so Edit can hydrate it** (NEW B §A).
    *
@@ -329,6 +333,9 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     // when the mode is `entire_level` and otherwise unavailable here, so the
     // audience label carries it rather than a second guess.
     levelName: row.teaching_mode === 'entire_level' ? row.target_name : null,
+    levelNames: row.level_names ?? [],
+    groupNames: row.group_names ?? [],
+    circleNames: row.circle_names ?? [],
     staffCount: row.staff.length,
     staffNames: row.staff.map((x) => x.user_name).filter((n): n is string => n !== null && n !== undefined),
     version: row.version,
@@ -412,6 +419,9 @@ export function fromEvent(
     // rather than invented, the rule every other field here follows.
     subjectName: null,
     levelName: null,
+    levelNames: [],
+    groupNames: [],
+    circleNames: [],
     // **Corrected alongside `staffNames`** (Owner-reported, 2026-09-15): R71
     // gave an activity real staffing, stated two lines below, but this had
     // hardcoded `null` regardless — the الجدولة list showed «—» for every
@@ -476,6 +486,9 @@ function fromExam(row: Exam): SchedulingItem {
     audienceLabel: row.administrative_group_name ?? row.level_name,
     subjectName: row.subject_name,
     levelName: row.level_name,
+    levelNames: row.level_name ? [row.level_name] : [],
+    groupNames: row.administrative_group_name ? [row.administrative_group_name] : [],
+    circleNames: [],
     staffCount: row.staff.length,
     staffNames: row.staff.map((x) => x.user_name).filter((n): n is string => n !== null && n !== undefined),
     version: row.version,

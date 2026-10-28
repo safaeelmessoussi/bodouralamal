@@ -437,25 +437,6 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
   {
     /**
-     * R61 — was `STAFF`, because Revision 26 let an Admin *read* this screen.
-     *
-     * **The endpoint is unchanged.** `GET /admin/branches` stays Admin-readable,
-     * branch-scoped, because `use-scope-options.ts` feeds `/admin/groups`,
-     * `/admin/schedules`, `/admin/content` and every scope selector from it —
-     * withdrawing it would leave a branch Admin unable to create a group or
-     * schedule a class, with empty selectors and no error saying why (R61.2).
-     *
-     * What changes is who may *manage* branches and rooms, and who sees the
-     * node. Writes were already Super Admin only.
-     */
-    path: '/admin/branches',
-    labelKey: 'admin.nav.branches',
-    section: 'administration',
-    roles: SUPER_ONLY,
-    status: 'ready',
-  },
-  {
-    /**
      * **R110 (NEW H) — أنواع الجدولة, the scheduling-type catalogue.**
      *
      * A NEW node rather than a reshuffle: R105 fixed the order of the existing
@@ -493,6 +474,27 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
      */
     path: '/admin/academic-periods',
     labelKey: 'admin.nav.academicPeriods',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
+    /**
+     * R61 — was `STAFF`, because Revision 26 let an Admin *read* this screen.
+     *
+     * **The endpoint is unchanged.** `GET /admin/branches` stays Admin-readable,
+     * branch-scoped, because `use-scope-options.ts` feeds `/admin/groups`,
+     * `/admin/schedules`, `/admin/content` and every scope selector from it —
+     * withdrawing it would leave a branch Admin unable to create a group or
+     * schedule a class, with empty selectors and no error saying why (R61.2).
+     *
+     * What changes is who may *manage* branches and rooms, and who sees the
+     * node. Writes were already Super Admin only.
+     *
+     * **R254 — after «الفصول الدراسية»** (the Owner's menu order, 2026-10-28).
+     */
+    path: '/admin/branches',
+    labelKey: 'admin.nav.branches',
     section: 'administration',
     roles: SUPER_ONLY,
     status: 'ready',

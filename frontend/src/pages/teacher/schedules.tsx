@@ -19,7 +19,7 @@ import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { Feedback } from '../../components/ui/feedback.js';
-import { SchedulingDialog } from '../admin/scheduling.js';
+import { audienceColumns, SchedulingDialog } from '../admin/scheduling.js';
 import { ApiError } from '../../lib/api.js';
 import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
 import { useSession } from '../../contexts/session.js';
@@ -186,11 +186,8 @@ export function TeacherSchedulesPage(): ReactNode {
       cell: (r) =>
         r.title.trim() !== '' ? r.title : <span className="muted">{t('scheduling.untitled')}</span>,
     },
-    {
-      key: 'audience',
-      header: t('admin.schedules.target'),
-      cell: (r) => r.audienceLabel ?? <span className="muted">—</span>,
-    },
+    // R254 — the same three columns as الجدولة.
+    ...audienceColumns(),
     {
       key: 'date',
       sortKey: 'when',

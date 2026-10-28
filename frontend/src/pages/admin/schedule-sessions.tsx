@@ -643,12 +643,14 @@ export function ScheduleSessionsPage({
         : {}),
     };
     await run(
-      () =>
+      async () =>
         updateCourseSchedule(
           scheduleId,
-          // The schedule's own version is not on this screen; the server
-          // refuses a stale one, and the notice tells the reader to reload.
-          0,
+          // R254 — the schedule's CURRENT version, read just before the write
+          // (it was a constant `0`, so every schedule edited once refused every
+          // later wide edit as «تم تعديل هذا السجل من قِبل مستخدم آخر»). The
+          // server still refuses a genuinely concurrent edit (TD-15).
+          (await listScheduleSessions(scheduleId, accessToken)).schedule_version,
           scope === 'this_and_future'
             ? { ...scheduleEdit, scope: 'this_and_future', from_date: session.date }
             : scheduleEdit,

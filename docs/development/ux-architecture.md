@@ -49,6 +49,7 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 ## H · Tables
 - Use `DataTable` (§14.2, §14.4, once); columns, actions, labels, empty copy, sorting and reordering are configuration.
 - R251 — below 44rem a row is a block (bold name, «label: value» from `data-label`, actions in one row; headings as sort buttons); wider, a table that continues past its box shades the hidden edge (`data-more`, `useScrollEdges`). A hand-built table inside `.datatable` gets the same phone layout when its cells carry `data-label` (Hijri months).
+- R254 — a column marked `fit` is as wide as its widest value or heading, on one line, from 44rem (`.is-fit`; a fitted first column drops R251's 14rem name floor); running text (`wide`) and a list of names wrap. A filter with a single choice opens on it, several on «الكل» (personal calendars, SRS Revision 254).
 - Exception: cells holding live form controls bound to per-row draft state — grade sheet, Quran log editor, Hijri month editor — allowlisted in the guard; a fourth means build an editable-table primitive. A calendar month grid is a `<table>`, not a list.
 
 ## AF · Ordering a list: sort is a question, drag is a decision

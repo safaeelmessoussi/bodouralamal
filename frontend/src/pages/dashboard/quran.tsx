@@ -7,7 +7,6 @@ import {
   type SurahCoverage,
 } from '../../adapters/quran.js';
 import { LevelCompletionSummary } from '../../components/quran/level-completion.js';
-import { levelLabel } from '../../components/scope/level-select.js';
 import { StudentLayout } from '../../components/student/student-layout.js';
 import { DataTable, type Column } from '../../components/ui/data-table.js';
 import { ProgressBar } from '../../components/ui/progress-bar.js';
@@ -124,13 +123,9 @@ export function StudentQuranPage(): ReactNode {
         // R253 (the Owner) — each Level a white card under its name, so one
         // Level's memorisation is never read as another's.
         <section key={level.level_id} className="quran-level">
-          <h2>
-            {levelLabel({
-              id: level.level_id,
-              name: level.level_name,
-              category_name: level.category_name,
-            })}
-          </h2>
+          {/* R254 — the Level's own name («ضياء الأمل»), not «النساء — ضياء الأمل»:
+              her Category is hers, saying it on every card says nothing. */}
+          <h2>{level.level_name}</h2>
           {/* SRS Revision 166 §1 — the verdict first, then what it is made of. */}
           <LevelCompletionSummary level={level} />
           <SurahBars surahs={level.surahs} />

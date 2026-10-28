@@ -1226,6 +1226,10 @@ document.paths['/admin/approvals'].get.description +=
   ' Staff rows include the framing preference and branch willingness for review; it remains distinct from the role/scope the approver grants.';
 document.paths['/library'].get.description +=
   ' **R215 — who made each item:** `author_name` is that person\'s PUBLIC display name (§7; `null` when the item names nobody, or the account is gone), `author_role` the capacity (`teacher` | `assistant` | `admin` | `student`), and `author_id` their id for staff readers only (`null` otherwise).';
+document.paths['/admin/course-schedules'].get.description +=
+  ' **R254 —** each row carries `level_names`, `group_names`, `circle_names`: who the class is for, by name — its Levels (named directly or through its groups and circles), its groups and its circles, from a single target or a filter-built class\'s scopes alike.';
+document.paths['/admin/course-schedules/{id}/sessions'].get.description +=
+  ' **R254 —** beside `data`/`meta`, `schedule_version`: the schedule\'s own TD-15 version, which the scoped edits («هذه الحصة وكل ما بعدها», «كل حصص هذا الجدول») send to `PATCH /admin/course-schedules/{id}`.';
 document.paths['/library'].get.description +=
   ' **R250 — `?kind=pdf|audio|video|image|document`** narrows to what the screens call the file: `application/pdf`, `audio/*`, `video/*`, `image/*`, or any other type.';
 document.paths['/library'].get.description +=

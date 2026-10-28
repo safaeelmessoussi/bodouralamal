@@ -201,6 +201,8 @@ const CALENDAR_FILTER_FIELDS = [
   'levelId',
   'type',
   'subjectId',
+  // R254 — «السورة», beside «المادة» (the Owner).
+  'surahId',
   'groupId',
   'circleId',
 ] as const;
@@ -466,6 +468,15 @@ export function SchedulingPage(): ReactNode {
     // `filters.set` is stable; only the offered list decides.
   }, [filterCircles]);
 
+  /** R254 — the Surahs «السورة» offers: the calendar's own list (the public one's too). */
+  const [filterSurahs, setFilterSurahs] = useState<{ id: number; name: string }[]>([]);
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    void fetchCalendarBootstrap({ from: today, to: today })
+      .then((bootstrap) => setFilterSurahs(bootstrap.surahs))
+      .catch(() => setFilterSurahs([]));
+  }, []);
+
   /**
    * **The filter row itself, built once and rendered by BOTH views** (R84).
    *
@@ -494,6 +505,7 @@ export function SchedulingPage(): ReactNode {
       subjects={listScope.options.subjectId.map((o) => ({ id: o.value, name: o.label }))}
       groups={listScope.options.groupId.map((o) => ({ id: o.value, name: o.label }))}
       circles={filterCircles}
+      surahs={filterSurahs}
       types={AVAILABLE_TYPES.map((k) => ({ value: k, label: t(`scheduling.type.${k}`) }))}
     />
   );
@@ -539,6 +551,8 @@ export function SchedulingPage(): ReactNode {
       key: 'type',
       sortKey: 'type',
       header: t('scheduling.itemType'),
+      // R254 — as wide as its badge, not a share of the row.
+      fit: true,
       // The badge carries the same colour the calendar chip does, from the same
       // token — an exam is recognisable at a glance on either surface.
       cell: (r) => <span className={`badge badge--${r.type}`}>{t(`scheduling.type.${r.type}`)}</span>,
@@ -557,21 +571,8 @@ export function SchedulingPage(): ReactNode {
           <span className="muted">{t('scheduling.untitled')}</span>
         ),
     },
-    {
-      key: 'audience',
-      header: t('admin.schedules.target'),
-      wide: true,
-      // An activity has no audience of that kind (§4.4) — absent, not invented.
-      // A filter-built class names its whole audience server-side (SRS
-      // Revision 163 §5); this column used to print the storage mode's own
-      // label for it, which every new class would now have shared.
-      cell: (r) =>
-        r.audienceLabel ? (
-          r.audienceLabel
-        ) : (
-          <span className="muted">—</span>
-        ),
-    },
+    // R254 — «الهدف» as three columns: Level, circle, group.
+    ...audienceColumns(),
     {
       /**
        * **§8 — the DATE, which this table did not show at all.**
@@ -583,11 +584,13 @@ export function SchedulingPage(): ReactNode {
       key: 'date',
       sortKey: 'when',
       header: t('admin.schedules.date'),
+      fit: true,
       cell: (r) => r.startDate ?? <span className="muted">—</span>,
     },
     {
       key: 'when',
       header: t('admin.schedules.time'),
+      fit: true,
       cell: (r) =>
         r.startTime && r.endTime ? (
           `${r.startTime} — ${r.endTime}`
@@ -600,12 +603,14 @@ export function SchedulingPage(): ReactNode {
       // name, so the two are different facts.
       key: 'subject',
       header: t('admin.schedules.subject'),
+      fit: true,
       cell: (r) => r.subjectName ?? <span className="muted">—</span>,
     },
     {
       key: 'recurrence',
       header: t('scheduling.recurrence'),
       secondary: true,
+      fit: true,
       cell: (r) => t(`scheduling.pattern.${patternOf({ type: r.recurrence, weekdays: r.weekdays })}`),
     },
     {
@@ -613,6 +618,7 @@ export function SchedulingPage(): ReactNode {
       sortKey: 'branch',
       header: t('admin.schedules.branch'),
       secondary: true,
+      fit: true,
       cell: (r) => r.branchName ?? <span className="muted">—</span>,
     },
     {
@@ -622,6 +628,7 @@ export function SchedulingPage(): ReactNode {
       key: 'venue',
       header: t('admin.schedules.venue'),
       secondary: true,
+      fit: true,
       cell: (r) =>
         r.ids.deliveryMode === 'online' ? (
           t('delivery.online')
@@ -635,6 +642,7 @@ export function SchedulingPage(): ReactNode {
       key: 'visibility',
       header: t('admin.calendar.colVisibility'),
       secondary: true,
+      fit: true,
       cell: (r) =>
         r.visibility === null ? (
           <span className="muted">—</span>
@@ -812,7 +820,7 @@ export function SchedulingPage(): ReactNode {
           <DataTable
             caption={t('admin.nav.scheduling')}
             columns={columns}
-            rows={sortRows(items, sort, {
+            rows={sortRows(bySurah(items, filters.value.surahId), sort, {
               // **Semantic values, never the rendered Arabic label.** `when`
               // composes date + wall-clock time so two items on one day order
               // by the clock; a null time is an all-day item and sorts by the
@@ -1035,6 +1043,7 @@ function CalendarView({
       ...(filters.value.subjectId ? { subjectId: filters.value.subjectId } : {}),
       ...(filters.value.groupId ? { groupId: filters.value.groupId } : {}),
       ...(filters.value.circleId ? { circleId: filters.value.circleId } : {}),
+      ...(filters.value.surahId ? { surahId: filters.value.surahId } : {}),
       ...(filters.value.type ? { kind: filters.value.type } : {}),
     })
       .then((r) => {
@@ -1061,6 +1070,7 @@ function CalendarView({
     filters.value.subjectId,
     filters.value.groupId,
     filters.value.circleId,
+    filters.value.surahId,
     filters.value.type,
   ]);
 
@@ -2900,4 +2910,35 @@ export function SchedulingDialog({
     ) : null}
     </>
   );
+}
+
+/**
+ * **R254 — who an item is for, as three columns** (the Owner: «replace the
+ * column الهدف with 3 columns, level, circle, group»), named by the server
+ * (`level_names`, `circle_names`, `group_names`). A class addressed to a whole
+ * Category names no Level: its one-line audience («كل مستويات النساء») stands
+ * in the Level column, so nothing it said is lost.
+ */
+export function audienceColumns(): Column<SchedulingItem>[] {
+  const names = (list: string[]): ReactNode => (list.length > 0 ? list.join('، ') : <span className="muted">—</span>);
+  return [
+    {
+      key: 'level',
+      header: t('admin.schedules.colLevel'),
+      fit: true,
+      cell: (r) =>
+        r.levelNames.length === 0 && r.groupNames.length === 0 && r.circleNames.length === 0 && r.audienceLabel
+          ? r.audienceLabel
+          : names(r.levelNames),
+    },
+    { key: 'circle', header: t('admin.schedules.colCircle'), fit: true, cell: (r) => names(r.circleNames) },
+    { key: 'group', header: t('admin.schedules.colGroup'), fit: true, cell: (r) => names(r.groupNames) },
+  ];
+}
+
+/** R254 — the list's items about the chosen Surah (each item carries its own). */
+function bySurah(items: SchedulingItem[], surahId: string | undefined): SchedulingItem[] {
+  if (!surahId) return items;
+  const id = Number(surahId);
+  return items.filter((item) => item.ids.surahIds.includes(id));
 }

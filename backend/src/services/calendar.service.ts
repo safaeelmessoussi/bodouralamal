@@ -1237,6 +1237,35 @@ export async function personalCalendarOptions(
     },
   });
 
+  /**
+   * **R254 — every branch her calendar holds** (the Owner: «the filter الفرع is
+   * empty even if there are events in the calendar»). A schedule's home branch
+   * alone missed its other branches (`multi_dimension`), the occurrences she is
+   * staffed on one by one, and the activities she is staffed on.
+   */
+  const [scheduleBranches, staffedSessions, staffedEvents] = await Promise.all([
+    prisma.courseScheduleBranch.findMany({
+      where: { schedule: { deletedAt: null, staff: { some: { userId, ...effectiveOn(new Date()) } } } },
+      select: { branchId: true },
+    }),
+    prisma.sessionStaff.findMany({
+      where: { userId, deletedAt: null, session: { deletedAt: null } },
+      select: {
+        session: { select: { schedule: { select: { branchId: true } }, audienceBranches: { select: { branchId: true } } } },
+      },
+    }),
+    prisma.eventStaff.findMany({
+      where: { userId, deletedAt: null, event: { deletedAt: null } },
+      select: { event: { select: { branchScopes: { select: { branchId: true } } } } },
+    }),
+  ]);
+  const branchIds = new Set<string>([
+    ...taught.branchIds,
+    ...scheduleBranches.map((b) => b.branchId),
+    ...staffedSessions.flatMap((s) => [s.session.schedule.branchId, ...s.session.audienceBranches.map((b) => b.branchId)]),
+    ...staffedEvents.flatMap((e) => e.event.branchScopes.map((b) => b.branchId)),
+  ]);
+
   const levelIds = new Set<string>([...enrolments.map((e) => e.levelId), ...taught.levelIds]);
   const categoryIds = new Set<string>([
     ...enrolments.map((e) => e.level.categoryId),
@@ -1300,9 +1329,9 @@ export async function personalCalendarOptions(
           select: { id: true, name: true, level: { select: { name: true } } },
         })
       : Promise.resolve([]),
-    taught.branchIds.length
+    branchIds.size
       ? prisma.branch.findMany({
-          where: { id: { in: taught.branchIds }, deletedAt: null },
+          where: { id: { in: [...branchIds] }, deletedAt: null },
           select: { id: true, name: true },
         })
       : Promise.resolve([]),

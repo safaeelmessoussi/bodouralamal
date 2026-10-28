@@ -11,7 +11,6 @@ import { AvailabilityEditor } from '../../components/teaching/availability-edito
 import { FramingPreferenceEditor } from '../../components/teaching/framing-preference-editor.js';
 import type { FramingPreferenceView } from '../../components/teaching/framing-preference-summary.js';
 import {
-  CapabilitiesEditor,
   type CapabilityOption,
 } from '../../components/teaching/capabilities-editor.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
@@ -231,22 +230,19 @@ export function TeacherAvailabilityPage(): ReactNode {
           <FramingPreferenceEditor
             framing={framing}
             controlled={{ value: framingValue, onChange: setFramingValue, showErrors: showFramingErrors }}
+            // R254 — her subjects and Categories (hers to state since
+            // 2026-08-30) sit among the framing fields, and the Categories
+            // narrow the Levels offered there.
+            capabilities={{
+              subjects: allSubjects,
+              categories: allCategories,
+              subjectIds,
+              categoryIds,
+              onSubjects: setSubjectIds,
+              onCategories: setCategoryIds,
+              disabled: busy,
+            }}
           />
-
-          {/* Hers to state since 2026-08-30, through the SHARED editor — the
-              administrator's dialog renders the identical controls. */}
-          <section className="form">
-            <h2 className="form__legend">{t('teacher.availability.capabilities')}</h2>
-            <CapabilitiesEditor
-              subjects={allSubjects}
-              categories={allCategories}
-              subjectIds={subjectIds}
-              categoryIds={categoryIds}
-              onSubjects={setSubjectIds}
-              onCategories={setCategoryIds}
-              disabled={busy}
-            />
-          </section>
 
           <section className="form">
             <AvailabilityEditor ranges={ranges} onChange={setRanges} disabled={busy} />

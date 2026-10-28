@@ -612,6 +612,11 @@ export interface CourseScheduleDto {
    *  order); both empty when its Subject is not taught by Surah. */
   surah_ids: number[];
   surah_names: string[];
+  /** R254 — who the class is for, by name: its Levels (directly or through its
+   *  groups and circles), groups and circles. `[]` from a write response. */
+  level_names: string[];
+  group_names: string[];
+  circle_names: string[];
   /**
    * **Revision 155 — present only when `teaching_mode` is
    * `multi_dimension`**, `null` for every other mode (never the empty
@@ -720,6 +725,8 @@ export function courseScheduleDto(row: {
   /** R165 §2 — absent from a narrower projection reads as "none". */
   surahIds?: number[];
   surahNames?: string[];
+  /** R254 — the Levels, groups and circles it is for, by name (the list read). */
+  audienceNames?: { levels: string[]; groups: string[]; circles: string[] };
   /** A `multi_dimension` row's first addressed Level; `null` otherwise. */
   representativeLevelId?: string | null;
   dimensions?: {
@@ -788,6 +795,10 @@ export function courseScheduleDto(row: {
     version: row.version,
     surah_ids: row.surahIds ?? [],
     surah_names: row.surahNames ?? [],
+    // R254 — «المستوى», «الحلقة», «المجموعة» as three columns; `[]` on a write.
+    level_names: row.audienceNames?.levels ?? [],
+    group_names: row.audienceNames?.groups ?? [],
+    circle_names: row.audienceNames?.circles ?? [],
     dimensions: row.dimensions
       ? {
           branch_ids: row.dimensions.branchIds,

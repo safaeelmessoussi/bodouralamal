@@ -381,7 +381,8 @@ export function sessions(prisma: PrismaClient) {
       idParam(req, "id"),
       pageParamsFrom(req.query),
     );
-    res.json(pageOf(result, scheduleSessionDto));
+    // R254 — the schedule's version beside its sessions, for the scoped edits.
+    res.json({ ...pageOf(result, scheduleSessionDto), schedule_version: result.scheduleVersion });
   };
 }
 

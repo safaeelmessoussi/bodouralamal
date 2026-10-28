@@ -38,6 +38,9 @@ export interface Column<T> {
   /** R199 §9 — a column of running text (an audience, a list of names) that
    *  must not be squeezed into a narrow strip. */
   wide?: boolean;
+  /** R254 — exactly as wide as its widest value or heading, never wrapped (a
+   *  type badge, a date, a time): the rest of the row takes the room. */
+  fit?: boolean;
   /**
    * **The contract field this column sorts by** (R76.1) — `sort_by=<this>`.
    *
@@ -879,7 +882,12 @@ function SortGlyph({ active }: { active: 'asc' | 'desc' | null }): ReactNode {
 }
 
 function cellClass<T>(column: Column<T>): string {
-  return [column.numeric ? 'is-numeric' : '', column.secondary ? 'is-secondary' : '', column.wide ? 'is-wide' : '']
+  return [
+    column.numeric ? 'is-numeric' : '',
+    column.secondary ? 'is-secondary' : '',
+    column.wide ? 'is-wide' : '',
+    column.fit ? 'is-fit' : '',
+  ]
     .filter(Boolean)
     .join(' ');
 }

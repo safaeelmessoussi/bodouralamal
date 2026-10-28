@@ -26,7 +26,6 @@ export const ar = {
     position_teacher: 'تأطير رئيسي',
     position_assistant: 'مساعدة في التأطير',
     position_both: 'الاثنان',
-    allLevels: 'كل المستويات',
     levelsLabel: 'المستويات',
     errDates: 'يُرجى تحديد تاريخ البداية وتاريخ النهاية، على ألّا تسبق النهايةُ البداية.',
     errLevels: 'يُرجى اختيار مستوى واحد على الأقل، أو «كل المستويات».',
@@ -990,8 +989,6 @@ export const ar = {
     framingMode_online: 'عن بُعد',
     framingMode_both: 'حضوري وعن بُعد',
     framingModeHint: 'هذه قدرة عامة قبل الموافقة، وليست جدولاً أسبوعياً ولا تمنح صلاحية.',
-    framingAllBranches: 'يمكنني التأطير في كل المقرات',
-    framingAllBranchesHint: 'تشمل المقرات الحالية وأي مقر يُضاف لاحقاً.',
     framingBranchesLabel: 'المقرات التي يمكنني التأطير فيها',
     framingBranchesHint: 'يمكن اختيار مقر واحد أو عدة مقرات.',
     framingBranchesEmpty: 'بدون',
@@ -1189,7 +1186,6 @@ export const ar = {
         'هذه بيانات تخطيط: لا تمنح بذاتها أيّ صلاحية ولا تُسند إليك حصة. الإسناد تقرّره الإدارة.',
       // R88.2/R106.2 — what she may teach is the administration's record of
       // her, shown here so the ranges have context, and not editable.
-      capabilities: 'المواد والفئات التي سجّلتها الإدارة لتدريسك',
       capabilitiesSaveFailed: 'تعذّر حفظ المواد والفئات. يرجى إعادة المحاولة.',
       noCapabilities: 'لم تسجّل الإدارة مواد بعد.',
       // المراجعة 253 — زرّ «حفظ» واحد للصفحة كلها.
@@ -3084,7 +3080,10 @@ export const ar = {
       mode_teaching_group: 'حلقة مادة',
       create: 'إضافة جدول',
       editTitle: 'تعديل الجدول',
-      target: 'الهدف',
+      // المراجعة 254 — «الهدف» صار ثلاثة أعمدة.
+      colLevel: 'المستوى',
+      colCircle: 'الحلقة',
+      colGroup: 'المجموعة',
       year: 'السنة الدراسية',
       start: 'من (سا:د)',
       end: 'إلى (سا:د)',
