@@ -1535,3 +1535,13 @@
     display: block;
   }
 }
+
+/* R253 — «إدخال أوقات التوفّر» as one white card: its parts parted by a hairline,
+   one «حفظ» at its foot. */
+.teacher-availability {
+  gap: var(--space-4);
+}
+.teacher-availability > section + section {
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--color-border-subtle);
+}

@@ -27,27 +27,28 @@ await send('Network.setCookie', {
 await send('Page.navigate', { url: `${BASE}/teacher/availability` });
 await new Promise((r) => setTimeout(r, 5000));
 
+// R224 §3 — the multi-select is the shared dropdown: its choices are checkboxes
+// in a panel the field opens. R253 — the page has ONE «حفظ», for everything.
 const out = await evaluate(`(async () => {
-  const legends = [...document.querySelectorAll('legend')].map(l => l.textContent.trim());
-  const optionButtons = () => [...document.querySelectorAll('.multi-select__options button')];
-  const before = optionButtons().map(b => b.textContent.replace('＋','').trim());
-  if (before.length === 0) return { noOptions: true, legends,
-    body: document.body.textContent.slice(0, 200) };
-
-  // Pick the first offered Subject, then save the capabilities half.
-  optionButtons()[0].click();
-  await new Promise(r => setTimeout(r, 600));
-
+  const legends = [...document.querySelectorAll('legend, h2')].map(l => l.textContent.trim());
+  const trigger = document.querySelector('.teacher-availability .multi-select .dropdown-trigger');
+  if (!trigger) return { noOptions: true, legends };
+  const summaryBefore = trigger.querySelector('.dropdown-trigger__label')?.getAttribute('title') ?? '';
+  trigger.click();
+  await new Promise(r => setTimeout(r, 400));
+  const boxes = [...document.querySelectorAll('.multi-select__options input[type=checkbox]')];
+  const pick = boxes.find(b => !b.checked);
+  if (!pick) return { noOptions: true, legends, offered: boxes.length };
+  pick.click();
+  await new Promise(r => setTimeout(r, 400));
+  trigger.click();
   const saves = [...document.querySelectorAll('button')].filter(b => b.textContent.trim() === 'حفظ');
-  const savedLabel = optionButtons().length !== before.length;
-  if (saves.length === 0) return { noSave: true, legends };
+  if (saves.length !== 1) return { offered: boxes.length, saves: saves.length, legends };
   saves[0].click();
   await new Promise(r => setTimeout(r, 3000));
-
-  // Feedback renders as .admin-notice[role=status] — and note: a backtick
-  // anywhere inside this evaluated template, comments included, ends it.
   const notice = (document.querySelector('.admin-notice[role=status]')?.textContent ?? '').trim();
-  return { legends, offered: before.length, notice, savedLabel };
+  const summaryAfter = trigger.querySelector('.dropdown-trigger__label')?.getAttribute('title') ?? '';
+  return { legends, offered: boxes.length, saves: saves.length, notice, summaryBefore, summaryAfter };
 })()`);
 
 // **Reload through CDP, not `location.reload()` inside the page.** Reloading
@@ -57,15 +58,46 @@ const out = await evaluate(`(async () => {
 await send('Page.navigate', { url: `${BASE}/teacher/availability` });
 await new Promise((r) => setTimeout(r, 4500));
 const reloaded = await evaluate(`(() => ({
-  chosen: [...document.querySelectorAll('.multi-select__chosen li')]
-    .map(x => x.textContent.trim()).filter(Boolean).slice(0, 6),
+  chosen: document.querySelector('.teacher-availability .multi-select .dropdown-trigger__label')?.getAttribute('title') ?? '',
 }))()`);
 
 console.log(JSON.stringify({ ...out, ...reloaded }, null, 1).slice(0, 900));
+// R253 — one «حفظ» saves two parts at once: a new time slot AND another Subject.
+const both = await evaluate(`(async () => {
+  const rows = () => document.querySelectorAll('.teacher-availability fieldset.form__group .form__row').length;
+  const before = rows();
+  const add = [...document.querySelectorAll('.teacher-availability button')].find(b => b.textContent.trim().endsWith('إضافة فترة'));
+  if (!add) return { noAdd: true };
+  add.click();
+  await new Promise(r => setTimeout(r, 300));
+  const trigger = document.querySelector('.teacher-availability .multi-select .dropdown-trigger');
+  trigger.click();
+  await new Promise(r => setTimeout(r, 400));
+  const pick = [...document.querySelectorAll('.multi-select__options input[type=checkbox]')].find(b => !b.checked);
+  pick?.click();
+  await new Promise(r => setTimeout(r, 300));
+  trigger.click();
+  const summary = trigger.querySelector('.dropdown-trigger__label')?.getAttribute('title') ?? '';
+  [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'حفظ').click();
+  await new Promise(r => setTimeout(r, 3500));
+  return { before, after: rows(), summary, notice: (document.querySelector('.admin-notice[role=status]')?.textContent ?? '').trim() };
+})()`);
+await send('Page.navigate', { url: `${BASE}/teacher/availability` });
+await new Promise((r) => setTimeout(r, 4500));
+const bothReloaded = await evaluate(`(() => ({
+  rows: document.querySelectorAll('.teacher-availability fieldset.form__group .form__row').length,
+  summary: document.querySelector('.teacher-availability .multi-select .dropdown-trigger__label')?.getAttribute('title') ?? '',
+}))()`);
+console.log(JSON.stringify({ both, bothReloaded }));
+
 check('the capabilities are OFFERED as controls, not printed as text',
   (out.offered ?? 0) > 0, JSON.stringify({ offered: out.offered, legends: out.legends }));
-check('choosing one and saving is accepted', /تمّ|حُفظ|حفظ/.test(out.notice ?? ''), out.notice ?? '');
-check('and the choice survives a reload', (reloaded.chosen ?? []).length > 0, JSON.stringify(reloaded.chosen));
+check('the page has ONE «حفظ» (R253)', out.saves === 1, String(out.saves));
+check('choosing one and saving is accepted', /حُفظت/.test(out.notice ?? ''), out.notice ?? '');
+check('one «حفظ» saved a new time slot and another Subject together (R253)',
+  /حُفظت/.test(both.notice ?? '') && bothReloaded.rows === (both.before ?? -1) + 1 && bothReloaded.summary === both.summary,
+  JSON.stringify({ both, bothReloaded }));
+check('and the choice survives a reload', reloaded.chosen !== '' && reloaded.chosen === out.summaryAfter && out.summaryAfter !== out.summaryBefore, JSON.stringify({ before: out.summaryBefore, after: out.summaryAfter, reloaded: reloaded.chosen }));
 
 /**
  * **And it grants nothing** — the reason this is safe.

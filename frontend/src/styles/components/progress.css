@@ -87,6 +87,20 @@
   padding-block-start: var(--space-4);
   border-block-start: 1px solid var(--color-border-subtle);
 }
+/* R253 — each Level a white card on the page's ground: one Level's bars never
+   run into the next one's. */
+.quran-page > section.quran-level {
+  gap: var(--space-3);
+  padding: clamp(var(--space-3), 3vw, var(--space-5));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+.quran-page > section.quran-level > h2 {
+  padding-block-end: var(--space-2);
+  border-block-end: 1px solid var(--color-border-subtle);
+}
 .quran-page > section > h2,
 .quran-page > h2 {
   font-size: var(--font-size-lg);

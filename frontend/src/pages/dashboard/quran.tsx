@@ -121,18 +121,16 @@ export function StudentQuranPage(): ReactNode {
       ) : null}
 
       {levels.map((level) => (
-        <section key={level.level_id}>
-          {/* The heading is omitted for a single Level — its own title already
-              says whose progress this is, and one group is not a grouping. */}
-          {levels.length > 1 ? (
-            <h2>
-              {levelLabel({
-                id: level.level_id,
-                name: level.level_name,
-                category_name: level.category_name,
-              })}
-            </h2>
-          ) : null}
+        // R253 (the Owner) — each Level a white card under its name, so one
+        // Level's memorisation is never read as another's.
+        <section key={level.level_id} className="quran-level">
+          <h2>
+            {levelLabel({
+              id: level.level_id,
+              name: level.level_name,
+              category_name: level.category_name,
+            })}
+          </h2>
           {/* SRS Revision 166 §1 — the verdict first, then what it is made of. */}
           <LevelCompletionSummary level={level} />
           <SurahBars surahs={level.surahs} />
@@ -140,7 +138,7 @@ export function StudentQuranPage(): ReactNode {
       ))}
 
       {extra.length > 0 ? (
-        <section>
+        <section className="quran-level">
           <h2>{t('student.quran.beyondSyllabus')}</h2>
           <SurahBars surahs={extra} />
         </section>

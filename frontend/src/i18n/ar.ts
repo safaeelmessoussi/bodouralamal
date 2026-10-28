@@ -1190,10 +1190,11 @@ export const ar = {
       // R88.2/R106.2 — what she may teach is the administration's record of
       // her, shown here so the ranges have context, and not editable.
       capabilities: 'المواد والفئات التي سجّلتها الإدارة لتدريسك',
-      capabilitiesSaved: 'تمّ حفظ المواد والفئات.',
       capabilitiesSaveFailed: 'تعذّر حفظ المواد والفئات. يرجى إعادة المحاولة.',
       noCapabilities: 'لم تسجّل الإدارة مواد بعد.',
-      saved: 'حُفظت أوقاتك.',
+      // المراجعة 253 — زرّ «حفظ» واحد للصفحة كلها.
+      allSaved: 'حُفظت التغييرات.',
+      framingIncomplete: 'يرجى إكمال الحقول المطلوبة في تفضيل التأطير، ثم الحفظ.',
       saveFailed: 'تعذّر الحفظ. يرجى التحقق من الفترات: لا يجوز تداخل فترتين في اليوم نفسه.',
       loadFailed: 'تعذّر تحميل أوقاتك.',
     },

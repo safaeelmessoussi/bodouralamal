@@ -22,22 +22,30 @@ import { Button } from '../ui/button.js';
  * registration's own fields, so the three places ask the same questions; the
  * branches and Levels come from the public calendar bootstrap. Planning data:
  * saving it grants nothing.
+ *
+ * **R253 — `controlled`**: a page that saves everything with one «حفظ» (the
+ * مؤطِّرة's «إدخال أوقات التوفّر») holds the value itself; the editor then draws
+ * the fields only, with no button of its own.
  */
 export function FramingPreferenceEditor({
   framing,
   onSave,
+  controlled,
 }: {
   framing: FramingPreferenceView | null;
-  onSave: (payload: FramingPayload) => Promise<FramingPreferenceView | null>;
+  onSave?: (payload: FramingPayload) => Promise<FramingPreferenceView | null>;
+  controlled?: { value: TeachingSectionValue; onChange: (next: TeachingSectionValue) => void; showErrors: boolean };
 }): ReactNode {
-  const [value, setValue] = useState<TeachingSectionValue>(() => teachingSectionFrom(framing));
+  const [own, setOwn] = useState<TeachingSectionValue>(() => teachingSectionFrom(framing));
+  const value = controlled ? controlled.value : own;
+  const setValue = controlled ? controlled.onChange : setOwn;
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [levels, setLevels] = useState<{ id: string; label: string }[]>([]);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
-  useEffect(() => setValue(teachingSectionFrom(framing)), [framing]);
+  useEffect(() => setOwn(teachingSectionFrom(framing)), [framing]);
   useEffect(() => {
     let cancelled = false;
     const today = new Date().toISOString().slice(0, 10);
@@ -60,6 +68,7 @@ export function FramingPreferenceEditor({
     setBusy(true);
     setStatus(null);
     try {
+      if (!onSave) return;
       const saved = await onSave(framingPayload(value));
       setValue(teachingSectionFrom(saved));
       setStatus(t('framing.saved'));
@@ -86,19 +95,21 @@ export function FramingPreferenceEditor({
         onChange={setValue}
         branches={branches}
         levels={levels}
-        errors={touched ? errors : {}}
+        errors={(controlled ? controlled.showErrors : touched) ? errors : {}}
         notice={false}
       />
-      <div className="form__actions">
-        <Button variant="primary" disabled={busy} onClick={() => void save()}>
-          {t('framing.save')}
-        </Button>
-        {status ? (
-          <span className="muted" role="status">
-            {status}
-          </span>
-        ) : null}
-      </div>
+      {controlled ? null : (
+        <div className="form__actions">
+          <Button variant="primary" disabled={busy} onClick={() => void save()}>
+            {t('framing.save')}
+          </Button>
+          {status ? (
+            <span className="muted" role="status">
+              {status}
+            </span>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 }

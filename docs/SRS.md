@@ -24,7 +24,7 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
-**Revision ledger (R1–R240):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 252** (2026-10-28).
+**Revision ledger (R1–R240):** the dated Owner decisions that produced this text live in [`docs/archive/SRS-revisions.md`](archive/SRS-revisions.md); clauses below cite them as «Revision N». New revisions are appended there and reflected in the clauses they change. Current: **Revision 253** (2026-10-28).
 
 Where §4 (functional) and §12–§20 (rules/constraints) describe the same behavior, they must agree; if an implementer ever finds a conflict, **§12 Business Rules win**, and the conflict must be reported, not silently resolved.
 
@@ -653,7 +653,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 ### 5.3 Student (adult students directly; minors via Parent context with `X-Active-Child-ID`)
 * **Dashboard (`/dashboard/student`)** — today's/upcoming sessions, most recent published grade, quick links.
 * **My Calendar (`/dashboard/student/calendar`)** — the §4.4 calendar with filters prefilled to the student's own Category, enrolled Levels and Branch: their Sessions across every enrolled Level and Teaching Group, plus Public and Private events (Hidden invisible). Filters remain changeable.
-* **My Quran Progress (`/dashboard/student/quran`)** — per-surah expandable cards, union-merged coverage %, log history (read-only).
+* **My Quran Progress (`/dashboard/student/quran`)** — per-surah expandable cards, union-merged coverage %, log history (read-only). **Revision 253 — each Level a white card under its name** (with one Level too), so one Level's memorisation is never read as another's; what lies outside the syllabus is a card of its own. **«إدخال أوقات التوفّر» is one white card with ONE «حفظ»** for the framing preference, the Subjects and Categories, and the weekly times: only the parts that changed are sent, each to its own route; an incomplete framing preference saves nothing.
 * **اختباراتي — My Exams & Grades (`/dashboard/student/assessments`)** — one table, every exam that concerns her on EITHER mode: طريقة الحضور (عن بُعد/حضوري), her published grade once there is one, and — for a remote sitting only — الحالة and «مراجعة إجاباتي»/«فتح» to take it, save progress and submit. **Save is not Submit and every response is resumable** — there is one response policy (Revision 127). Sortable on every column (Revision 153, which also retired the separate `/dashboard/student/grades`/«نقاطي» this merges).
 
 ### 5.4 Parent
