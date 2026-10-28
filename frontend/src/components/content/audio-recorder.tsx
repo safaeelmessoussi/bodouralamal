@@ -6,6 +6,7 @@ import { extensionFor, formatElapsed, pickContainer } from '../../lib/recorder.j
 import { recordingSession } from '../../lib/recording-platform.js';
 import type { RecordingOrigin, RecordingSession } from '../../lib/recording-session.js';
 import { Button } from '../ui/button.js';
+import { useDiscardCheck } from '../ui/dialog.js';
 import { Feedback } from '../ui/feedback.js';
 import { TextField } from '../ui/field.js';
 
@@ -113,6 +114,8 @@ export function AudioRecorder({
   compact = false,
   session = recordingSession(),
 }: AudioRecorderProps): ReactNode {
+  // R248 — «إلغاء» asks first when the dialog around holds typed work.
+  const discardCheck = useDiscardCheck();
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const mine = state.origin === null || state.origin.key === origin.key;
   const bound = mine && state.status !== 'idle';
@@ -227,7 +230,7 @@ export function AudioRecorder({
           {t('recorder.title')}
         </h3>
         <Feedback>{t('recorder.elsewhere').replace('{label}', state.origin?.label ?? '')}</Feedback>
-        <Button variant="secondary" onClick={onCancel}>
+        <Button variant="secondary" onClick={() => discardCheck(onCancel)}>
           {t('common.cancel')}
         </Button>
       </section>
@@ -379,7 +382,7 @@ export function AudioRecorder({
       ) : (
         // Leaving the screen never stops the recording (R172 §4): «إلغاء»
         // closes the recorder here; the bar keeps showing it while it runs.
-        <Button variant="secondary" disabled={state.status === 'saving'} onClick={onCancel}>
+        <Button variant="secondary" disabled={state.status === 'saving'} onClick={() => discardCheck(onCancel)}>
           {t('common.cancel')}
         </Button>
       )}

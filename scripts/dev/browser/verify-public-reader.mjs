@@ -113,6 +113,11 @@ try {
     check(`${w}: Surah page has no runtime errors`, await evaluate('window.__readerErrors.length === 0'));
   }
   await width(390);
+  // R248 — a recording's page is shown beside its recording only: not on a Level's shelf.
+  await open('/resources?view=levels');
+  const shelfTitles = `[...document.querySelectorAll('.content-card')].map((c) => c.textContent)`;
+  check('«حسب المستوى» lists the session image', await waitFor(`${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.pageTitles[0])}))`));
+  check("«حسب المستوى» leaves out a recording's page", await evaluate(`!${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.pageTitles[1])}))`));
   for (const [kind, id] of Object.entries(fixture.items)) {
     await open(shelf(id));
     check(`${kind}: preview opens anonymously`, await waitFor("!!document.querySelector('dialog[open] .preview__actions button')"));

@@ -62,7 +62,8 @@ export function groupBySurah(entries: readonly LibraryEntry[]): SurahGroup[] {
   const groups = new Map<number, SurahGroup>();
   const seen = new Set<string>();
   for (const entry of entries) {
-    if (entry.surah_id === null) continue;
+    // R248 — a recording's page is never on a Surah's shelf of its own: it comes with its recording below.
+    if (entry.surah_id === null || entry.item.slide_of) continue;
     const key = `${entry.surah_id}:${entry.item.id}`;
     if (seen.has(key)) continue;
     seen.add(key);

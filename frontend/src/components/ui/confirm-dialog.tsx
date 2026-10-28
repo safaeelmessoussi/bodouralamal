@@ -129,7 +129,9 @@ export function ConfirmDialog({
   const reasonOk = !needsReason || (length >= reasonMin && !tooLong);
 
   return (
-    <Dialog open={open} onClose={onCancel} title={title}>
+    // R248 — a typed reason survives a stray click beside it; «إلغاء», ✕ and
+    // Escape still decline at once (a confirmation asks no second question).
+    <Dialog open={open} onClose={onCancel} title={title} dismissible={!needsReason || reason.trim() === ''}>
       <div className="confirm">
         {/* **Refused: the dialog explains instead of asking.** The question is
             withdrawn along with the button, because there is no longer anything

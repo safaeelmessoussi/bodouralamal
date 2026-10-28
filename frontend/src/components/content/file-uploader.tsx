@@ -4,6 +4,7 @@ import { uploadFile, type UploadMeta, type UploadStage } from '../../adapters/up
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
+import { useDiscardCheck } from '../ui/dialog.js';
 import { CheckboxField, TextArea, TextField } from '../ui/field.js';
 import { Feedback } from '../ui/feedback.js';
 
@@ -133,6 +134,8 @@ export function FileUploader({
   single = false,
   accept = ACCEPT,
 }: FileUploaderProps): ReactNode {
+  // R248 — «إلغاء» asks first when the dialog around holds typed work.
+  const discardCheck = useDiscardCheck();
   // There is always one item, so the title and description are there from
   // the start (the composed title shows before a file is picked).
   const [items, setItems] = useState<Item[]>(() => [
@@ -353,7 +356,7 @@ export function FileUploader({
       ) : null}
 
       <div className="dialog__actions">
-        <Button variant="ghost" onClick={onCancel} disabled={running}>
+        <Button variant="ghost" onClick={() => discardCheck(onCancel)} disabled={running}>
           {t('common.cancel')}
         </Button>
         <Button

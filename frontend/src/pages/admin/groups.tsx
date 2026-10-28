@@ -49,6 +49,7 @@ import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
+import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 
 /**
  * `/admin/groups` — Administrative Groups and their rosters (§4.4c, §5.6).
@@ -616,8 +617,18 @@ function RosterDialog({
     }
   }
 
+  // R248 — a person picked but not yet added is unsaved work, as in «مواد الحصة».
+  const guard = useUnsavedGuard({ open: group !== null, dirty: picked !== '', busy, onCancel: onClose });
+
   return (
-    <Dialog open={group !== null} onClose={onClose} title={t('admin.groups.rosterTitle')} wide>
+    <Dialog
+      open={group !== null}
+      onClose={guard.requestClose}
+      dismissible={guard.dismissible}
+      title={t('admin.groups.rosterTitle')}
+      wide
+    >
+      {guard.confirmation}
       {notice ? (
         <Feedback>
           {notice}

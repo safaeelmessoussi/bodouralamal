@@ -43,6 +43,7 @@ import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
+import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 
 /**
  * `/admin/teaching-groups` — **حلقات المواد** (§14.1, §4.4c, BR-22, R43.3, R69).
@@ -929,13 +930,18 @@ function CircleRosterDialog({
     }
   }
 
+  // R248 — a person picked but not yet added is unsaved work, as in «مواد الحصة».
+  const guard = useUnsavedGuard({ open: circle !== null, dirty: picked !== '', busy, onCancel: onClose });
+
   return (
     <Dialog
       open={circle !== null}
-      onClose={onClose}
+      onClose={guard.requestClose}
+      dismissible={guard.dismissible}
       title={t('admin.subjectOrg.membersTitle')}
       wide
     >
+      {guard.confirmation}
       {circle ? (
         <p className="lede">
           {circle.subject_name} — {circle.name}

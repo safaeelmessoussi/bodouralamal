@@ -273,3 +273,15 @@ describe('R247 — by academic year, and the pages of what is heard', async () =
     expect(fatiha?.items.map((i) => i.id).sort()).toEqual(['page', 'rec']);
   });
 });
+
+describe('R248 — a recording\'s page is shown beside it and nowhere else', () => {
+  it('never puts a page on a Surah shelf of its own, only with its recording', () => {
+    const recording = entry('rec', 1, 'audio/mpeg');
+    const page = entry('page', 2, 'image/png');
+    page.item = { ...page.item, slide_of: 'rec', slide_position: 0 };
+    const drawing = entry('drawing', 2, 'image/png');
+    const groups = groupBySurah([recording, page, drawing]);
+    expect(groups.find((g) => g.id === 1)?.items.map((i) => i.id).sort()).toEqual(['page', 'rec']);
+    expect(groups.find((g) => g.id === 2)?.items.map((i) => i.id)).toEqual(['drawing']);
+  });
+});

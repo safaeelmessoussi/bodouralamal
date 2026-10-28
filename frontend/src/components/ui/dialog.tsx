@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
+import { Button } from './button.js';
 import { IconButton } from './icon-button.js';
 
 /**
@@ -47,14 +48,38 @@ import { IconButton } from './icon-button.js';
  * mis-aimed click. The **explicit close button always works**: it routes through
  * `onClose`, which is where a form puts its confirmation, so there is never a
  * dialog a keyboard user cannot leave.
+ *
+ * ## R248 — a dialog guards what was typed in it, by itself
+ *
+ * A dialog that is NOT given `dismissible` watches its own fields: once any
+ * field inside it — however deep in a child form — has been typed in or
+ * changed (`input`/`change`, which bubble), the backdrop is ignored and
+ * `Escape` or ✕ ask «تجاهل التغييرات؟» before closing (`useUnsavedGuard`'s
+ * rule). The Owner lost a half-filled «رفع ملف» to a click beside it: that
+ * dialog wraps a form component, so the per-file opt-in never reached it. A
+ * caller that passes `dismissible` keeps its own guard (`FormDialog`,
+ * `useUnsavedGuard`); a field marked `data-unsaved-ignore` (a search box) is
+ * not work. Closing from the code (`open` false, after a save) never asks.
  */
+/** R248 — «إلغاء» inside a guarding dialog asks first; elsewhere it just proceeds. */
+const DiscardCheck = createContext<((proceed: () => void) => void) | null>(null);
+
+/**
+ * **R248 — for a form's own «إلغاء»** inside a dialog that guards itself: the
+ * same question as ✕ when something was typed, then `proceed`. Outside such a
+ * dialog (or with nothing typed) it simply proceeds.
+ */
+export function useDiscardCheck(): (proceed: () => void) => void {
+  return useContext(DiscardCheck) ?? ((proceed) => proceed());
+}
+
 export function Dialog({
   open,
   onClose,
   title,
   wide = false,
   full = false,
-  dismissible = true,
+  dismissible: dismissibleProp,
   children,
 }: {
   open: boolean;
@@ -75,6 +100,43 @@ export function Dialog({
 }): ReactNode {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  // R248 — no `dismissible` given: the dialog guards what was typed in it.
+  const auto = dismissibleProp === undefined;
+  const [touched, setTouched] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const holding = auto && touched;
+  const dismissible = auto ? !holding : dismissibleProp;
+  /** What to do once the reader agrees to discard: close, or a form's own «إلغاء». */
+  const pending = useRef<() => void>(onClose);
+  const check = (proceed: () => void): void => {
+    if (!holding) return proceed();
+    pending.current = proceed;
+    setAsking(true);
+  };
+  const requestClose = (): void => check(onClose);
+
+  useEffect(() => {
+    setTouched(false);
+    setAsking(false);
+  }, [open]);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || !auto) return;
+    const mark = (event: Event): void => {
+      const target = event.target as Element | null;
+      if (target?.closest('[data-unsaved-ignore]')) return;
+      // A nested dialog (this one's own question) is its own business.
+      if (target?.closest('dialog') !== element) return;
+      setTouched(true);
+    };
+    element.addEventListener('input', mark);
+    element.addEventListener('change', mark);
+    return () => {
+      element.removeEventListener('input', mark);
+      element.removeEventListener('change', mark);
+    };
+  }, [auto]);
 
   useEffect(() => {
     const element = ref.current;
@@ -109,12 +171,12 @@ export function Dialog({
         event.preventDefault();
         // Routed through `onClose` anyway, so a form's confirmation is offered
         // rather than the key doing nothing at all — a dead key teaches nothing.
-        onClose();
+        requestClose();
       }
     };
     element.addEventListener('cancel', handle);
     return () => element.removeEventListener('cancel', handle);
-  }, [dismissible, onClose]);
+  }, [dismissible, onClose, holding]);
 
   return (
     <dialog
@@ -137,12 +199,38 @@ export function Dialog({
           <IconButton
             icon="close"
             label={t('common.close')}
-            onClick={onClose}
+            onClick={requestClose}
             className="dialog__close"
           />
         </div>
-        <div className="dialog__body">{children}</div>
+        <div className="dialog__body">
+          {auto ? <DiscardCheck.Provider value={check}>{children}</DiscardCheck.Provider> : children}
+        </div>
       </div>
+      {auto && asking ? (
+        /* R248 — the shared question («إغلاق النموذج؟»), in this dialog's top layer;
+           mounted only while asked, so no closed dialog carries a second one. */
+        <Dialog open={asking} onClose={() => setAsking(false)} title={t('common.discardTitle')} dismissible>
+          <div className="confirm">
+            <p className="confirm__body">{t('common.discardBody')}</p>
+            <div className="confirm__actions">
+              <Button variant="secondary" onClick={() => setAsking(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setAsking(false);
+                  setTouched(false);
+                  pending.current();
+                }}
+              >
+                {t('common.discardConfirm')}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      ) : null}
     </dialog>
   );
 }

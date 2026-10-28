@@ -333,7 +333,9 @@ function LibraryView({
       cancelled = true;
     };
   }, [accessToken]);
-  const entries = load.kind === 'ready' ? load.data : [];
+  // R248 — a recording's page («صفحات المطبوع») is shown beside its recording
+  // in «حسب السورة» and nowhere else.
+  const entries = useMemo(() => (load.kind === 'ready' ? load.data.filter((e) => !e.item.slide_of) : []), [load]);
 
   /**
    * The options are what EXISTS, so no filter offers an empty answer — and

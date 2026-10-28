@@ -695,6 +695,26 @@ describe('unsaved form changes are protected by the shared dialog', () => {
    * being fixed. One of the six did exactly that while this section was being
    * written, which is why the property is pinned rather than assumed.
    */
+  /**
+   * **R248 — and a dialog that wraps a form COMPONENT is guarded too.** The
+   * scan above reads one file, so «رفع ملف» (a `Dialog` around
+   * `ContentUploadForm`) passed it while a click beside it lost a half-filled
+   * form. `Dialog` now watches its own fields when no `dismissible` is given;
+   * this pins that the mechanism stays, and that a form's own «إلغاء» asks too.
+   */
+  it('R248 — Dialog guards what was typed in it, and a form\'s «إلغاء» asks through it', () => {
+    const dialog = stripComments(FILES.find((f) => f.path === 'components/ui/dialog.tsx')!.text);
+    expect(dialog).toContain("addEventListener('input'");
+    expect(dialog).toContain("addEventListener('change'");
+    expect(dialog).toContain('dismissibleProp === undefined');
+    expect(dialog).toContain('onClick={requestClose}');
+    for (const path of ['components/content/file-uploader.tsx', 'components/content/audio-recorder.tsx']) {
+      const code = stripComments(FILES.find((f) => f.path === path)!.text);
+      expect(code, path).toContain('discardCheck(onCancel)');
+      expect(code, path).not.toContain('onClick={onCancel}');
+    }
+  });
+
   it('every useUnsavedGuard renders its confirmation', () => {
     const offenders = FILES.filter((f) => {
       if (f.path.includes('.test.') || f.path === 'lib/use-unsaved-guard.tsx') return false;

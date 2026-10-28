@@ -481,3 +481,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - «مكتبة المحتوى»: row action «صفحات المطبوع» (`RecordingSlidesDialog`: order, remove, pick, upload images); `FileUploader accept`; 20 keys in ar + 6 locales.
 - `overview/lesson-follow-up-plan.md`: the Telegram channel/group workflow once sign-in opens, Owner decisions D-a…D-f, today's read-only «أسئلة الحصة» option; TASKS D15.
 - Verified: gates, guards, content + library HTTP integration (its exact-key list gains the 3 fields), the public-reader browser checks of the Surah page at 390/1366.
+
+## 2026-10-28 — SRS Revision 248: no form is lost to a stray click; a recording's pages only beside it
+- `Dialog` (no `dismissible` given) watches `input`/`change` inside it: backdrop ignored, Escape/✕ ask «إغلاق النموذج؟» (mounted only while asked); `useDiscardCheck()` routes `FileUploader`/`AudioRecorder` «إلغاء» through it — «رفع ملف» and the recorder in مكتبة المحتوى were unguarded.
+- رواد المجموعة and أعضاء الحلقة: `useUnsavedGuard` on an unsent pick; `ConfirmDialog` ignores the backdrop while a reason is typed.
+- `resources.tsx` «حسب المستوى» drops `slide_of` rows; `groupBySurah` never shelves a page under its own Surah.
+- Verified: frontend gates (1715), guards, browser «رفع ملف» 12/12 on Localhost (nothing uploaded), content integration + public-reader «حسب المستوى» check.
