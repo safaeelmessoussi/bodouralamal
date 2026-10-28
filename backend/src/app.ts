@@ -891,6 +891,9 @@ export function createApp(
   // its own route because it moves no bytes in.
   guarded.patch('/content/:id', contentCtl.update(prisma, storage));
   guarded.delete('/content/:id', contentCtl.remove(prisma, storage));
+  // R247 — a recording's slides: the images of its «مطبوع», in order.
+  guarded.get('/content/:id/slides', contentCtl.listSlides(prisma));
+  guarded.put('/content/:id/slides', contentCtl.setSlides(prisma));
   // TD-12: minting is one of the high-risk operations where an unexpired token
   // is not sufficient — the service re-asserts the caller against live rows.
 

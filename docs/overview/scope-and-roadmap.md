@@ -45,6 +45,7 @@ Deliberate; building any now is prohibited (§20 rule 16); the SRS postponement 
 - Content/comms: in-app recorder, notifications, FR/EN catalogs, CSV import/export, Trash UI, audit page, committees, print exam layout, Quran-completion exam triggers, attendance, certificates.
 - Calendar: Hijri importer if the Ministry publishes something importable (write path + provenance column exist).
 - Payments: deferred; Stripe removed (rejects Moroccan cards for local entities); CMI or an aggregator such as PayZone; banking decision re-verified at phase start.
+- Lesson follow-up once sign-in opens: the Level's channel alert and «أسئلة الحصة» — [lesson-follow-up-plan](lesson-follow-up-plan.md) (R247, TASKS D15).
 - Later: duplicate-account merge tooling · QR self-check-in · second institute as a separate deployment (no dormant tenancy layer, by decision).
 
 ## Open risks

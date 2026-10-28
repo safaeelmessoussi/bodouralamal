@@ -6,6 +6,7 @@ import type { StorageClients } from '../lib/storage.js';
 import { ACTIVE_CHILD_HEADER } from '../middleware/child-context.js';
 import { requireActor } from '../middleware/authenticate.js';
 import * as content from '../services/content.service.js';
+import * as slides from '../services/recording-slides.service.js';
 import { completeUploadSchema, initiateUploadSchema } from '../validators/content.validators.js';
 import { z } from 'zod';
 
@@ -216,5 +217,27 @@ export function downloadUrl(prisma: PrismaClient, clients: StorageClients) {
     // shared caching would hand one caller's grant to another.
     res.setHeader('Cache-Control', 'no-store');
     res.json({ url: result.url, expires_in: result.expiresIn });
+  };
+}
+
+/** R247 — the whole ordered list; `[]` clears it. */
+const recordingSlidesSchema = z
+  .object({ slide_ids: z.array(z.string().uuid()).max(slides.MAX_SLIDES) })
+  .strict();
+
+/** `GET /content/{id}/slides` (R247) — for whoever may edit the recording. */
+export function listSlides(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const data = await slides.listRecordingSlides(prisma, requireActor(req), idParam(req, 'id'));
+    res.json({ data });
+  };
+}
+
+/** `PUT /content/{id}/slides` (R247) — replaces the recording's pages, in order. */
+export function setSlides(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse<{ slide_ids: string[] }>(recordingSlidesSchema, req.body);
+    const data = await slides.setRecordingSlides(prisma, requireActor(req), idParam(req, 'id'), body.slide_ids);
+    res.json({ data });
   };
 }

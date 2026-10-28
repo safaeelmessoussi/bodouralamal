@@ -308,6 +308,7 @@ Not under `/admin/`: TD-2 gives a Teacher write access to sessions they staff; s
 | `hidden` | Admins and Teachers only |
 
 - No `X-Active-Child-ID` needed here (one shared reading surface, §5.2).
+- R247: an image carries `slide_of`/`slide_position` (its live recording, else `null`); every item `session_ids` (live sessions it is attached to) — a session's images are its recordings' pages.
 - Listing is not the download gate: items carry `visibility`; `GET /content/{id}/download-url` (TD-3.5) checks §4.9 before minting; the DTO omits `storage_bucket`, `storage_key`, `original_filename`; `media_consent_missing` is projected for staff, `null` otherwise (R170 §3).
 
 ## Storage — uploads, replacement, deletion and the mint (TD-3.5)
@@ -319,6 +320,7 @@ Not under `/admin/`: TD-2 gives a Teacher write access to sessions they staff; s
 | `POST` | `/uploads/{upload_id}/abort` | 🔒 Best-effort; deletes the object |
 | `DELETE` | `/content/{id}` | 🔒 R53: soft delete + Trash snapshot + quarantine |
 | `GET` | `/content/{id}/download-url` | 🌐/🔒 Optional-auth GET — a public item read in place gets its stable address (`expires_in: null`, R223), otherwise short-lived; anonymous only for an exact live public coordinate; private keeps §4.9/TD-12 checks; `Cache-Control: no-store`; out of scope `404` |
+| `GET` · `PUT` | `/content/{id}/slides` | 🔒 R247: a recording's pages of its «مطبوع», in order — `{ slide_ids }` REPLACES the list (`[]` clears); recording and each image pass the edit rule (`loadWritableContent`, out of scope `404`); `NOT_A_RECORDING` · `NOT_AN_IMAGE` · `DUPLICATE_SLIDE`; an image is a page of one recording (listing it moves it) |
 
 - The file never passes through the API: the browser PUTs to MinIO via the presigned URL (§2.3).
 - Decided at `/initiate`: §4.9 branch scope, TD-9 whitelist and size cap, per-user quota. `/complete` decides only what the object answers: ranged GET `bytes=0-511` for magic bytes, HEAD for size (§4.9, R8), never streamed; a mismatch deletes the object, creates no row, answers `409 VALIDATION_FAILED` (TD-3.8's only status-varying code).

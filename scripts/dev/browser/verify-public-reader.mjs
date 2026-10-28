@@ -91,6 +91,28 @@ try {
   // SHELF heading with its items beneath it, not a card that links away.
   check('fresh anonymous public library has real fixture level', await waitFor(`!!document.querySelector('#shelf-${fixture.levelId}') && document.querySelectorAll('#shelf-${fixture.levelId} ~ .content-year .content-card, section[aria-labelledby="shelf-${fixture.levelId}"] .content-card').length > 0`));
   check('the library filters read «الكل»', await evaluate(`[...document.querySelectorAll('.cal-toolbar select option[value=""]')].every((o) => o.textContent.trim() === 'الكل')`));
+  // R247 — «حسب السورة»: the years newest first, and the pages of what is heard.
+  const sp = fixture.surahPage;
+  const yearToggles = "[...document.querySelectorAll('#surah-listen .surah-library__yearToggle')]";
+  for (const w of [390, 1366]) {
+    await width(w);
+    await open(`/resources?surah=${sp.surah}`);
+    // Every section arrives closed (R240): open the recordings.
+    const opened = await waitFor(`(() => { const b = document.querySelector('#surah-listen-title button'); if (!b) return false; if (b.getAttribute('aria-expanded') !== 'true') b.click(); return true; })()`);
+    check(`${w}: «تسجيلات الدروس» shows a heading per year`, opened && await waitFor(`${yearToggles}.length === ${sp.years.length}`));
+    check(`${w}: the years newest first`, await evaluate(`${yearToggles}.every((b, i) => b.textContent.includes(${JSON.stringify(sp.years)}[i]))`));
+    check(`${w}: two years, each closed`, await evaluate(`${yearToggles}.every((b) => b.getAttribute('aria-expanded') === 'false')`));
+    await evaluate(`${yearToggles}.find((b) => b.textContent.includes(${JSON.stringify(sp.lessonYear)})).click()`);
+    check(`${w}: the session's pages stand above its recording`, await waitFor(`(() => { const s = document.querySelector('#surah-listen .surah-slides--session'); return !!s && !!s.nextElementSibling?.classList.contains('surah-track'); })()`));
+    await evaluate(`document.querySelector('#surah-listen .surah-slides--session .surah-slides__toggle').click()`);
+    check(`${w}: a session page decodes`, await waitFor(`document.querySelector('#surah-listen .surah-slides--session .surah-slides__page img')?.naturalWidth > 0`));
+    await evaluate(`document.querySelector('#surah-listen .surah-track .surah-slides__toggle').click()`);
+    check(`${w}: the recording's own page decodes`, await waitFor(`document.querySelector('#surah-listen .surah-track .surah-slides__page img')?.naturalWidth > 0`));
+    check(`${w}: a page is on no shelf`, await evaluate(`![...document.querySelectorAll('.surah-tile__title')].some((t) => ${JSON.stringify(sp.pageTitles)}.includes(t.textContent.trim()))`));
+    check(`${w}: Surah page has no document overflow`, await overflow());
+    check(`${w}: Surah page has no runtime errors`, await evaluate('window.__readerErrors.length === 0'));
+  }
+  await width(390);
   for (const [kind, id] of Object.entries(fixture.items)) {
     await open(shelf(id));
     check(`${kind}: preview opens anonymously`, await waitFor("!!document.querySelector('dialog[open] .preview__actions button')"));

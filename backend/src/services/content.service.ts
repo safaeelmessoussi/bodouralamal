@@ -666,6 +666,7 @@ interface WritableContent {
   storageBucket: string;
   storageKey: string;
   version: number;
+  mimeType: string;
 }
 
 /** A stable identity for pre-B-03 tickets which did not carry one. */
@@ -1113,7 +1114,7 @@ export async function abortUpload(
  * §4.9 tiers, writing by TD-2 plus the same branch scope an upload takes. A
  * Teacher may read Global content and may not edit it.
  */
-async function loadWritableContent(
+export async function loadWritableContent(
   prisma: PrismaClient,
   actor: Actor,
   contentId: string,
@@ -1129,6 +1130,7 @@ async function loadWritableContent(
       storageBucket: true,
       storageKey: true,
       version: true,
+      mimeType: true,
     },
   });
   // §20 rule 17: out of scope answers 404, never 403 — a 403 would confirm the

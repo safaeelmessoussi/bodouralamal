@@ -9,6 +9,7 @@ import { MultiSelectField } from '../components/ui/multi-select.js';
 import { AdminLayout } from '../components/admin/admin-layout.js';
 import { ContentRecorderForm } from '../components/content/content-recorder-form.js';
 import { ContentUploadForm } from '../components/content/content-upload-form.js';
+import { RecordingSlidesDialog } from '../components/content/recording-slides-dialog.js';
 import { TeacherLayout } from '../components/teacher/teacher-layout.js';
 import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
 import { FormDialog } from '../components/ui/form-dialog.js';
@@ -411,6 +412,8 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<LibraryRow | null>(null);
   const [editing, setEditing] = useState<LibraryRow | null>(null);
+  /** R247 — the recording whose «صفحات المطبوع» are open. */
+  const [slidesOf, setSlidesOf] = useState<LibraryRow | null>(null);
   /** Set when the server reports consent keeps THIS item private (see the
    *  catch below). Cleared whenever a different item is opened. */
   const [busy, setBusy] = useState(false);
@@ -555,6 +558,8 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
 
   const actions: RowAction<LibraryRow>[] = [
     // Rule AC — contextual, then تعديل, then the destructive one.
+    // R247 — a recording's «صفحات المطبوع».
+    { label: t('content.slides.action'), onSelect: (r) => setSlidesOf(r), available: (r) => r.mime_type.startsWith('audio/') },
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     { label: t('common.delete'), onSelect: (r) => setDeleting(r), danger: true },
   ];
@@ -791,6 +796,17 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           />
         ) : null}
       </Dialog>
+
+      {slidesOf === null ? null : (
+        <RecordingSlidesDialog
+          recording={slidesOf}
+          token={accessToken}
+          onClose={() => {
+            setSlidesOf(null);
+            void load();
+          }}
+        />
+      )}
 
       {editing === null ? null : (
         <ContentEditDialog

@@ -73,6 +73,22 @@ export function groupBySurah(entries: readonly LibraryEntry[]): SurahGroup[] {
     }
     group.items.push({ ...entry.item, subjectName: entry.subject_name });
   }
+  // R247 — a recording's pages, and the images of its session, come with it
+  // to its Surah, whatever Surah (or none) the images were filed under.
+  const images = new Map<string, LibraryEntry>();
+  for (const entry of entries) if (entry.item.kind === 'image') images.set(entry.item.id, entry);
+  for (const group of groups.values()) {
+    const audio = group.items.filter((item) => item.kind === 'audio');
+    const recordings = new Set(audio.map((item) => item.id));
+    const sessions = new Set(audio.flatMap((item) => item.session_ids ?? []));
+    const present = new Set(group.items.map((item) => item.id));
+    for (const entry of images.values()) {
+      const image = entry.item;
+      if (present.has(image.id)) continue;
+      const page = image.slide_of ? recordings.has(image.slide_of) : (image.session_ids ?? []).some((s) => sessions.has(s));
+      if (page) group.items.push({ ...image, subjectName: entry.subject_name });
+    }
+  }
   // R199 §3 (the Owner) — a Surah's recordings in TITLE order, numbers read
   // as numbers («الحصة 2» before «الحصة 10»), so the order is the one the
   // titles say whatever order the files were uploaded in; equal titles keep

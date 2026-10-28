@@ -1139,6 +1139,13 @@ export interface LibraryItemDto {
   /** R223 — a public audio's stable address (§3.1), played in one click;
    *  `null` for every other item, which mints through `download-url`. */
   stream_url: string | null;
+  /** R247 — on an image: the recording it is a page of (shown beside it while
+   *  it plays), and where in its order; `null` otherwise. */
+  slide_of: string | null;
+  slide_position: number | null;
+  /** R247 — the live class sessions this item is attached to: a session's
+   *  images are the slides of its recordings. `[]` for none. */
+  session_ids: string[];
 }
 
 /**
@@ -1188,6 +1195,9 @@ export function libraryItemDto(row: {
   surahId: number | null;
   surahName: string | null;
   streamUrl?: string | null;
+  slideOfId: string | null;
+  slidePosition: number | null;
+  sessionIds: string[];
 }): LibraryItemDto {
   return {
     id: row.id,
@@ -1235,6 +1245,9 @@ export function libraryItemDto(row: {
     surah_id: row.surahId,
     surah_name: row.surahName,
     stream_url: row.streamUrl ?? null,
+    slide_of: row.slideOfId,
+    slide_position: row.slidePosition,
+    session_ids: row.sessionIds,
   };
 }
 

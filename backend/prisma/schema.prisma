@@ -4015,10 +4015,35 @@ model EducationalContent {
   /// relation lives on `SessionRecording`).
   sessionRecording SessionRecording?
 
+  /// R247 — on a recording: the pages of the «مطبوع» heard in it, in order.
+  slides  RecordingSlide[] @relation("RecordingSlides")
+  /// R247 — on an image: the one recording it is a page of, if any.
+  slideOf RecordingSlide?  @relation("SlideOfRecording")
+
   @@index([levelId, academicYearId, branchId])
   @@index([visibility])
   @@index([authorId])
   @@map("educational_content")
+}
+
+/// **R247 — a recording's slides** (the Owner, 2026-10-28): images of the
+/// «مطبوع» shown beside ONE recording while it plays, in `position` order. An
+/// image is a page of at most one recording (the key). Each is still an
+/// ordinary library item with its own visibility, which the read applies. A
+/// session's slides are its attached images (`SessionContent`), not rows here.
+/// A trigger in hand-written SQL refuses a non-audio recording, a non-image
+/// slide, and an item as its own slide.
+model RecordingSlide {
+  slideId     String             @id @map("slide_id") @db.Uuid
+  slide       EducationalContent @relation("SlideOfRecording", fields: [slideId], references: [id], onDelete: Cascade)
+  recordingId String             @map("recording_id") @db.Uuid
+  recording   EducationalContent @relation("RecordingSlides", fields: [recordingId], references: [id], onDelete: Cascade)
+  position    Int
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdById String?            @map("created_by") @db.Uuid
+
+  @@index([recordingId, position])
+  @@map("recording_slide")
 }
 
 /// **An item's OTHER Levels** (SRS Revision 169 §10). `EducationalContent.levelId`

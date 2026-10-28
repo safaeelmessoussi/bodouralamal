@@ -88,6 +88,14 @@ export interface ContentItem {
   /** R223 — a public audio's stable address: its player shows at once and
    *  plays in one click; absent/`null` mints through `download-url`. */
   stream_url?: string | null;
+  /** R247 — the academic year it was filed in («حسب السورة» groups by it). */
+  academic_year_label?: string;
+  /** R247 — on an image: the recording it is a page of, and its place there. */
+  slide_of?: string | null;
+  slide_position?: number | null;
+  /** R247 — the class sessions it is attached to; a session's images are
+   *  the slides of its recordings. */
+  session_ids?: string[];
 }
 
 export interface BranchGroup {
@@ -189,6 +197,10 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
       subject_name: row.subject_name,
       whole_category: row.whole_category,
       stream_url: row.stream_url ?? null,
+      academic_year_label: row.academic_year_label,
+      slide_of: row.slide_of ?? null,
+      slide_position: row.slide_position ?? null,
+      session_ids: row.session_ids ?? [],
     };
     const shelves = row.whole_category
       ? [{ key: `category:${row.category_id}`, kind: 'whole_category' as const, id: row.category_id, name: '' }]
@@ -382,6 +394,10 @@ interface LibraryItemWire {
   surah_name?: string | null;
   /** R223 — a public audio's stable address. */
   stream_url?: string | null;
+  /** R247 — absent from a server older than it. */
+  slide_of?: string | null;
+  slide_position?: number | null;
+  session_ids?: string[];
 }
 
 /**
@@ -535,5 +551,32 @@ export async function fetchContentSessions(
 ): Promise<Occurrence[]> {
   return (
     await api<{ data: Occurrence[] }>(`/library/${contentId}/sessions`, { token })
+  ).data;
+}
+
+/** R247 — one page of a recording's «مطبوع». */
+export interface RecordingSlide {
+  id: string;
+  title: string;
+  position: number;
+}
+
+/** `GET /content/{id}/slides` (R247) — the recording's pages, in order. */
+export async function fetchRecordingSlides(recordingId: string, token: string | null): Promise<RecordingSlide[]> {
+  return (await api<{ data: RecordingSlide[] }>(`/content/${encodeURIComponent(recordingId)}/slides`, { token })).data;
+}
+
+/** `PUT /content/{id}/slides` (R247) — the whole ordered list; `[]` clears it. */
+export async function saveRecordingSlides(
+  recordingId: string,
+  slideIds: readonly string[],
+  token: string | null,
+): Promise<RecordingSlide[]> {
+  return (
+    await api<{ data: RecordingSlide[] }>(`/content/${encodeURIComponent(recordingId)}/slides`, {
+      token,
+      method: 'PUT',
+      body: { slide_ids: slideIds },
+    })
   ).data;
 }

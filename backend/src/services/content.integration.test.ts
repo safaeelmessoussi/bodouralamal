@@ -64,6 +64,7 @@ import {
   UPLOAD_QUOTA,
 } from "./content.service.js";
 import { listLibrary } from "./library.service.js";
+import { listRecordingSlides, setRecordingSlides } from "./recording-slides.service.js";
 
 /**
  * TD-3.5 end to end, against **real MinIO through the real Nginx proxy**.
@@ -1550,6 +1551,67 @@ describe("editing an item's metadata (UAT 2026-09-02)", () => {
   });
 });
 
+describe("R247 — a recording's slides", () => {
+  async function item(kind: string, mime: string): Promise<string> {
+    const id = randomUUID();
+    await prisma.educationalContent.create({ data: {
+      id, title: `${TAG} شريحة ${kind}`, levelId, subjectId, academicYearId, branchId, visibility: 'public',
+      storageBucket: 'public', storageKey: `content/${id}/${randomUUID()}/slide`, originalFilename: `slide.${kind}`,
+      mimeType: mime, sizeBytes: 1,
+    } });
+    createdContentIds.add(id);
+    return id;
+  }
+
+  it("orders a recording's images, moves an image between recordings, and the library says whose page each is", async () => {
+    const recording = await item('mp3', 'audio/mpeg');
+    const other = await item('m4a', 'audio/mp4');
+    const first = await item('png', 'image/png');
+    const second = await item('jpg', 'image/jpeg');
+    const handout = await item('pdf', 'application/pdf');
+
+    expect(await setRecordingSlides(prisma, admin(), recording, [second, first])).toEqual([
+      { id: second, title: `${TAG} شريحة jpg`, position: 0 },
+      { id: first, title: `${TAG} شريحة png`, position: 1 },
+    ]);
+    // A teacher of the branch edits them as she edits the items themselves.
+    expect((await listRecordingSlides(prisma, teacher(), recording)).map((s) => s.id)).toEqual([second, first]);
+
+    // An image is a page of ONE recording: listed for another, it leaves the first.
+    await setRecordingSlides(prisma, admin(), other, [first]);
+    expect((await listRecordingSlides(prisma, admin(), recording)).map((s) => s.id)).toEqual([second]);
+
+    // What is not a recording has no slides; what is not an image is no slide.
+    expect(await failure(() => setRecordingSlides(prisma, admin(), handout, [first]))).toMatchObject({
+      code: 'VALIDATION_FAILED', details: { reason: 'NOT_A_RECORDING' },
+    });
+    expect(await failure(() => setRecordingSlides(prisma, admin(), recording, [handout]))).toMatchObject({
+      code: 'VALIDATION_FAILED', details: { reason: 'NOT_AN_IMAGE' },
+    });
+    expect(await failure(() => setRecordingSlides(prisma, admin(), recording, [second, second]))).toMatchObject({
+      code: 'VALIDATION_FAILED', details: { reason: 'DUPLICATE_SLIDE' },
+    });
+    // The database's own last word, past the service.
+    await expect(prisma.recordingSlide.create({ data: { slideId: handout, recordingId: recording, position: 5 } })).rejects.toThrow();
+
+    // The library row of each image names its recording; a session's items name the session.
+    await prisma.sessionContent.create({ data: { sessionId, contentId: recording } });
+    const rows = (await listLibrary(prisma, null, { levelId, pageSize: 100 })).data;
+    const row = (id: string) => rows.find((r) => r.id === id);
+    expect(row(second)).toMatchObject({ slideOfId: recording, slidePosition: 0 });
+    expect(row(first)).toMatchObject({ slideOfId: other, slidePosition: 0 });
+    expect(row(handout)).toMatchObject({ slideOfId: null, slidePosition: null, sessionIds: [] });
+    expect(row(recording)?.sessionIds).toEqual([sessionId]);
+
+    // A deleted recording has no pages any more; `[]` clears a list.
+    await prisma.educationalContent.update({ where: { id: other }, data: { deletedAt: new Date() } });
+    const after = (await listLibrary(prisma, null, { levelId, pageSize: 100 })).data;
+    expect(after.find((r) => r.id === first)).toMatchObject({ slideOfId: null });
+    expect(await setRecordingSlides(prisma, admin(), recording, [])).toEqual([]);
+    await prisma.sessionContent.deleteMany({ where: { contentId: recording } });
+  });
+});
+
 describe("abort", () => {
   it("removes the object so an abandoned upload leaves nothing behind", async () => {
     const bytes = pdfBytes();
@@ -1681,6 +1743,34 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
     }
     await prisma.sessionStaff.create({ data: { sessionId, userId: teacherId, position: 'teacher' } });
     await prisma.sessionContent.create({ data: { sessionId, contentId: items['image']! } });
+    // R247 — «حسب السورة» by year, with pages: a recording of this session (the
+    // session's image is its page) and its own page, and one of another year.
+    const existingYear = await prisma.academicYear.findFirst({
+      where: { id: { not: academicYearId }, deletedAt: null },
+      orderBy: { label: 'asc' },
+    });
+    const earlierYear = existingYear ?? (await prisma.academicYear.create({ data: { label: '2000-2001' } }));
+    const surahItems: Record<string, string> = {};
+    for (const [name, mime, bytes, yearId] of [
+      ['lesson', 'audio/wav', audio, academicYearId],
+      ['page', 'image/png', readFileSync('../frontend/public/favicon-32.png'), academicYearId],
+      ['earlier', 'audio/wav', audio, earlierYear.id],
+    ] as const) {
+      const id = randomUUID();
+      const key = buildStorageKey(id, `surah.${mime.split('/')[1]}`);
+      trackObject('public', key);
+      await clients.internal.send(new PutObjectCommand({ Bucket: 'public', Key: key, Body: bytes, ContentType: mime }));
+      await prisma.educationalContent.create({ data: {
+        id, title: `${TAG} الحصة ${name}`, levelId, subjectId, academicYearId: yearId, branchId, visibility: 'public',
+        surahId: mime.startsWith('audio/') ? 1 : null,
+        storageBucket: 'public', storageKey: key, originalFilename: `surah.${name}`, mimeType: mime, sizeBytes: bytes.length,
+      } });
+      createdContentIds.add(id);
+      surahItems[name] = id;
+    }
+    await prisma.sessionContent.create({ data: { sessionId, contentId: surahItems['lesson']! } });
+    await setRecordingSlides(prisma, admin(), surahItems['lesson']!, [surahItems['page']!]);
+    const years = await prisma.academicYear.findMany({ where: { id: { in: [academicYearId, earlierYear.id] } }, select: { label: true } });
     // Private material is visible to the teacher because it is used in the
     // exact Session she staffs, not because the browser fixture grants a wider
     // content role than production does.
@@ -1726,6 +1816,15 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
           },
           date: session.date.toISOString().slice(0, 10),
           restrictedId: restricted.id,
+          surahPage: {
+            surah: 1,
+            years: years.map((y) => y.label).sort().reverse(),
+            lessonYear: (await prisma.academicYear.findUniqueOrThrow({ where: { id: academicYearId } })).label,
+            pageTitles: [`${TAG} image`, `${TAG} الحصة page`],
+            lesson: surahItems['lesson'],
+            page: surahItems['page'],
+            sessionPage: items['image'],
+          },
           cookies,
           expected: {
             subject: `${TAG} مادة`,
@@ -1744,6 +1843,12 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
       if (failed.stdout) process.stdout.write(failed.stdout);
       if (failed.stderr) process.stderr.write(failed.stderr);
       throw error;
+    } finally {
+      // A year this test created goes with the one item filed under it.
+      if (existingYear === null) {
+        await prisma.educationalContent.delete({ where: { id: surahItems['earlier']! } });
+        await prisma.academicYear.delete({ where: { id: earlierYear.id } });
+      }
     }
   }, 300_000);
   it("serves public bytes anonymously through the actual HTTP route and Nginx gate", async () => {

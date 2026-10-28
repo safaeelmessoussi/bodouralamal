@@ -206,3 +206,70 @@ describe('R239 — the lesson player', async () => {
     expect(clock(3754)).toBe('1:02:34');
   });
 });
+
+describe('R247 — by academic year, and the pages of what is heard', async () => {
+  const { SurahPage, byYear, slidesOf } = await import('./surah-page.js');
+  const at = (id: string, mime: string, over: Record<string, unknown> = {}) => ({
+    ...entry(id, 1, mime).item,
+    subjectName: null,
+    academic_year_label: '2026-2027',
+    session_ids: [] as string[],
+    ...over,
+  });
+  const render = (items: ReturnType<typeof at>[]) =>
+    renderToStaticMarkup(
+      <SurahPage surah={1} title="الفاتحة" items={items} accessToken={null} activeChildId={null} onOpen={() => undefined} startOpen />,
+    );
+
+  it('puts the newest year first and keeps each year in its order', () => {
+    const years = byYear([
+      at('a', 'audio/mpeg', { academic_year_label: '2025-2026' }),
+      at('b', 'audio/mpeg'),
+      at('c', 'audio/mpeg', { academic_year_label: '2025-2026' }),
+    ]);
+    expect(years.map((y) => [y.year, y.items.map((i) => i.id)])).toEqual([
+      ['2026-2027', ['b']],
+      ['2025-2026', ['a', 'c']],
+    ]);
+  });
+
+  it('draws one heading per year, newest first, in the recordings and the handouts', () => {
+    const html = render([
+      at('a', 'audio/mpeg', { academic_year_label: '2025-2026' }),
+      at('b', 'audio/mpeg'),
+      at('p', 'application/pdf', { title: 'مطبوع تفسير سورة الفاتحة' }),
+    ]);
+    expect(html.indexOf('السنة الدراسية 2026-2027')).toBeLessThan(html.indexOf('السنة الدراسية 2025-2026'));
+    expect(html.match(/surah-library__yearToggle/g)).toHaveLength(3);
+  });
+
+  it("shows a recording's pages under it and a session's above its first recording, never on a shelf", () => {
+    const items = [
+      at('r1', 'audio/mpeg', { title: 'الحصة 1 الجزء 1', session_ids: ['s1'] }),
+      at('r2', 'audio/mpeg', { title: 'الحصة 1 الجزء 2', session_ids: ['s1'] }),
+      at('p2', 'image/png', { slide_of: 'r1', slide_position: 1 }),
+      at('p1', 'image/png', { slide_of: 'r1', slide_position: 0 }),
+      at('g', 'image/png', { session_ids: ['s1'] }),
+      at('drawing', 'image/png'),
+    ];
+    const pages = slidesOf(items);
+    expect(pages.byRecording.get('r1')?.map((i) => i.id)).toEqual(['p1', 'p2']);
+    expect(pages.bySession.get('s1')?.map((i) => i.id)).toEqual(['g']);
+    expect([...pages.ids].sort()).toEqual(['g', 'p1', 'p2']);
+    const html = render(items);
+    expect(html.match(/surah-slides--session/g)).toHaveLength(1);
+    expect(html).toContain(ar.content.bySurah.trackSlides);
+    expect(html.indexOf(ar.content.bySurah.sessionSlides)).toBeLessThan(html.indexOf('الحصة 1 الجزء 1'));
+    // Only the drawing that is no page stays on «ملخصات ومذكرات».
+    expect(html.match(/surah-tile[" ]/g)).toHaveLength(1);
+  });
+
+  it("brings a recording's page to its Surah when the image is filed under none", () => {
+    const recording = entry('rec', 1, 'audio/mpeg');
+    const page = entry('page', null, 'image/png');
+    page.item = { ...page.item, slide_of: 'rec', slide_position: 0 };
+    const stray = entry('stray', null, 'image/png');
+    const [fatiha] = groupBySurah([recording, page, stray]);
+    expect(fatiha?.items.map((i) => i.id).sort()).toEqual(['page', 'rec']);
+  });
+});

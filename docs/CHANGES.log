@@ -474,3 +474,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Live probe: 40/40 lessons answered `Content-Encoding: aws-chunked` (SDK checksum upload, kept by SeaweedFS); Safari fails such a body, the player gave «تعذّر تشغيل هذا الدرس» after 3 renewals.
 - `nginx.conf` map `$storage_content_encoding` (token removed, a real encoding kept); `storage-proxy.conf` `proxy_hide_header` + `add_header`; `check-storage-edge.sh` pins it; runbook check added.
 - Verified: `nginx -t` + restart on Localhost (no header on a read), throwaway nginx proves the three cases; content integration through the new edge.
+
+## 2026-10-28 — SRS Revision 247: «حسب السورة» by academic year; «صفحات المطبوع» beside what is heard; the follow-up plan
+- `surah-page.tsx`: `byYear` groups «تسجيلات الدروس»/«مطبوعات الدروس» newest first (closed unless one year; auto-next opens the next year); `slidesOf` + `SlideViewer` show a recording's pages under it and a session's images above its first recording, opening as it plays; `groupBySurah` brings them to the recording's Surah.
+- `recording_slide` (PK `slide_id`, trigger `recording_slide_kinds`), `GET/PUT /content/{id}/slides` (`recording-slides.service.ts`, the edit rule on recording and images); library rows carry `slide_of`, `slide_position`, `session_ids`.
+- «مكتبة المحتوى»: row action «صفحات المطبوع» (`RecordingSlidesDialog`: order, remove, pick, upload images); `FileUploader accept`; 20 keys in ar + 6 locales.
+- `overview/lesson-follow-up-plan.md`: the Telegram channel/group workflow once sign-in opens, Owner decisions D-a…D-f, today's read-only «أسئلة الحصة» option; TASKS D15.
+- Verified: backend/frontend gates, guards, content integration (+ the public-reader browser checks of the Surah page at 390/1366).

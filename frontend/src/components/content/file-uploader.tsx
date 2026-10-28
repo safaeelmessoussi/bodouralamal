@@ -71,6 +71,8 @@ export interface FileUploaderProps {
   incomplete?: boolean;
   /** R53 — a replacement swaps ONE file on one record. */
   single?: boolean;
+  /** R247 — the picker's hint, narrower than TD-9's whole list (images only). */
+  accept?: string;
 }
 
 /**
@@ -129,6 +131,7 @@ export function FileUploader({
   disabledReason = null,
   incomplete = false,
   single = false,
+  accept = ACCEPT,
 }: FileUploaderProps): ReactNode {
   // There is always one item, so the title and description are there from
   // the start (the composed title shows before a file is picked).
@@ -245,7 +248,7 @@ export function FileUploader({
           ref={inputRef}
           className="field__control"
           type="file"
-          accept={ACCEPT}
+          accept={accept}
           multiple={!single}
           disabled={running}
           onChange={(e) => chooseFiles([...(e.target.files ?? [])])}

@@ -819,6 +819,7 @@ const TABLE_ENTITY: Record<string, string> = {
   educational_content: 'EducationalContent',
   educational_content_level: 'EducationalContent',
   educational_content_branch: 'EducationalContent',
+  recording_slide: 'EducationalContent',
   enrollment: 'Enrollment',
   event: 'Event',
   event_administrative_group: 'Event',

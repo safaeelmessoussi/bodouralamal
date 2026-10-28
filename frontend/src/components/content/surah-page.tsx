@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { fetchContentUrl, type ContentItem } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
@@ -52,9 +52,12 @@ export function SurahPage({
   onOpen: (item: ContentItem) => void;
 }): ReactNode {
   const profile = SURAH_DIAGRAMS.get(surah);
-  const shelves = SECTIONS.map((section) => ({ ...section, items: items.filter(section.holds) })).filter(
-    (section) => section.items.length > 0,
-  );
+  // R247 — a page of a recording or of its session is shown beside it, not on a shelf.
+  const pages = slidesOf(items);
+  const shelves = SECTIONS.map((section) => ({
+    ...section,
+    items: items.filter((item) => !pages.ids.has(item.id) && section.holds(item)),
+  })).filter((section) => section.items.length > 0);
   const diagrams = profile?.diagrams ?? [];
   const keys = [...(diagrams.length > 0 ? ['diagrams'] : []), ...shelves.map((section) => section.key)];
   // R239 — every section opens and closes.
@@ -70,6 +73,38 @@ export function SurahPage({
   // R239 — after one lesson ends, the next one plays (on by default).
   const [autoNext, setAutoNext] = useState<boolean>(() => readAutoNext());
   const [cue, setCue] = useState<number | null>(null);
+  /**
+   * R247 — «تسجيلات الدروس» and «مطبوعات الدروس» by academic year, newest
+   * first, each year closed — unless the section has one year only, which is
+   * open from the start. A year's key is flipped from that default.
+   */
+  const [flipped, setFlipped] = useState<Set<string>>(() => new Set());
+  const yearOpen = (key: string, single: boolean): boolean => (single || startOpen) !== flipped.has(key);
+  const flip = (key: string): void =>
+    setFlipped((was) => {
+      const next = new Set(was);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  /** R247 — the session whose recording is playing: its pages open. */
+  const [playingSession, setPlayingSession] = useState<string | null>(null);
+
+  const yearHeading = (key: string, year: string, single: boolean): ReactNode => (
+    <h4 className="surah-library__yearTitle">
+      <button
+        type="button"
+        className="surah-library__yearToggle"
+        aria-expanded={yearOpen(key, single)}
+        onClick={() => flip(key)}
+      >
+        {t('content.bySurah.year').replace('{year}', year)}
+        <span className="surah-library__chevron" aria-hidden="true">
+          {yearOpen(key, single) ? '−' : '+'}
+        </span>
+      </button>
+    </h4>
+  );
 
   const heading = (key: string, icon: Parameters<typeof Icon>[0]['name'], label: string): ReactNode => (
     <h3 id={`surah-${key}-title`} className="surah-library__sectionTitle">
@@ -160,20 +195,66 @@ export function SurahPage({
                 />
                 {t('content.bySurah.autoNext')}
               </label>
-              <ol className="surah-library__tracks">
-                {section.items.map((item, index) => (
-                  <AudioTrack
-                    key={item.id}
-                    surah={surah}
-                    item={item}
-                    index={index + 1}
-                    accessToken={accessToken}
-                    activeChildId={activeChildId}
-                    cued={cue === index}
-                    onFinished={() => setCue(autoNext && index + 1 < section.items.length ? index + 1 : null)}
-                  />
-                ))}
-              </ol>
+              {(() => {
+                const years = byYear(section.items);
+                const single = years.length === 1;
+                // The play order runs across the years, newest first, as drawn.
+                const order = years.flatMap((year) => year.items);
+                const keyOf = (item: SurahItem): string => `listen:${item.academic_year_label ?? ''}`;
+                return years.map((year) => {
+                  const key = `listen:${year.year}`;
+                  const drawn = new Set<string>();
+                  return (
+                    <div key={key} className="surah-library__year">
+                      {yearHeading(key, year.year, single)}
+                      {yearOpen(key, single) ? (
+                        <ol className="surah-library__tracks">
+                          {year.items.map((item, index) => {
+                            const at = order.indexOf(item);
+                            // R247 — a session's pages, once, above its first recording here.
+                            const session = (item.session_ids ?? []).find((id) => pages.bySession.has(id)) ?? null;
+                            const first = session !== null && !drawn.has(session);
+                            if (session !== null) drawn.add(session);
+                            return (
+                              <Fragment key={item.id}>
+                                {first && session !== null ? (
+                                  <li className="surah-slides surah-slides--session">
+                                    <SlideViewer
+                                      slides={pages.bySession.get(session) ?? []}
+                                      label={t('content.bySurah.sessionSlides')}
+                                      revealed={playingSession === session}
+                                      accessToken={accessToken}
+                                      activeChildId={activeChildId}
+                                      onOpen={onOpen}
+                                    />
+                                  </li>
+                                ) : null}
+                                <AudioTrack
+                                  surah={surah}
+                                  item={item}
+                                  index={index + 1}
+                                  slides={pages.byRecording.get(item.id) ?? []}
+                                  accessToken={accessToken}
+                                  activeChildId={activeChildId}
+                                  onOpen={onOpen}
+                                  cued={cue === at}
+                                  onStarted={() => setPlayingSession(session)}
+                                  onFinished={() => {
+                                    const next = autoNext && at + 1 < order.length ? at + 1 : null;
+                                    // The next lesson may open a closed year.
+                                    if (next !== null && !yearOpen(keyOf(order[next]!), single)) flip(keyOf(order[next]!));
+                                    setCue(next);
+                                  }}
+                                />
+                              </Fragment>
+                            );
+                          })}
+                        </ol>
+                      ) : null}
+                    </div>
+                  );
+                });
+              })()}
               {/* R241 — one quiz over every lesson of the Surah. */}
               <div className="surah-quiz__final">
                 <QuizButton surah={surah} quizKey="final" label={t('content.quiz.final')} final />
@@ -181,7 +262,28 @@ export function SurahPage({
             </div>
           ) : (
             <div id={`surah-${section.key}-body`} className="surah-library__shelf">
-              {section.items.some((item) => item.kind !== 'image') ? (
+              {section.key === 'slides'
+                ? (() => {
+                    // R247 — «مطبوعات الدروس» by academic year, as the recordings are.
+                    const years = byYear(section.items);
+                    return years.map((year) => {
+                      const key = `slides:${year.year}`;
+                      return (
+                        <div key={key} className="surah-library__year">
+                          {yearHeading(key, year.year, years.length === 1)}
+                          {yearOpen(key, years.length === 1) ? (
+                            <ul className="content-list">
+                              {year.items.map((item) => (
+                                <ContentCard key={item.id} item={item} onOpen={onOpen} />
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+                      );
+                    });
+                  })()
+                : null}
+              {section.key !== 'slides' && section.items.some((item) => item.kind !== 'image') ? (
                 <ul className="content-list">
                   {section.items
                     .filter((item) => item.kind !== 'image')
@@ -226,6 +328,154 @@ export function isSlides(item: Pick<ContentItem, 'title' | 'mime_type'>): boolea
 }
 
 const isReading = (item: ContentItem): boolean => item.kind === 'pdf' || item.kind === 'document';
+
+/** R247 — items by academic year, the newest first; each year keeps the items' order. */
+export function byYear<T extends Pick<ContentItem, 'academic_year_label'>>(
+  items: readonly T[],
+): { year: string; items: T[] }[] {
+  const years = new Map<string, T[]>();
+  for (const item of items) {
+    const year = item.academic_year_label ?? '';
+    years.set(year, [...(years.get(year) ?? []), item]);
+  }
+  return [...years.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([year, list]) => ({ year, items: list }));
+}
+
+/**
+ * **R247 — which images are pages of what is heard** (the Owner, 2026-10-28).
+ * A recording's own (`slide_of`, in `slide_position` order), and a class
+ * session's: the images attached to a session one of this page's recordings
+ * belongs to, in the page's order. `ids` — every image shown that way, which
+ * no shelf repeats.
+ */
+export function slidesOf(items: readonly SurahItem[]): {
+  byRecording: Map<string, SurahItem[]>;
+  bySession: Map<string, SurahItem[]>;
+  ids: Set<string>;
+} {
+  const audio = items.filter((item) => item.kind === 'audio');
+  const recordings = new Set(audio.map((item) => item.id));
+  const sessions = new Set(audio.flatMap((item) => item.session_ids ?? []));
+  const byRecording = new Map<string, SurahItem[]>();
+  const bySession = new Map<string, SurahItem[]>();
+  const ids = new Set<string>();
+  for (const item of items) {
+    if (item.kind !== 'image') continue;
+    if (item.slide_of && recordings.has(item.slide_of)) {
+      byRecording.set(item.slide_of, [...(byRecording.get(item.slide_of) ?? []), item]);
+      ids.add(item.id);
+      continue;
+    }
+    for (const session of item.session_ids ?? []) {
+      if (!sessions.has(session)) continue;
+      bySession.set(session, [...(bySession.get(session) ?? []), item]);
+      ids.add(item.id);
+    }
+  }
+  for (const list of byRecording.values()) list.sort((a, b) => (a.slide_position ?? 0) - (b.slide_position ?? 0));
+  return { byRecording, bySession, ids };
+}
+
+/**
+ * **R247 — the pages of what is being heard**, one at a time: the image, «السابقة»
+ * and «التالية», and where in the set it is. Closed until asked for — or until
+ * its recording plays (`revealed`). A tap on the page opens it full screen.
+ * Each image is fetched only when it is shown.
+ */
+function SlideViewer({
+  slides,
+  label,
+  revealed,
+  accessToken,
+  activeChildId,
+  onOpen,
+}: {
+  slides: readonly SurahItem[];
+  label: string;
+  revealed: boolean;
+  accessToken: string | null;
+  activeChildId: string | null;
+  onOpen: (item: ContentItem) => void;
+}): ReactNode {
+  const [open, setOpen] = useState(false);
+  const [at, setAt] = useState(0);
+  const [urls, setUrls] = useState<Record<string, string | null>>({});
+  const slide = slides[Math.min(at, slides.length - 1)];
+
+  useEffect(() => {
+    if (revealed) setOpen(true);
+  }, [revealed]);
+
+  useEffect(() => {
+    if (!open || !slide || slide.id in urls) return;
+    let live = true;
+    void fetchContentUrl(slide.id, accessToken, activeChildId)
+      .catch(() => null)
+      .then((url) => {
+        if (live) setUrls((was) => ({ ...was, [slide.id]: url }));
+      });
+    return () => {
+      live = false;
+    };
+  }, [open, slide?.id]);
+
+  if (!slide) return null;
+  const url = urls[slide.id];
+  return (
+    <div className="surah-slides__viewer">
+      <button
+        type="button"
+        className="surah-slides__toggle"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Icon name="image" size={16} />
+        {label}
+        <span className="surah-slides__count">({slides.length})</span>
+        <span className="surah-library__chevron" aria-hidden="true">
+          {open ? '−' : '+'}
+        </span>
+      </button>
+      {open ? (
+        <figure className="surah-slides__stage">
+          <button type="button" className="surah-slides__page" onClick={() => onOpen(slide)} aria-label={slide.title}>
+            {url ? <img src={url} alt={slide.title} /> : <Icon name="image" size={32} />}
+          </button>
+          {slides.length > 1 ? (
+            <figcaption className="surah-slides__nav">
+              {/* Right to left: the previous page is on the right, pointing right. */}
+              <button
+                type="button"
+                className="surah-player__button"
+                disabled={at === 0}
+                onClick={() => setAt(at - 1)}
+                aria-label={t('content.bySurah.slidePrev')}
+              >
+                <svg className="surah-player__glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="2" />
+                </svg>
+              </button>
+              <span className="surah-slides__where" dir="ltr">
+                {at + 1} / {slides.length}
+              </span>
+              <button
+                type="button"
+                className="surah-player__button"
+                disabled={at >= slides.length - 1}
+                onClick={() => setAt(at + 1)}
+                aria-label={t('content.bySurah.slideNext')}
+              >
+                <svg className="surah-player__glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" strokeWidth="2" />
+                </svg>
+              </button>
+            </figcaption>
+          ) : null}
+        </figure>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * A Surah's shelves, in the order the Owner listed them (R212). **R242** —
@@ -279,18 +529,26 @@ function AudioTrack({
   surah,
   item,
   index,
+  slides,
   accessToken,
   activeChildId,
+  onOpen,
   cued,
+  onStarted,
   onFinished,
 }: {
   surah: number;
   item: SurahItem;
   index: number;
+  /** R247 — the pages of its «مطبوع», shown under it; they open as it plays. */
+  slides: readonly SurahItem[];
   accessToken: string | null;
   activeChildId: string | null;
+  onOpen: (item: ContentItem) => void;
   /** R239 — the previous lesson just ended: start this one. */
   cued: boolean;
+  /** R247 — it began playing (its session's pages open). */
+  onStarted: () => void;
   onFinished: () => void;
 }): ReactNode {
   const direct = item.stream_url ?? null;
@@ -441,6 +699,16 @@ function AudioTrack({
             </span>
           </div>
         )}
+        {slides.length > 0 ? (
+          <SlideViewer
+            slides={slides}
+            label={t('content.bySurah.trackSlides')}
+            revealed={playing}
+            accessToken={accessToken}
+            activeChildId={activeChildId}
+            onOpen={onOpen}
+          />
+        ) : null}
         {/* R241 — «اختبار الفهم» of this lesson, where it has one. */}
         <QuizButton surah={surah} quizKey={item.id} label={t('content.quiz.open')} />
         {state === 'ready' && url ? (
@@ -451,6 +719,7 @@ function AudioTrack({
             onPlay={(event) => {
               pauseOthers(event.currentTarget);
               setPlaying(true);
+              onStarted();
             }}
             onPause={(event) => {
               setPlaying(false);

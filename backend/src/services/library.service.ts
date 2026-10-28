@@ -215,6 +215,12 @@ export interface LibraryItem {
   /** R223 — a PUBLIC audio's storage key, so the list can carry its stable
    *  address (§3.1) and the page plays it in one click; `null` otherwise. */
   publicAudioKey: string | null;
+  /** R247 — on an image: the live recording it is a page of, and its place. */
+  slideOfId: string | null;
+  slidePosition: number | null;
+  /** R247 — the live sessions it is attached to (a session's images are the
+   *  slides of its recordings). */
+  sessionIds: string[];
 }
 
 /** Staff — Admin, Super Admin or Teacher — are the only ones §4.9 shows `hidden` to. */
@@ -530,8 +536,21 @@ export async function listLibrary(
              q."name_arabic"             AS "surahName",
              CASE WHEN c."storage_bucket" = 'public' AND c."visibility" = 'public'
                        AND c."mime_type" LIKE 'audio/%'
-                  THEN c."storage_key" END AS "publicAudioKey"
+                  THEN c."storage_key" END AS "publicAudioKey",
+             rs."recording_id"           AS "slideOfId",
+             rs."position"               AS "slidePosition",
+             COALESCE((
+               SELECT json_agg(DISTINCT sc."session_id")
+               FROM "session_content" sc
+               JOIN "session" se ON se."id" = sc."session_id" AND se."deleted_at" IS NULL
+               WHERE sc."educational_content_id" = c."id" AND sc."deleted_at" IS NULL
+             ), '[]'::json)              AS "sessionIds"
       FROM "educational_content" c
+      -- R247 — the recording an image is a page of, while that recording lives.
+      LEFT JOIN "recording_slide" rs ON rs."slide_id" = c."id" AND EXISTS (
+        SELECT 1 FROM "educational_content" rec
+        WHERE rec."id" = rs."recording_id" AND rec."deleted_at" IS NULL
+      )
       LEFT JOIN "quran_surah" q ON q."surah_id" = c."surah_id"
       JOIN "level" l          ON l."id"  = c."level_id"
       JOIN "category" cat     ON cat."id" = l."category_id"
