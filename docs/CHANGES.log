@@ -508,3 +508,4 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-28 — SRS Revision 252: «الجدول الزمني» opens on «تفسير القرآن»
 - `calendar.tsx`: `DEFAULT_SUBJECT_NAME`, applied once from the bootstrap's Subjects unless the address names a Subject or an occurrence (a ref guard); test pins it.
 - Verified: browser 5/5 on Localhost at 390 (plain visit chooses it, 9 sessions shown; «الكل» clears it and shows 50; a link to another Subject keeps it); calendar tests 69/69.
+- CI flake fixed: `verify-public-reader`'s phone dialog-fit measured mid `dialog-in` (12 px low, 1 px over); it now waits for finite animations. Content integration 218/218.

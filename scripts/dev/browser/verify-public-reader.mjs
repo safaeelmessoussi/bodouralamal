@@ -69,13 +69,15 @@ try {
   }
   const overflow = () => evaluate('document.documentElement.scrollWidth <= innerWidth + 1');
   // Its measurements travel with a failure, so CI says WHAT did not fit.
-  const dialogBox = () => evaluate(`(() => {
+  // The dialog rises into place (`dialog-in`): measured mid-rise it sat 12 px low
+  // and «did not fit» by a pixel (CI, R252). Measure once every finite animation is done (a skeleton's shimmer never ends).
+  const dialogBox = () => evaluate(`Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => null))).then(() => {
     const d = document.querySelector('dialog[open]'); if (!d) return null;
     const r = d.getBoundingClientRect(), b = d.querySelector('.dialog__close').getBoundingClientRect();
     const box = { left: r.left, right: r.right, top: r.top, bottom: r.bottom, vw: innerWidth, vh: innerHeight, close: b.width, closeLeft: b.left, closeRight: b.right };
     box.fits = r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight + 1 && b.width >= 32 && b.left >= r.left && b.right <= r.right;
     return JSON.stringify(box);
-  })()`);
+  })`);
   const dialogFits = async () => JSON.parse((await dialogBox()) ?? '{"fits":false}').fits;
   const shelf = (id) => `/resources?level=${fixture.levelId}&content=${id}`;
   await send('Network.clearBrowserCookies');
