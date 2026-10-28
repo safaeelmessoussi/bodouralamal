@@ -1087,3 +1087,13 @@ describe('prefilled_filters is a suggestion, never a scope', () => {
     expect(prefilled.level_id).toBeNull();
   });
 });
+
+describe('R252 — «الجدول الزمني» opens on «تفسير القرآن»', async () => {
+  const { default: SOURCE } = await import('./calendar.tsx?raw');
+  it('chooses it once, by its stored name, unless the address names a Subject or an occurrence', () => {
+    expect(SOURCE).toContain("const DEFAULT_SUBJECT_NAME = 'تفسير القرآن';");
+    expect(SOURCE).toContain("new URLSearchParams(window.location.search).has('subject_id') ||");
+    expect(SOURCE).toContain('readOccurrenceAddress(window.location.search) !== null');
+    expect(SOURCE).toContain("filters.set('subjectId', tafsir.id)");
+  });
+});

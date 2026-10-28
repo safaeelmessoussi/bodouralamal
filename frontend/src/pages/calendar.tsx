@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
 import {
@@ -74,6 +74,8 @@ type Load =
  * visitor sees of the public timetable; it never personalises it.
  */
 const PUBLIC_FILTER_FIELDS = ['branchId', 'categoryId', 'levelId', 'subjectId', 'surahId', 'type'] as const;
+/** R252 — the Subject «الجدول الزمني» opens on (matched by its stored name). */
+const DEFAULT_SUBJECT_NAME = 'تفسير القرآن';
 
 export function CalendarPage(): ReactNode {
   const { accessToken, status: sessionStatus } = useSession();
@@ -158,6 +160,24 @@ export function CalendarPage(): ReactNode {
       cancelled = true;
     };
   }, [from, to, categoryId]);
+
+  /**
+   * **R252 — «تفسير القرآن» chosen on arrival** (the Owner, 2026-10-28: «by
+   * default select تفسير القرآن in المادة as that is the most important subject
+   * and to make the calendar more visible»). Once, when the address names no
+   * Subject and opens no particular occurrence, so a shared link keeps what it
+   * says and «الكل» stays the reader's to choose.
+   */
+  const defaultSubjectApplied = useRef(
+    new URLSearchParams(window.location.search).has('subject_id') ||
+      readOccurrenceAddress(window.location.search) !== null,
+  );
+  useEffect(() => {
+    if (defaultSubjectApplied.current || !bootstrap) return;
+    defaultSubjectApplied.current = true;
+    const tafsir = bootstrap.subjects.find((subject) => subject.name === DEFAULT_SUBJECT_NAME);
+    if (tafsir) filters.set('subjectId', tafsir.id);
+  }, [bootstrap, filters]);
 
   /** The occurrences. Every filter narrows them server-side (TD-3.4). */
   useEffect(() => {

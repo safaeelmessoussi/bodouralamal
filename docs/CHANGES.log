@@ -504,3 +504,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `DataTable`: `data-label` per cell, phone rows as blocks (`admin.css` *A row as a block*), `.datatable__frame[data-more]` + `useScrollEdges` shade, two row actions nowrap, name column 14 rem; Hijri table in the frame. Toolbar two-per-row on a phone; dialogs/forms tighter; `level-grid--modules` tiles; profile flattened; library tabs `ModeLabel`; `PersonalCalendar headingHidden`.
 - Phone header: a grid (title | action, description full width); `measure-page-header` asserts it (9/9).
 - Verified: crawl of every route at 360/390/1366 (public, student, teacher, super admin) and 16 dialogs — no overflow, no wide element, no console error; frontend 1714, guards, sorting 17/17, unsaved 24/24, admin-navigation 37/42 (same 5 stale expectations as HEAD), shoot-pages 13/13.
+
+## 2026-10-28 — SRS Revision 252: «الجدول الزمني» opens on «تفسير القرآن»
+- `calendar.tsx`: `DEFAULT_SUBJECT_NAME`, applied once from the bootstrap's Subjects unless the address names a Subject or an occurrence (a ref guard); test pins it.
+- Verified: browser 5/5 on Localhost at 390 (plain visit chooses it, 9 sessions shown; «الكل» clears it and shows 50; a link to another Subject keeps it); calendar tests 69/69.
