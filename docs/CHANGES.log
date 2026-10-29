@@ -533,3 +533,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Backend: `personalFilters`/`personalCalendarOptions(as)`; `?as=` on both /me/calendar routes; profile `self_saved_at` + `?self_saved_at=` → 409 `TEACHER_SAVED_FIRST`; type usage = events + classes + exams (list and delete); library rows `subject_seasonal`/`subject_shared`.
 - Frontend: `PersonalCalendar as`; `/teacher`, `/teacher/calendar`, `/dashboard/student` redirect; `useTeachingProfileForm` (page + dialog); `SubjectLibrary`/`isGeneralEntry`; tabs renamed (ar + 6 locales); a download button per recording; `.certificate-list*` restored.
 - Verified: integration 321/321 (journey, calendar options as teacher/student, teacher-wins 409, library flags, type usage) + public reader 226/226 with «محتوى عام»; seed drill; frontend 1708, backend 391; browser: portals 25/25, teaching dialog = her form, «شهاداتي» gaps 12 px.
+
+## 2026-10-29 — SRS Revision 257: library tabs on a phone, «محتوى عام»'s Subject list
+- `.content-modes` two columns below 44rem, labels `white-space: normal`; `.subject-library .surah-library__surah` without the number column.
+- `verify-public-reader`: a Subject's name has its row at 1366/390; Localhost tabs measured at 320–412 px (no clip, no overlap).

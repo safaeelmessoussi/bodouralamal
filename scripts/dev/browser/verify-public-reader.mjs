@@ -168,6 +168,22 @@ try {
   check('«محتوى عام»: its recording first, its file below, no filters', general.firstTrack === gen.lectureTitle && general.cards.includes(gen.notesTitle) && general.trackBeforeCards && general.filters === 0, JSON.stringify(general));
   check('a recording downloads from its own row', general.download);
   check('«محتوى عام» fits a phone', await overflow());
+  // R257 — the Subject's name has the row (the Surah list's number column squeezed it to a word a line).
+  for (const w of [1366, 390]) {
+    await width(w);
+    await open('/resources?view=categories');
+    await waitFor("document.querySelectorAll('.subject-library .surah-library__name').length > 0");
+    const name = JSON.parse(await evaluate(`JSON.stringify((() => {
+      const n = [...document.querySelectorAll('.subject-library .surah-library__name')].find((x) => x.textContent.includes(${JSON.stringify('دورة موسمية')}));
+      if (!n) return null;
+      const r = n.getBoundingClientRect(); const button = n.parentElement.getBoundingClientRect();
+      const count = n.parentElement.querySelector('.surah-library__count')?.getBoundingClientRect().width ?? 0;
+      return { width: Math.round(r.width), button: Math.round(button.width), count: Math.round(count) };
+    })())`));
+    // The fixture's name carries a long test tag and may wrap; what matters is that it has the row.
+    check(`${w}: a Subject's name has its row in the list`, name !== null && name.width >= (name.button - name.count) * 0.7, JSON.stringify(name));
+  }
+  await width(390);
   await open('/resources?view=levels');
   await waitFor("document.querySelectorAll('.content-card').length > 0");
   check('«محتوى المستويات» holds nothing general', await evaluate(`![...document.querySelectorAll('.content-card')].some((c) => c.textContent.includes(${JSON.stringify(gen.notesTitle)}))`));

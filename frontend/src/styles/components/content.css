@@ -830,11 +830,13 @@
   align-items: center;
   gap: var(--space-2);
 }
-/* R250 — four views on a phone: four equal columns, each word under the other. */
+/* R250 — four views on a phone. R257 — two to a row: the R256 labels are two
+   words («محتوى المستويات»), and four columns on one line made them overlap. */
 @media (max-width: 44rem) {
   .content-modes {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-1);
     inline-size: 100%;
   }
   .content-modes .btn {
@@ -856,8 +858,11 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
+  /* A label wraps inside its own tab rather than running into the next one. */
   .content-modes .btn {
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    min-inline-size: 0;
   }
 }
 
@@ -1589,4 +1594,10 @@
 .content-card__wrap.is-focused > .content-card {
   outline: 3px solid var(--color-focus-ring);
   outline-offset: 2px;
+}
+
+/* R257 — «محتوى عام»: a Subject has no number, so its name takes the whole
+   row (the Surah list's 2rem number column squeezed it to one word a line). */
+.subject-library .surah-library__surah {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
