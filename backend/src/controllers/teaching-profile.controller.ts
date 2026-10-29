@@ -1,3 +1,4 @@
+import { AppError } from '../lib/errors.js';
 import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
@@ -37,6 +38,22 @@ export function read(prisma: PrismaClient) {
   };
 }
 
+/**
+ * **R256 — `?self_saved_at=`**: the `self_saved_at` the administrator's form
+ * opened with (`none` when she had never saved). Absent, the older contract
+ * (no check). A different value now means she saved meanwhile: 409
+ * `VERSION_CONFLICT`, reason `TEACHER_SAVED_FIRST` — hers stands.
+ */
+function expectedSelfSave(req: Request): string | null | undefined {
+  const raw = req.query['self_saved_at'];
+  if (raw === undefined) return undefined;
+  if (raw === 'none') return null;
+  if (typeof raw !== 'string' || Number.isNaN(Date.parse(raw))) {
+    throw new AppError('VALIDATION_FAILED', 'self_saved_at is an ISO instant or none');
+  }
+  return new Date(raw).toISOString();
+}
+
 export function replace(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const body = parse(teachingProfileSchema, req.body ?? {});
@@ -49,7 +66,7 @@ export function replace(prisma: PrismaClient) {
         endTime: a.end_time,
         mode: a.mode ?? null,
       })),
-    });
+    }, expectedSelfSave(req));
     res.json({ data: profile });
   };
 }
@@ -161,6 +178,6 @@ export function replaceMyFraming(prisma: PrismaClient) {
 export function replaceUserFraming(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const body = parse(framingPreference, req.body ?? {});
-    res.json({ data: await replaceFraming(prisma, requireActor(req), idParam(req, 'id'), body) });
+    res.json({ data: await replaceFraming(prisma, requireActor(req), idParam(req, 'id'), body, expectedSelfSave(req)) });
   };
 }

@@ -90,6 +90,9 @@ const ITEM_KEYS = [
   "stream_url",
   "subject_id",
   "subject_name",
+  // R256 — «محتوى عام»: a seasonal Subject, or one shared by every Level of the Category.
+  "subject_seasonal",
+  "subject_shared",
   // R177 §7 — the one Surah the item is about, or none.
   "surah_id",
   "surah_name",

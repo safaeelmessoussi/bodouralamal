@@ -18,7 +18,8 @@
 export const ROLE_HOMES: { role: string; path: string }[] = [
   { role: 'super_admin', path: '/admin' },
   { role: 'admin', path: '/admin' },
-  { role: 'teacher', path: '/teacher' },
+  // R256 — each portal opens on its working page: «الجدولة», «تقويمي».
+  { role: 'teacher', path: '/teacher/schedules' },
   /**
    * **R62 — a parent's home is their child's dashboard, not one of their own.**
    *
@@ -34,8 +35,8 @@ export const ROLE_HOMES: { role: string; path: string }[] = [
    * who is both reaches the same screen either way, and the active role decides
    * whether it renders their own record or their child's.
    */
-  { role: 'parent', path: '/dashboard/student' },
-  { role: 'student', path: '/dashboard/student' },
+  { role: 'parent', path: '/dashboard/student/calendar' },
+  { role: 'student', path: '/dashboard/student/calendar' },
 ];
 
 /**

@@ -87,7 +87,7 @@ describe('the §14.1 sitemap decides, not a second list', () => {
     // screens are later milestones.
     for (const { role, path } of ROLE_HOMES) {
       const route = resolveRoute(path);
-      expect(['admin', 'teacher', 'dashboard-student', 'screen-pending'] satisfies Route[]).toContain(route);
+      expect(['admin', 'teacher', 'dashboard-student-calendar', 'screen-pending'] satisfies Route[]).toContain(route);
       expect(route, `${role} → ${path} must not be a dead link`).not.toBe('not-found');
     }
   });

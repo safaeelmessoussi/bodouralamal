@@ -563,7 +563,7 @@ export function clock(seconds: number): string {
  * heard. When it ends, the page plays the next one (`onFinished`; on by
  * default, «تشغيل التالي تلقائيًا»).
  */
-function AudioTrack({
+export function AudioTrack({
   surah,
   item,
   index,
@@ -594,6 +594,7 @@ function AudioTrack({
   const [url, setUrl] = useState<string | null>(direct);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [current, setCurrent] = useState<number>(() => savedPlace(item.id) ?? 0);
   const [duration, setDuration] = useState<number>(() => savedDuration(item.id) ?? 0);
   /** Set when a renewed URL must resume where the old one stopped. */
@@ -735,6 +736,27 @@ function AudioTrack({
             <span className="surah-player__time" dir="ltr">
               {clock(current)} / {clock(total)}
             </span>
+            {/* R256 — every item downloads, a recording too: one more button in
+                this row, so the row does not grow. A separate `attachment` URL,
+                as the preview's own «تنزيل الملف» mints. */}
+            <button
+              type="button"
+              className="surah-player__button surah-player__button--download"
+              disabled={downloading}
+              onClick={() => {
+                setDownloading(true);
+                void fetchContentUrl(item.id, accessToken, activeChildId, 'attachment')
+                  .then((link) => {
+                    if (link) window.open(link, '_blank', 'noopener,noreferrer');
+                  })
+                  .catch(() => undefined)
+                  .finally(() => setDownloading(false));
+              }}
+              aria-label={`${t('content.download')} — ${item.title}`}
+              title={t('content.download')}
+            >
+              <Icon name="download" size={18} />
+            </button>
           </div>
         )}
         {slides.length > 0 ? (

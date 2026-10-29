@@ -56,7 +56,7 @@ const shell = () =>
 /* ── the مؤطرة ──────────────────────────────────────────────────────────── */
 
 await as(process.env.TEACHER_COOKIE);
-await open('/teacher');
+await open('/teacher/schedules');
 const teacherHome = await shell();
 
 check(
@@ -83,10 +83,12 @@ for (const label of ['الجدولة', 'نقاط الاختبارات', 'مكت�
     JSON.stringify(teacherHome.menu),
   );
 }
+// R256 — «مساحة التدريس» is withdrawn: her portal opens on «الجدولة», and
+// «إدخال أوقات التوفّر» closes the menu.
 check(
-  '3 · مساحة التدريس stays minimal — no cards, no calendar, no table',
-  teacherHome.calendars === 0 && teacherHome.tables === 0,
-  JSON.stringify({ calendars: teacherHome.calendars, tables: teacherHome.tables }),
+  '3 · no «مساحة التدريس»; «إدخال أوقات التوفّر» is last',
+  !teacherHome.menu.some((m) => m.includes('مساحة التدريس')) && (teacherHome.menu.at(-1) ?? '').includes('إدخال أوقات التوفّر'),
+  JSON.stringify(teacherHome.menu),
 );
 check(
   '4 · and the bell is in the top bar',
@@ -128,7 +130,7 @@ check(
 /* ── the beneficiary ────────────────────────────────────────────────────── */
 
 await as(process.env.STUDENT_COOKIE);
-await open('/dashboard/student');
+await open('/dashboard/student/calendar');
 const studentHome = await shell();
 
 check(
@@ -150,10 +152,11 @@ check(
   !studentHome.text.includes('حصص اليوم') && !studentHome.text.includes('القادمة'),
   studentHome.text.slice(0, 140),
 );
+// R256 — «لوحة المستفيدة» is withdrawn: her portal opens on «تقويمي».
 check(
-  '12 · لوحة المستفيد(ة) stays minimal — no calendar on it',
-  studentHome.calendars === 0,
-  JSON.stringify({ calendars: studentHome.calendars }),
+  '12 · no «لوحة المستفيد(ة)» in her menu',
+  !studentHome.menu.some((m) => m.includes('لوحة المستفيد')),
+  JSON.stringify(studentHome.menu),
 );
 check(
   '13 · and she has the bell too',

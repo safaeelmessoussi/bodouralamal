@@ -351,6 +351,7 @@ export function TeacherSchedulesPage(): ReactNode {
         * `catalogList`.
         */}
       <PersonalCalendar
+        as="teacher"
         token={accessToken}
         fields={['branchId', 'categoryId', 'levelId', 'type', 'subjectId', 'groupId', 'circleId']}
         columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'audience', 'branch', 'room']}

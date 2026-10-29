@@ -8,6 +8,7 @@ import {
   type HijriDay,
   type Occurrence,
   type PersonalCalendarOptions,
+  type PersonalRole,
 } from '../../adapters/calendar.js';
 import {
   useCalendarFilters,
@@ -56,7 +57,10 @@ export function PersonalCalendar({
   heading,
   headingHidden = false,
   catalogList,
+  as,
 }: {
+  /** R256 — whose calendar: what she teaches, or what she studies. */
+  as: PersonalRole;
   token: string | null;
   /** Which filters this reader may narrow by — see the note above. */
   fields?: readonly CalendarFilterField[];
@@ -111,6 +115,7 @@ export function PersonalCalendar({
         from,
         to,
         token,
+        as,
         ...(filters.value.branchId ? { branchId: filters.value.branchId } : {}),
         ...(filters.value.categoryId ? { categoryId: filters.value.categoryId } : {}),
         ...(filters.value.levelId ? { levelId: filters.value.levelId } : {}),
@@ -136,6 +141,7 @@ export function PersonalCalendar({
     filters.value.groupId,
     filters.value.circleId,
     filters.value.type,
+    as,
   ]);
 
   useEffect(() => {
@@ -154,10 +160,10 @@ export function PersonalCalendar({
     // Her own vocabulary, fetched once — it does not depend on the month, and
     // fetching it per month change would be the general bootstrap's mistake
     // again for a different field.
-    void fetchMyCalendarOptions(token)
+    void fetchMyCalendarOptions(token, as)
       .then(setOptions)
       .catch(() => setOptions(null));
-  }, [token]);
+  }, [token, as]);
 
   /**
    * **R254 — a list of one is chosen, not «الكل»** (the Owner: «if the drop

@@ -50,6 +50,8 @@ const querySchema = z.object({
   teaching_group_id: z.uuid().optional(),
   /** R176 §4 — a Surah number; classes and sittings only (see `CalendarQuery`). */
   surah_id: z.coerce.number().int().min(1).max(114).optional(),
+  // R256 — `GET /me/calendar` only: her teaching calendar or her studying one.
+  as: z.enum(['teacher', 'student']).optional(),
   /**
    * R84 — the STORAGE taxonomy. Retained because deep links carry it and
    * because it is still the honest answer for a row recording no catalogue
@@ -337,6 +339,7 @@ export function readMine(prisma: PrismaClient) {
         from: q.from,
         to: q.to,
         mine: true,
+        ...(q.as ? { as: q.as } : {}),
         ...(q.branch_id ? { branchId: q.branch_id } : {}),
         ...(q.level_id ? { levelId: q.level_id } : {}),
         ...(q.category_id ? { categoryId: q.category_id } : {}),
@@ -363,7 +366,10 @@ export function readMine(prisma: PrismaClient) {
 export function readMineOptions(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const actor = requireActor(req);
-    const options = await personalCalendarOptions(prisma, actor.userId);
+    // R256 — the same `as` as the calendar it filters.
+    const as = z.enum(['teacher', 'student']).optional().safeParse(req.query['as']);
+    if (!as.success) throw new AppError('VALIDATION_FAILED', 'as is teacher or student');
+    const options = await personalCalendarOptions(prisma, actor.userId, as.data);
     res.json({
       data: {
         branches: options.branches,

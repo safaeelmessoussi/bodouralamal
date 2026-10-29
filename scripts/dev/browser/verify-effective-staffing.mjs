@@ -185,7 +185,7 @@ for (const [name, cookie, pageCookie] of [
   // **`/teacher`, her portal's home** — `/dashboard/teacher` is not a route and
   // rendered «الصفحة غير موجودة», whose empty menu the harness read as a hidden
   // entry for somebody whose roster and marker were both correct.
-  await open('/teacher', 'main');
+  await open('/teacher/schedules', 'main');
   // eslint-disable-next-line no-await-in-loop
   await new Promise((r) => setTimeout(r, 1500));
   // eslint-disable-next-line no-await-in-loop

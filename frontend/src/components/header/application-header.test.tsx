@@ -86,7 +86,8 @@ describe('authenticated user', () => {
     // blank white page. Asserting the resolved path is what pins the fix; a
     // `toContain('/dashboard')` check passes either way, because
     // `/dashboard/student` contains it.
-    expect(html).toContain('href="/dashboard/student"');
+    // R256 — the student portal opens on «تقويمي».
+    expect(html).toContain('href="/dashboard/student/calendar"');
   });
 
   it('does NOT see Sign in', () => {

@@ -1,18 +1,16 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
 
 import {
   fetchMyTeachingProfile,
   saveMyAvailability,
   saveMyCapabilities,
   saveMyFraming,
-  type AvailabilityRange,
 } from '../../adapters/teaching-profile.js';
-import { AvailabilityEditor } from '../../components/teaching/availability-editor.js';
-import { FramingPreferenceEditor } from '../../components/teaching/framing-preference-editor.js';
-import type { FramingPreferenceView } from '../../components/teaching/framing-preference-summary.js';
 import {
-  type CapabilityOption,
-} from '../../components/teaching/capabilities-editor.js';
+  TeachingProfileSaveError,
+  useTeachingProfileForm,
+  type TeachingProfileChange,
+} from '../../components/teaching/teaching-profile-form.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ErrorPanel } from '../../components/ui/error-panel.js';
@@ -20,14 +18,6 @@ import { Feedback } from '../../components/ui/feedback.js';
 import { LoadingState } from '../../components/states.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
-import { isDirty } from '../../lib/form-dirty.js';
-import { ApiError } from '../../lib/api.js';
-import {
-  framingPayload,
-  teachingSectionFrom,
-  validateTeachingSection,
-  type TeachingSectionValue,
-} from '../../components/registration/role-sections.js';
 
 /**
  * `/teacher/availability` — **إدخال متى أنا متاحة** (SRS Revision 106).
@@ -76,183 +66,58 @@ import {
  * apply — its mechanism is a dialog's dismissal paths. What a page can do is
  * keep the save action live and honest, so `dirty` drives the button rather
  * than being decorative: nothing is auto-saved and nothing is silently lost.
+
+ * ## One form with the administrator's dialog (R256)
+ *
+ * The fields, the dirty check and the one save are `useTeachingProfileForm`,
+ * which «الملف التدريسي» renders too; this page sends each part to her own
+ * route.
  */
 export function TeacherAvailabilityPage(): ReactNode {
   const { accessToken } = useSession();
-  const [ranges, setRanges] = useState<AvailabilityRange[]>([]);
-  const [framing, setFraming] = useState<FramingPreferenceView | null>(null);
-  /** R253 — the framing preference as edited, and as last confirmed. */
-  const [framingValue, setFramingValue] = useState<TeachingSectionValue>(() => teachingSectionFrom(null));
-  const [pristineFraming, setPristineFraming] = useState<TeachingSectionValue>(() => teachingSectionFrom(null));
-  const [showFramingErrors, setShowFramingErrors] = useState(false);
-  /** What the server last confirmed — the comparison `dirty` is made against. */
-  const [pristine, setPristine] = useState<AvailabilityRange[]>([]);
-  /** The catalogue she chooses from, carried on her own profile read — she
-   *  cannot call `/admin/subjects`, and widening that to make this screen work
-   *  would be the one fix that is never right (rule O). */
-  const [allSubjects, setAllSubjects] = useState<CapabilityOption[]>([]);
-  const [allCategories, setAllCategories] = useState<CapabilityOption[]>([]);
-  const [subjectIds, setSubjectIds] = useState<string[]>([]);
-  const [categoryIds, setCategoryIds] = useState<string[]>([]);
-  /** What the server last confirmed for the capabilities half. Sorted, because
-   *  `MultiSelectField` returns click order and `isDirty` is order-sensitive —
-   *  the trap AY.1 records. */
-  const [pristineCaps, setPristineCaps] = useState<{ subjects: string[]; categories: string[] }>({
-    subjects: [],
-    categories: [],
-  });
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<unknown>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const profile = await fetchMyTeachingProfile(accessToken);
-      // The `id` each stored range carries is the server's; the editor works in
-      // the shape the write takes, so it is dropped rather than round-tripped.
-      const stored = profile.availability.map((a) => ({
-        weekday: a.weekday,
-        start_time: a.start_time,
-        end_time: a.end_time,
-        mode: a.mode,
-      }));
-      setRanges(stored);
-      setPristine(stored);
-      setFraming(profile.framing);
-      setFramingValue(teachingSectionFrom(profile.framing));
-      setPristineFraming(teachingSectionFrom(profile.framing));
-      setAllSubjects(profile.selectable_subjects);
-      setAllCategories(profile.selectable_categories);
-      const subs = profile.subjects.map((x) => x.id);
-      const cats = profile.categories.map((x) => x.id);
-      setSubjectIds(subs);
-      setCategoryIds(cats);
-      setPristineCaps({ subjects: [...subs].sort(), categories: [...cats].sort() });
-    } catch (error) {
-      setLoadError(error);
-    } finally {
-      setLoading(false);
-    }
+    const profile = await fetchMyTeachingProfile(accessToken);
+    return { profile, subjects: profile.selectable_subjects, categories: profile.selectable_categories };
   }, [accessToken]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const dirty = isDirty(ranges, pristine);
-  const capsDirty = isDirty(
-    { subjects: [...subjectIds].sort(), categories: [...categoryIds].sort() },
-    pristineCaps,
+  const save = useCallback(
+    async (change: TeachingProfileChange) => {
+      // Each changed part to her own route, in turn; the parts before a refusal are saved.
+      if (change.framing) {
+        await saveMyFraming(change.framing, accessToken).catch((error: unknown) => {
+          throw new TeachingProfileSaveError('framing', error);
+        });
+      }
+      if (change.capabilities) {
+        await saveMyCapabilities(change.capabilities.subjectIds, change.capabilities.categoryIds, accessToken).catch(
+          (error: unknown) => {
+            throw new TeachingProfileSaveError('capabilities', error);
+          },
+        );
+      }
+      if (change.availability) {
+        await saveMyAvailability(change.availability, accessToken).catch((error: unknown) => {
+          throw new TeachingProfileSaveError('availability', error);
+        });
+      }
+    },
+    [accessToken],
   );
-
-  const framingDirty = isDirty(framingValue, pristineFraming);
-  const anyDirty = dirty || capsDirty || framingDirty;
-
-  /** R253 — one save for the page: each changed part to its own route, in turn. */
-  async function saveAll(): Promise<void> {
-    setNotice(null);
-    if (framingDirty && Object.keys(validateTeachingSection(framingValue)).length > 0) {
-      setShowFramingErrors(true);
-      setNotice(t('teacher.availability.framingIncomplete'));
-      return;
-    }
-    setBusy(true);
-    let part: 'framing' | 'capabilities' | 'availability' = 'framing';
-    try {
-      if (framingDirty) {
-        const saved = await saveMyFraming(framingPayload(framingValue), accessToken);
-        setFraming(saved.framing);
-        setFramingValue(teachingSectionFrom(saved.framing));
-        setPristineFraming(teachingSectionFrom(saved.framing));
-        setShowFramingErrors(false);
-      }
-      part = 'capabilities';
-      if (capsDirty) {
-        const profile = await saveMyCapabilities(subjectIds, categoryIds, accessToken);
-        const subs = profile.subjects.map((x) => x.id);
-        const cats = profile.categories.map((x) => x.id);
-        setSubjectIds(subs);
-        setCategoryIds(cats);
-        setPristineCaps({ subjects: [...subs].sort(), categories: [...cats].sort() });
-      }
-      part = 'availability';
-      if (dirty) {
-        const profile = await saveMyAvailability(ranges, accessToken);
-        const stored = profile.availability.map((a) => ({
-          weekday: a.weekday,
-          start_time: a.start_time,
-          end_time: a.end_time,
-          mode: a.mode,
-        }));
-        setRanges(stored);
-        setPristine(stored);
-      }
-      setNotice(t('teacher.availability.allSaved'));
-    } catch (error) {
-      // Each refusal is the server's (a retired Subject, R88.6's overlap rule,
-      // no current year), told in the words of the part that was refused; the
-      // parts before it are saved.
-      const reason =
-        error instanceof ApiError ? (error.envelope?.details as { reason?: string } | undefined)?.reason : undefined;
-      setNotice(
-        part === 'framing'
-          ? reason === 'NO_CURRENT_YEAR'
-            ? t('framing.noCurrentYear')
-            : reason === 'NO_CURRENT_PERIOD'
-              ? t('framing.noCurrentPeriod')
-              : t('profile.saveFailed')
-          : part === 'capabilities'
-            ? t('teacher.availability.capabilitiesSaveFailed')
-            : t('teacher.availability.saveFailed'),
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
+  const form = useTeachingProfileForm({ load, save });
 
   return (
-    <TeacherLayout
-      title={t('teacher.nav.availability')}
-    >
-      {loading ? (
+    <TeacherLayout title={t('teacher.nav.availability')}>
+      {form.loading ? (
         <LoadingState />
-      ) : loadError ? (
-        <ErrorPanel error={loadError} variant="region" onRetry={() => void load()} />
+      ) : form.loadError ? (
+        <ErrorPanel error={form.loadError} variant="region" onRetry={() => void form.reload()} />
       ) : (
         // R253 — the page's content as one white card, with one «حفظ».
         <div className="card teacher-availability">
-          <p className="field__hint">{t('teacher.availability.planningOnly')}</p>
-
-          {/* R215 — her framing preference, said by her. */}
-          <FramingPreferenceEditor
-            framing={framing}
-            controlled={{ value: framingValue, onChange: setFramingValue, showErrors: showFramingErrors }}
-            // R254 — her subjects and Categories (hers to state since
-            // 2026-08-30) sit among the framing fields, and the Categories
-            // narrow the Levels offered there.
-            capabilities={{
-              subjects: allSubjects,
-              categories: allCategories,
-              subjectIds,
-              categoryIds,
-              onSubjects: setSubjectIds,
-              onCategories: setCategoryIds,
-              disabled: busy,
-            }}
-          />
-
-          <section className="form">
-            <AvailabilityEditor ranges={ranges} onChange={setRanges} disabled={busy} />
-          </section>
-
+          {form.fields}
           {/* Rule AH — a FORM message, so it belongs above the form's buttons. */}
-          {notice ? <Feedback>{notice}</Feedback> : null}
-
+          {form.notice ? <Feedback>{form.notice}</Feedback> : null}
           <div className="form__actions">
-            <Button variant="primary" disabled={busy || !anyDirty} onClick={() => void saveAll()}>
+            <Button variant="primary" disabled={form.busy || !form.dirty} onClick={() => void form.saveAll()}>
               {t('common.save')}
             </Button>
           </div>

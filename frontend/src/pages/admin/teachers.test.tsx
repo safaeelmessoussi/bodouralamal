@@ -183,20 +183,25 @@ describe('the weekday labels are Arabic, and come from the catalogue', () => {
     // (touching ranges legal, overlapping refused, never merged) that a second
     // copy would be a real defect, and this project's record is that the copy
     // which drifts still passes its own tests.
-    const dialog = code('/src/components/admin/teaching-profile-dialog.tsx');
-    expect(dialog).toContain('AvailabilityEditor');
-    expect(dialog).not.toContain('scheduling.weekday');
+    // R256 — the dialog and her page render ONE form, which holds the editor.
+    const form = code('/src/components/teaching/teaching-profile-form.tsx');
+    expect(form).toContain('AvailabilityEditor');
+    expect(form).not.toContain('scheduling.weekday');
+    for (const file of ['/src/components/admin/teaching-profile-dialog.tsx', '/src/pages/teacher/availability.tsx']) {
+      expect(code(file)).toContain('useTeachingProfileForm(');
+      expect(code(file)).not.toContain('<AvailabilityEditor');
+    }
   });
 
   it('R215 — edits the same framing preference on both profile views', () => {
-    const dialog = code('/src/components/admin/teaching-profile-dialog.tsx');
-    const own = code('/src/pages/teacher/availability.tsx');
-    expect(dialog).toContain('FramingPreferenceEditor');
-    expect(own).toContain('FramingPreferenceEditor');
+    // R256 — through the one form both views render.
+    const form = code('/src/components/teaching/teaching-profile-form.tsx');
+    expect(form).toContain('FramingPreferenceEditor');
     // One formatter owns the future-inclusive all-branches meaning; neither
     // profile view hand-builds or edits the registration preference.
-    expect(dialog).not.toContain('framing.allBranches');
-    expect(own).not.toContain('framing.allBranches');
+    expect(form).not.toContain('framing.allBranches');
+    expect(code('/src/components/admin/teaching-profile-dialog.tsx')).not.toContain('framing.allBranches');
+    expect(code('/src/pages/teacher/availability.tsx')).not.toContain('framing.allBranches');
   });
 
   it('reports dirty against the PROFILE it loaded, not against emptiness (NEW E)', () => {
@@ -206,11 +211,12 @@ describe('the weekday labels are Arabic, and come from the catalogue', () => {
     // profile therefore opened the dialog already dirty, and closing it without
     // touching a field asked her to confirm discarding work she had not done.
     // Rule AY: a pristine form must not nag.
-    const dialog = code('/src/components/admin/teaching-profile-dialog.tsx');
+    // R256 — the shared form is where the comparison lives.
+    const dialog = code('/src/components/teaching/teaching-profile-form.tsx');
     expect(dialog).toContain('isDirty(');
     // Compared against what the fetch returned, which is the only pristine side
     // available to a form whose values arrive asynchronously.
-    expect(dialog).toMatch(/const dirty = .*isDirty\([^;]*pristine[^;]*\)/s);
+    expect(dialog).toMatch(/isDirty\([^;]*pristine[^;]*\)/s);
     // And the length test is gone rather than merely supplemented — an `||`
     // beside the real comparison would restore the whole defect.
     expect(dialog).not.toMatch(/subjectIds\.length > 0/);

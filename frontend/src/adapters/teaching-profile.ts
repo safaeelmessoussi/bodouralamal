@@ -31,7 +31,13 @@ export interface TeachingProfile {
   subjects: { id: string; name: string }[];
   categories: { id: string; name: string }[];
   availability: (AvailabilityRange & { id: string })[];
+  /** R256 — when she last saved it herself (ISO), or null; absent from an older server. */
+  self_saved_at?: string | null;
 }
+
+/** R256 — an administrator's save names what it opened with; hers stands if she saved since. */
+const selfSavedQuery = (selfSavedAt: string | null | undefined): string =>
+  selfSavedAt === undefined ? '' : `?self_saved_at=${encodeURIComponent(selfSavedAt ?? 'none')}`;
 
 /**
  * Her own profile **plus the catalogue she chooses from** (2026-08-30).
@@ -67,8 +73,9 @@ export async function saveTeachingProfile(
   userId: string,
   input: TeachingProfileInput,
   token: string | null,
+  selfSavedAt?: string | null,
 ): Promise<TeachingProfile> {
-  const body = await api<{ data: TeachingProfile }>(`/admin/users/${userId}/teaching-profile`, {
+  const body = await api<{ data: TeachingProfile }>(`/admin/users/${userId}/teaching-profile${selfSavedQuery(selfSavedAt)}`, {
     method: 'PUT',
     token,
     body: input,
@@ -149,8 +156,9 @@ export async function saveUserFraming(
   userId: string,
   framing: FramingPayload,
   token: string | null,
+  selfSavedAt?: string | null,
 ): Promise<TeachingProfile> {
-  const body = await api<{ data: TeachingProfile }>(`/admin/users/${encodeURIComponent(userId)}/teaching-profile/framing`, {
+  const body = await api<{ data: TeachingProfile }>(`/admin/users/${encodeURIComponent(userId)}/teaching-profile/framing${selfSavedQuery(selfSavedAt)}`, {
     method: 'PUT',
     token,
     body: framing,

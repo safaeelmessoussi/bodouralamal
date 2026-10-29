@@ -185,7 +185,7 @@ const cancelThroughUi = (index, reason, decision) =>
   })()`);
 
 /** Opens the real bell and reads it, capturing the list request's status. */
-const readBell = async (pageCookie, home = '/dashboard/student') => {
+const readBell = async (pageCookie, home = '/dashboard/student/calendar') => {
   await beIdentity(pageCookie);
   await open(home, 'main');
   await new Promise((r) => setTimeout(r, 1800));
@@ -422,7 +422,7 @@ console.error('OBSERVED-A-MOVED', JSON.stringify((aMoved.text ?? '').slice(0, 32
  * names her and the assistant. Safa staffs the same schedule before and after,
  * and must hear nothing about a date she does not take.
  */
-const bellOf = async (cookie, home = '/dashboard/student') => {
+const bellOf = async (cookie, home = '/dashboard/student/calendar') => {
   const r = await readBell(cookie, home);
   if ((r.requests ?? []).some((x) => x.status !== 200)) {
     throw new Error(`notification list failed: ${JSON.stringify(r.requests)}`);
@@ -430,9 +430,9 @@ const bellOf = async (cookie, home = '/dashboard/student') => {
   return r.text ?? '';
 };
 
-const aminaText = await bellOf(process.env.AMINA_COOKIE, '/teacher');
-const nadiaText = await bellOf(process.env.NADIA_COOKIE, '/teacher');
-const safaText = await bellOf(process.env.SAFA_COOKIE, '/teacher');
+const aminaText = await bellOf(process.env.AMINA_COOKIE, '/teacher/schedules');
+const nadiaText = await bellOf(process.env.NADIA_COOKIE, '/teacher/schedules');
+const safaText = await bellOf(process.env.SAFA_COOKIE, '/teacher/schedules');
 
 check(
   '16 · R91 — the EFFECTIVE مؤطِّرة and her assistant are told',
@@ -480,7 +480,7 @@ check(
   JSON.stringify({ combinedCancel, combinedCalls }),
 );
 
-const bText = await bellOf(process.env.B2_COOKIE, '/dashboard/student');
+const bText = await bellOf(process.env.B2_COOKIE, '/dashboard/student/calendar');
 check(
   '20 · R92 — the OTHER branch’s beneficiary is told about a class at Targa',
   bText.includes(`${S.spareDate}`) && bText.includes('أُلغيت'),
@@ -513,7 +513,7 @@ const drafted = await evaluate(`(async () => {
 })()`);
 check('21 · a draft grade saves', drafted.saved === true, JSON.stringify(drafted));
 
-const aAfterDraft = await bellOf(process.env.A7_COOKIE, '/dashboard/student');
+const aAfterDraft = await bellOf(process.env.A7_COOKIE, '/dashboard/student/calendar');
 check(
   '22 · a DRAFT tells the student nothing (BR-8)',
   !aAfterDraft.includes('نتيجة') && !aAfterDraft.includes('نُشرت'),
@@ -539,7 +539,7 @@ const published = await evaluate(`(async () => {
 })()`);
 check('23 · the sheet publishes', published.published === true, JSON.stringify(published));
 
-const aAfterPublish = await bellOf(process.env.A8_COOKIE, '/dashboard/student');
+const aAfterPublish = await bellOf(process.env.A8_COOKIE, '/dashboard/student/calendar');
 check(
   '24 · and publishing tells her — in Arabic, naming the exam',
   aAfterPublish.includes('نتيجة') || aAfterPublish.includes('نُشرت'),
@@ -665,7 +665,7 @@ const createdEvent = await json(adminToken, `/calendar?from=${S.spareDate}&to=${
 const mine = (createdEvent.data ?? []).find((o) => (o.title ?? '').includes('نشاط للمستوى'));
 console.error('EVENT-AS-STORED', JSON.stringify(mine ?? null));
 
-const aEvent = await bellOf(process.env.A9_COOKIE, '/dashboard/student');
+const aEvent = await bellOf(process.env.A9_COOKIE, '/dashboard/student/calendar');
 check(
   '27 · the beneficiary of that Level sees the new activity in her bell',
   aEvent.includes('نشاط للمستوى'),
@@ -735,7 +735,7 @@ check(
   JSON.stringify({ eventDeleted, eventId: mine?.id, status: definitionsAfterDelete.status }),
 );
 
-const aCancelledEvent = await readBell(process.env.A_EVENT_DELETE_COOKIE, '/dashboard/student');
+const aCancelledEvent = await readBell(process.env.A_EVENT_DELETE_COOKIE, '/dashboard/student/calendar');
 check(
   '31 · the concerned beneficiary sees the cancelled activity by name',
   (aCancelledEvent.requests ?? []).every((request) => request.status === 200) &&
@@ -743,7 +743,7 @@ check(
   JSON.stringify({ requests: aCancelledEvent.requests, text: (aCancelledEvent.text ?? '').slice(0, 320) }),
 );
 
-const cCancelledEvent = await readBell(process.env.C_EVENT_DELETE_COOKIE, '/dashboard/student');
+const cCancelledEvent = await readBell(process.env.C_EVENT_DELETE_COOKIE, '/dashboard/student/calendar');
 check(
   '32 · the unrelated beneficiary receives no cancellation for that activity',
   (cCancelledEvent.requests ?? []).every((request) => request.status === 200) &&
@@ -756,7 +756,7 @@ check(
 /** Marks every notice read, so "unread again" is a real observation. */
 const markAllRead = async (cookie) => {
   await beIdentity(cookie);
-  await open('/dashboard/student', 'main');
+  await open('/dashboard/student/calendar', 'main');
   await new Promise((r) => setTimeout(r, 1800));
   return evaluate(`(async () => {
     const trigger = document.querySelector('.bell__trigger');

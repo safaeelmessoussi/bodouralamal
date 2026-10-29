@@ -30,15 +30,15 @@ describe('roleHomePath — §14.1 role-specific homes', () => {
   });
 
   it('sends each other role to its own §14.1 home', () => {
-    expect(roleHomePath(['teacher'])).toBe('/teacher');
-    expect(roleHomePath(['student'])).toBe('/dashboard/student');
+    expect(roleHomePath(['teacher'])).toBe('/teacher/schedules');
+    expect(roleHomePath(['student'])).toBe('/dashboard/student/calendar');
   });
 
   it('R62: a parent lands on the STUDENT dashboard — there is no parent one', () => {
     // §5.4's Family Dashboard was removed: a parent's question is *how is my
     // daughter doing*, and the Student Dashboard already answers it. Two
     // screens over one child's data would have been two things to keep true.
-    expect(roleHomePath(['parent'])).toBe('/dashboard/student');
+    expect(roleHomePath(['parent'])).toBe('/dashboard/student/calendar');
     // And the removed path must not be reachable through this module at all,
     // or the router would still have to serve it.
     expect(ROLE_HOME_PATHS).not.toContain('/dashboard/parent');
@@ -47,10 +47,10 @@ describe('roleHomePath — §14.1 role-specific homes', () => {
   it('resolves the MOST privileged role, because the button is one link', () => {
     // A مؤطِّرة who is also a parent gets her teacher home; the family views
     // are reached through the child-context switcher (§4.3), not this button.
-    expect(roleHomePath(['parent', 'teacher'])).toBe('/teacher');
+    expect(roleHomePath(['parent', 'teacher'])).toBe('/teacher/schedules');
     // Both resolve to one screen since R62; the ACTIVE role decides whether it
     // renders her own record or her child's.
-    expect(roleHomePath(['student', 'parent'])).toBe('/dashboard/student');
+    expect(roleHomePath(['student', 'parent'])).toBe('/dashboard/student/calendar');
     expect(roleHomePath(['teacher', 'admin'])).toBe('/admin');
   });
 

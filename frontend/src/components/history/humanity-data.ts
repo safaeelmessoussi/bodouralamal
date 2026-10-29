@@ -12,7 +12,7 @@ import type { HistoryNode, TimelineDetail, TimelineMarker, TimelineSpan } from '
 
 export const HUMANITY: HistoryNode = {
  "id": "root",
- "title": "حسب الخط الزمني",
+ "title": "الخط الزمني",
  "tone": "root",
  "children": [
   {

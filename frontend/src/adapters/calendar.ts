@@ -285,8 +285,13 @@ function calendarParams(query: CalendarQuery): URLSearchParams {
   return params;
 }
 
-export async function fetchMyOccurrences(query: CalendarQuery): Promise<Occurrence[]> {
-  const page = await api<CalendarPage>(`/me/calendar?${calendarParams(query).toString()}`, {
+/** R256 — her teaching calendar (`teacher`) or her studying one (`student`). */
+export type PersonalRole = 'teacher' | 'student';
+
+export async function fetchMyOccurrences(query: CalendarQuery & { as?: PersonalRole }): Promise<Occurrence[]> {
+  const params = calendarParams(query);
+  if (query.as) params.set('as', query.as);
+  const page = await api<CalendarPage>(`/me/calendar?${params.toString()}`, {
     token: query.token ?? null,
   });
   return page.data;
@@ -305,8 +310,11 @@ export interface PersonalCalendarOptions {
   circles: { id: string; name: string }[];
 }
 
-export async function fetchMyCalendarOptions(token: string | null): Promise<PersonalCalendarOptions> {
-  const body = await api<{ data: PersonalCalendarOptions }>('/me/calendar/options', { token });
+export async function fetchMyCalendarOptions(
+  token: string | null,
+  as?: PersonalRole,
+): Promise<PersonalCalendarOptions> {
+  const body = await api<{ data: PersonalCalendarOptions }>(`/me/calendar/options${as ? `?as=${as}` : ''}`, { token });
   return body.data;
 }
 

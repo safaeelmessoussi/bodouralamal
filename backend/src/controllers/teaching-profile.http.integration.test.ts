@@ -255,6 +255,39 @@ describe("an administrator records what a مؤطِّرة can teach, and when", (
 
 /* ── validation ─────────────────────────────────────────────────────────── */
 
+describe("R256 — her own save takes priority over an administrator's", () => {
+  it("refuses the administrator's save when she saved after the form opened, and accepts it once re-read", async () => {
+    const opened = await call("GET", `/admin/users/${teacherId}/teaching-profile`, adminToken);
+    expect(opened.status).toBe(200);
+    const token = ((opened.body.data as { self_saved_at: string | null }).self_saved_at ?? "none") as string;
+
+    // She saves meanwhile.
+    const hers = await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [{ weekday: "friday", start_time: "08:00", end_time: "09:00", mode: "online" }],
+    });
+    expect(hers.status, JSON.stringify(hers.body)).toBe(200);
+
+    const stale = await call("PUT", `/admin/users/${teacherId}/teaching-profile?self_saved_at=${encodeURIComponent(token)}`, adminToken, profile());
+    expect(stale.status, JSON.stringify(stale.body)).toBe(409);
+    expect((stale.body.error as { details: { reason: string } }).details.reason).toBe("TEACHER_SAVED_FIRST");
+    const staleFraming = await call(
+      "PUT",
+      `/admin/users/${teacherId}/teaching-profile/framing?self_saved_at=${encodeURIComponent(token)}`,
+      adminToken,
+      { mode: "online" },
+    );
+    expect(staleFraming.status, JSON.stringify(staleFraming.body)).toBe(409);
+    // Hers stands.
+    const now = await call("GET", `/admin/users/${teacherId}/teaching-profile`, adminToken);
+    const data = now.body.data as { self_saved_at: string; availability: { weekday: string }[] };
+    expect(data.availability.map((a) => a.weekday)).toEqual(["friday"]);
+
+    // Re-read, the administrator's save goes through.
+    const fresh = await call("PUT", `/admin/users/${teacherId}/teaching-profile?self_saved_at=${encodeURIComponent(data.self_saved_at)}`, adminToken, profile());
+    expect(fresh.status, JSON.stringify(fresh.body)).toBe(200);
+  });
+});
+
 describe("the planning data is validated where it is written", () => {
   it("refuses a range that ends before it starts", async () => {
     const res = await call("PUT", `/admin/users/${teacherId}/teaching-profile`, adminToken, {

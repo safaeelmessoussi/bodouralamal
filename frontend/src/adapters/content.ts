@@ -168,6 +168,9 @@ export interface LibraryEntry {
   /** R177 §7 — the one Surah the item is about, or none. */
   surah_id: number | null;
   surah_name: string | null;
+  /** R256 — a «دورة موسمية» / a Subject of every Level of the Category («محتوى عام»). */
+  subject_seasonal: boolean;
+  subject_shared: boolean;
 }
 
 /**
@@ -230,6 +233,8 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
         subject_name: row.subject_name,
         surah_id: row.surah_id ?? null,
         surah_name: row.surah_name ?? null,
+        subject_seasonal: row.subject_seasonal ?? false,
+        subject_shared: row.subject_shared ?? false,
       });
     }
   }
@@ -392,6 +397,9 @@ interface LibraryItemWire {
   /** R177 §7 — the one Surah, or none; optional while a server older than it could answer. */
   surah_id?: number | null;
   surah_name?: string | null;
+  /** R256 — absent from a server older than it. */
+  subject_seasonal?: boolean;
+  subject_shared?: boolean;
   /** R223 — a public audio's stable address. */
   stream_url?: string | null;
   /** R247 — absent from a server older than it. */

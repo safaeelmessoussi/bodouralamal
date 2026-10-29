@@ -156,11 +156,11 @@ describe('where each role lands', () => {
   it('gives every role §14.1 declares its own home', () => {
     expect(homeForRole('super_admin')).toBe('/admin');
     expect(homeForRole('admin')).toBe('/admin');
-    expect(homeForRole('teacher')).toBe('/teacher');
+    expect(homeForRole('teacher')).toBe('/teacher/schedules');
     // R62 — a parent's home is their child's dashboard; §5.4's Family
     // Dashboard is removed.
-    expect(homeForRole('parent')).toBe('/dashboard/student');
-    expect(homeForRole('student')).toBe('/dashboard/student');
+    expect(homeForRole('parent')).toBe('/dashboard/student/calendar');
+    expect(homeForRole('student')).toBe('/dashboard/student/calendar');
   });
 
   it('returns null for a role with no declared home, rather than a wrong one', () => {
@@ -173,7 +173,7 @@ describe('where each role lands', () => {
     // One button, most privileged first…
     expect(roleHomePath(roles)).toBe('/admin');
     // …but the switch must be able to reach the other portal.
-    expect(homeForRole('teacher')).toBe('/teacher');
+    expect(homeForRole('teacher')).toBe('/teacher/schedules');
   });
 });
 
@@ -222,7 +222,7 @@ describe('the dashboard button opens the ACTIVE role\'s home', () => {
     // The reported defect, at its source: the button resolves from whatever list
     // it is handed, so handing it the full set is what sent her to /admin.
     expect(roleHomePath(['super_admin', 'admin', 'teacher'])).toBe('/admin');
-    expect(roleHomePath(['teacher'])).toBe('/teacher');
+    expect(roleHomePath(['teacher'])).toBe('/teacher/schedules');
     expect(roleHomePath(['admin'])).toBe('/admin');
   });
 });

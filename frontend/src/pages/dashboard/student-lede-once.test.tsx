@@ -42,7 +42,8 @@ import { t } from '../../i18n/index.js';
  */
 if (!('window' in globalThis)) {
   (globalThis as unknown as { window: unknown }).window = {
-    location: { pathname: '/dashboard/student', search: '', href: 'http://localhost/dashboard/student' },
+    // R256 — «تقويمي» is the portal's first page (the bare dashboard redirects).
+    location: { pathname: '/dashboard/student/calendar', search: '', href: 'http://localhost/dashboard/student/calendar' },
   };
 }
 

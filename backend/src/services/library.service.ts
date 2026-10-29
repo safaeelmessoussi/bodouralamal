@@ -214,6 +214,13 @@ export interface LibraryItem {
   /** R177 §7 — the one Surah the item is about, or none. */
   surahId: number | null;
   surahName: string | null;
+  /**
+   * R256 — «محتوى عام» holds the content of the «دورات موسمية» (a seasonal
+   * Subject, R183 §1) and of the «مواد مشتركة في كل المستويات» (a Subject the
+   * item's Category offers to all its Levels, R172 §1).
+   */
+  subjectSeasonal: boolean;
+  subjectShared: boolean;
   /** R223 — a PUBLIC audio's storage key, so the list can carry its stable
    *  address (§3.1) and the page plays it in one click; `null` otherwise. */
   publicAudioKey: string | null;
@@ -542,6 +549,12 @@ export async function listLibrary(
              b."name"                    AS "branchName",
              c."surah_id"                AS "surahId",
              q."name_arabic"             AS "surahName",
+             COALESCE(s."is_seasonal", false) AS "subjectSeasonal",
+             EXISTS (
+               SELECT 1 FROM "category_subject" cs
+               WHERE cs."subject_id" = c."subject_id" AND cs."category_id" = l."category_id"
+                 AND cs."deleted_at" IS NULL
+             )                           AS "subjectShared",
              CASE WHEN c."storage_bucket" = 'public' AND c."visibility" = 'public'
                        AND c."mime_type" LIKE 'audio/%'
                   THEN c."storage_key" END AS "publicAudioKey",

@@ -56,36 +56,6 @@ const TEACHER = ['teacher'] as const;
  */
 export const TEACHER_MODULES: readonly TeacherModule[] = [
   {
-    path: '/teacher',
-    labelKey: 'teacher.nav.dashboard',
-    section: null,
-    roles: TEACHER,
-    // R83.4/R83.5 — it was `blocked` because there was nothing to put on it.
-    // There is now: what she has been told, and her own week.
-    status: 'ready',
-  },
-  {
-    /**
-     * **إدخال متى أنا متاحة — R106, and the question R88 deliberately left open.**
-     *
-     * R88.2 refused it in terms: *"a مؤطِّرة may not edit her own, because who
-     * may assert their own availability, and whether the administration may
-     * then rely on it, is a separate decision the Owner has not taken."* The
-     * Owner has now taken it, narrowly — **`TeacherAvailability` only**. What
-     * she may *teach* stays the administration's record of her.
-     *
-     * **No capability condition, and that is deliberate.** Unlike the Quran
-     * node below, availability is meaningful for every مؤطِّرة whatever she
-     * teaches — including one who currently staffs nothing, whose availability
-     * is exactly what the administration needs in order to give her a class.
-     */
-    path: '/teacher/availability',
-    labelKey: 'teacher.nav.availability',
-    section: null,
-    roles: TEACHER,
-    status: 'ready',
-  },
-  {
     /**
      * **إدخال حفظ المستفيدات** — recording a beneficiary's memorisation
      * (§4.5, R73). Renamed by R106: *whose* memorisation, said plainly — hers
@@ -200,6 +170,28 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     roles: TEACHER,
     status: 'ready',
   },
+  {
+    /**
+     * **إدخال متى أنا متاحة — R106, and the question R88 deliberately left open.**
+     *
+     * R88.2 refused it in terms: *"a مؤطِّرة may not edit her own, because who
+     * may assert their own availability, and whether the administration may
+     * then rely on it, is a separate decision the Owner has not taken."* The
+     * Owner has now taken it, narrowly — **`TeacherAvailability` only**. What
+     * she may *teach* stays the administration's record of her.
+     *
+     * **No capability condition, and that is deliberate.** Unlike the Quran
+     * node below, availability is meaningful for every مؤطِّرة whatever she
+     * teaches — including one who currently staffs nothing, whose availability
+     * is exactly what the administration needs in order to give her a class.
+     */
+    // R256 — the last entry of her menu (the Owner).
+    path: '/teacher/availability',
+    labelKey: 'teacher.nav.availability',
+    section: null,
+    roles: TEACHER,
+    status: 'ready',
+  },
 ];
 
 export const canAccess = canAccessModule;
@@ -218,5 +210,13 @@ export function teacherModuleForPath(pathname: string): TeacherModule | null {
 
 /** Whether a path belongs to the teacher portal at all. */
 export function isTeacherPath(pathname: string): boolean {
-  return teacherModuleForPath(pathname) !== null;
+  return teacherModuleForPath(pathname) !== null || TEACHER_REDIRECTS.has(pathname.replace(/\/+$/, ''));
 }
+
+/**
+ * **R256 — «مساحة التدريس» is withdrawn** (the Owner: «remove the empty pages
+ * … make … الجدولة opened for teacher dashboard»). Its address, and the
+ * calendar's older one, lead to «الجدولة», because links to them exist.
+ */
+export const TEACHER_REDIRECTS: ReadonlySet<string> = new Set(['/teacher', '/teacher/calendar']);
+export const TEACHER_HOME = '/teacher/schedules';

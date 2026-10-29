@@ -74,7 +74,7 @@ async function openBell() {
 
 /* ── The مستفيدة ──────────────────────────────────────────────────────────── */
 
-await open(S.studentCookie, '/dashboard/student');
+await open(S.studentCookie, '/dashboard/student/calendar');
 let inbox = await openBell();
 let body = await text();
 
@@ -125,7 +125,7 @@ check(
 
 /* ── The مؤطِّرة ───────────────────────────────────────────────────────────── */
 
-await open(S.teacherCookie, '/teacher');
+await open(S.teacherCookie, '/teacher/schedules');
 inbox = await openBell();
 check(
   'the مؤطِّرة is told about the same paper',
@@ -182,7 +182,7 @@ check(
 
 /* ── The control ──────────────────────────────────────────────────────────── */
 
-await open(S.otherStudentCookie, '/dashboard/student');
+await open(S.otherStudentCookie, '/dashboard/student/calendar');
 inbox = await openBell();
 check(
   'the LEVEL-B-only مستفيدة is told nothing about it',

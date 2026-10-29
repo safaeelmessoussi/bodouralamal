@@ -272,8 +272,8 @@ export function TeachersPage(): ReactNode {
       />
 
       {profiling ? (
-        // **The R88 dialog, reused unchanged.** This page owns the navigation,
-        // not a second editor.
+        // **The R88 dialog** — since R256 the same form as her own page. This
+        // page owns the navigation, not a second editor.
         <TeachingProfileDialog
           userId={profiling.id}
           userName={profiling.name_arabic}
@@ -286,7 +286,6 @@ export function TeachersPage(): ReactNode {
             setNotice(t('admin.teachingProfile.saved'));
             void load();
           }}
-          onFramingSaved={() => void load()}
         />
       ) : null}
     </AdminLayout>

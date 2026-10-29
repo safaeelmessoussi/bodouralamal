@@ -42,7 +42,7 @@ describe('the teacher registry matches §14.1', () => {
     // authorised author roles; the node is what makes that true on screen.
     expect(TEACHER_MODULES.map((m) => m.path).sort()).toEqual(
       [
-        '/teacher',
+        // R256 — «مساحة التدريس» withdrawn; `/teacher` redirects to «الجدولة».
         '/teacher/assessments',
         '/teacher/availability',
         '/teacher/content',
@@ -104,7 +104,8 @@ describe('the teacher registry matches §14.1', () => {
   });
 
   it('resolves sub-paths to their parent, longest match winning', () => {
-    expect(teacherModuleForPath('/teacher')?.path).toBe('/teacher');
+    // R256 — the withdrawn home is no module (`TEACHER_REDIRECTS` sends it on).
+    expect(teacherModuleForPath('/teacher')).toBeNull();
     expect(teacherModuleForPath('/teacher/schedules')?.path).toBe('/teacher/schedules');
     // A module owns its internal views without registering each as a node.
     expect(teacherModuleForPath('/teacher/schedules/abc')?.path).toBe('/teacher/schedules');
@@ -174,13 +175,12 @@ describe('the مؤطرة reaches her own scheduling and content, and nothing els
     // بناء الاختبارات/نقاط الاختبارات**, matching the admin/super_admin
     // dashboard's own end-of-list order (`admin-modules.test.ts`).
     expect(TEACHER_MODULES.map((m) => m.path)).toEqual([
-      '/teacher', // مساحة التدريس
-      '/teacher/availability', // إدخال متى أنا متاحة
       '/teacher/quran', // إدخال حفظ المستفيدات
       '/teacher/schedules', // الجدولة
       '/teacher/content', // مكتبة المحتوى
       '/teacher/assessments', // بناء الاختبارات (R124) — the paper, beside its marking
       '/teacher/exams', // نقاط الاختبارات
+      '/teacher/availability', // إدخال أوقات التوفّر — last (R256)
     ]);
   });
 

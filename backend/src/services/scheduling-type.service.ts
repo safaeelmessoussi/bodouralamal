@@ -88,7 +88,7 @@ export interface SchedulingTypeRef {
   attendanceMode: AttendanceMode;
   displayOrder: number;
   /**
-   * **How many activities already use it** — the one number that says whether
+   * **How many items already use it** (events, classes and exams — R256) — the one number that says whether
    * deleting it is even possible, without a request per row. The same field
    * `CategoryRef.levelCount` carries and for the same reason: an administrator
    * meeting a blocked deletion should be able to see what it is about before
@@ -117,7 +117,17 @@ export async function listSchedulingTypes(
     // this catalogue is seeded complete and ordered. `name` breaks a tie only
     // if an administrator has managed to give two rows the same position.
     orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
-    include: { _count: { select: { events: { where: { deletedAt: null } } } } },
+    // R256 — what uses it is every kind that names a type: events, classes and
+    // exams. Counting events alone showed «حصة», with 45 classes, as unused.
+    include: {
+      _count: {
+        select: {
+          events: { where: { deletedAt: null } },
+          courseSchedules: { where: { deletedAt: null } },
+          exams: { where: { deletedAt: null } },
+        },
+      },
+    },
   });
   return rows.map((r) => ({
     id: r.id,
@@ -125,7 +135,7 @@ export async function listSchedulingTypes(
     structuralKind: r.structuralKind,
     attendanceMode: r.attendanceMode,
     displayOrder: r.displayOrder,
-    eventCount: r._count.events,
+    eventCount: r._count.events + r._count.courseSchedules + r._count.exams,
     version: r.version,
   }));
 }
@@ -262,7 +272,15 @@ export async function deleteSchedulingType(
     if (!row) throw new AppError('NOT_FOUND', 'no such scheduling type');
 
     const events = await tx.event.count({ where: { schedulingTypeId: id, deletedAt: null } });
-    await assertNoBlockingReferences([{ label: 'events', count: events }]);
+    // R256 — a class or an exam of this type blocks it too, with the coded
+    // refusal rather than the foreign key's.
+    const classes = await tx.recurringCourseSchedule.count({ where: { schedulingTypeId: id, deletedAt: null } });
+    const exams = await tx.exam.count({ where: { schedulingTypeId: id, deletedAt: null } });
+    await assertNoBlockingReferences([
+      { label: 'events', count: events },
+      { label: 'classes', count: classes },
+      { label: 'exams', count: exams },
+    ]);
 
     await tx.schedulingType.update({
       where: { id },

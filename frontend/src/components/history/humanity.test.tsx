@@ -228,7 +228,7 @@ describe('R203 — the page', () => {
   it('R204 — keeps the line and the cards together: no visible title, no trail on the overview', () => {
     at('?view=history');
     const html = renderToStaticMarkup(<HumanityTimeline />);
-    expect(t('content.views.history')).toBe('حسب الخط الزمني');
+    expect(t('content.views.history')).toBe('الخط الزمني');
     expect(html).toContain(`class="humanity__title visually-hidden"`);
     expect(html).not.toContain('humanity__trail');
     // The calendars are named once, at the start of the line.

@@ -35,6 +35,8 @@ const entry = (id: string, surah: number | null, mime: string, shelf = 'L1', tit
   subject_name: 'تفسير القرآن',
   surah_id: surah,
   surah_name: surah === 1 ? 'الفاتحة' : surah === 2 ? 'البقرة' : surah === 36 ? 'يس' : null,
+  subject_seasonal: false,
+  subject_shared: false,
 });
 
 const ENTRIES = [
@@ -160,10 +162,11 @@ describe('the page', () => {
     expect(RESOURCES_SOURCE).toContain("if (param === 'levels' || levelId !== null) return 'level';");
     // R250 — «حسب الفئة», what is addressed to a whole Category.
     expect(RESOURCES_SOURCE).toContain("if (param === 'categories' || (categoryId !== null && levelId === null)) return 'category';");
-    expect(ar.content.views.byCategory).toBe('حسب الفئة');
+    // R256 — the four tabs without «حسب».
+    expect(ar.content.views.byCategory).toBe('محتوى عام');
     expect(RESOURCES_SOURCE).toContain("return 'surah';");
-    expect(ar.content.views.bySurah).toBe('حسب السورة');
-    expect(ar.content.views.byLevel).toBe('حسب المستوى');
+    expect(ar.content.views.bySurah).toBe('تفسير');
+    expect(ar.content.views.byLevel).toBe('محتوى المستويات');
   });
 });
 

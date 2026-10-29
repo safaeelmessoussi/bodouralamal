@@ -8,6 +8,7 @@ import { ContentCard } from '../components/content/content-card.js';
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
 import { useWarmPdfPreview } from '../components/content/pdf-canvas-preview.js';
 import { byTitle, groupBySurah, SurahLibrary } from '../components/content/surah-library.js';
+import { isGeneralEntry, SubjectLibrary } from '../components/content/subject-library.js';
 import { HumanityTimeline } from '../components/history/humanity-timeline.js';
 import { Button } from '../components/ui/button.js';
 import { useActiveChild } from '../contexts/active-child.js';
@@ -120,18 +121,20 @@ function LibraryPage({
         focusId={focusId}
         onElsewhere={(entry) => {
           setElsewhere(entry);
-          setMode(entry.shelf_kind === 'whole_category' ? 'category' : 'level');
+          setMode(isGeneralEntry(entry) ? 'category' : 'level');
         }}
       />
     );
   }
+  // R256 — «محتوى عام», read by Subject.
+  if (shown === 'category') return <GeneralView tabs={tabs} focusId={elsewhere?.item.id ?? null} />;
   // Keyed: each view starts with its own filters.
   return (
     <LibraryView
       key={shown}
-      scope={shown === 'category' ? 'whole_category' : 'level'}
+      scope="level"
       initialLevel={elsewhere && elsewhere.shelf_kind === 'level' ? elsewhere.level_id : levelId}
-      initialCategory={elsewhere && elsewhere.shelf_kind === 'whole_category' ? elsewhere.category_id : categoryId}
+      initialCategory={null}
       focusId={elsewhere?.item.id ?? null}
       tabs={tabs}
     />
@@ -245,6 +248,42 @@ function useLibraryEntries(accessToken: string | null): Load<LibraryEntry[]> {
     };
   }, [accessToken]);
   return load;
+}
+
+/** R256 — «محتوى عام»: the general content by Subject (`subject-library.tsx`). */
+function GeneralView({ tabs, focusId }: { tabs: ReactNode; focusId: string | null }): ReactNode {
+  const { accessToken } = useSession();
+  const { activeChildId } = useActiveChild();
+  const load = useLibraryEntries(accessToken);
+  const [open, setOpen] = useState<ContentItem | null>(null);
+  const focus = load.kind === 'ready' && focusId ? (load.data.find((e) => e.item.id === focusId) ?? null) : null;
+  const initialSubject = useMemo(
+    () => focus?.subject_id ?? new URLSearchParams(window.location.search).get('subject'),
+    [focus],
+  );
+  const [focusHandled, setFocusHandled] = useState(false);
+  useEffect(() => {
+    if (focusHandled || focus === null) return;
+    setFocusHandled(true);
+    setOpen(focus.item);
+  }, [focus, focusHandled]);
+  return (
+    <Shell title={t('content.title')} lede={null} tabs={tabs}>
+      {load.kind === 'loading' ? <YearSkeletons /> : null}
+      {load.kind === 'error' ? <ErrorState /> : null}
+      {load.kind === 'ready' ? (
+        <SubjectLibrary
+          entries={load.data}
+          initialSubject={initialSubject}
+          focusId={focus?.item.id ?? null}
+          accessToken={accessToken}
+          activeChildId={activeChildId}
+          onOpen={setOpen}
+        />
+      ) : null}
+      <ContentPreviewDialog item={open} onClose={() => setOpen(null)} accessToken={accessToken} activeChildId={activeChildId} />
+    </Shell>
+  );
 }
 
 /** R196 — the Surah view: the same rows, read by Surah (`surah-library.tsx`). */
@@ -437,7 +476,9 @@ function LibraryView({
     () =>
       load.kind === 'ready'
         ? load.data.filter(
-            (e) => e.shelf_kind === scope && !e.item.slide_of && !(e.item.kind === 'audio' && e.surah_id !== null),
+            // R256 — «محتوى المستويات» holds what is split by Level: nothing
+            // about a Surah («تفسير» holds it) and nothing general («محتوى عام»).
+            (e) => e.shelf_kind === scope && !e.item.slide_of && e.surah_id === null && !isGeneralEntry(e),
           )
         : [],
     [load, scope],

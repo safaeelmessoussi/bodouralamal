@@ -98,7 +98,7 @@ const safaToken = await tokenFor(process.env.SAFA_API_COOKIE);
 /* ── 1–3 · one node, and the page carries both halves ────────────────────── */
 
 await beIdentity(process.env.SAFA_COOKIE);
-await open('/teacher', 'main');
+await open('/teacher/schedules', 'main');
 
 const menu = await evaluate(
   `(() => [...document.querySelectorAll('.admin-nav a')].map((a) => ({ label: a.textContent.trim(), href: a.getAttribute('href') })))()`,
@@ -390,7 +390,7 @@ const bellOf = async (cookie, home) => {
   return read;
 };
 
-const aminaBell = await bellOf(process.env.AMINA2_COOKIE, '/teacher');
+const aminaBell = await bellOf(process.env.AMINA2_COOKIE, '/teacher/schedules');
 check(
   '7 · the assistant she named is TOLD she was assigned',
   (aminaBell.text ?? '').includes('أُسندت إليك') &&
@@ -406,7 +406,7 @@ check(
   JSON.stringify({ badge: aminaBell.badge }),
 );
 
-const safaBell = await bellOf(process.env.SAFA3_COOKIE, '/teacher');
+const safaBell = await bellOf(process.env.SAFA3_COOKIE, '/teacher/schedules');
 check(
   '9 · the مؤطرة who created it is NOT told she assigned herself',
   !(safaBell.text ?? '').includes('أُسندت إليك'),

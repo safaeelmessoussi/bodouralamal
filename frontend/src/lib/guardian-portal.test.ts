@@ -27,7 +27,7 @@ const ACTING = { actingForChild: true };
 describe('the gate matches what role-home has always intended', () => {
   it('sends a parent to the beneficiary portal', () => {
     // If this ever stops being true, the cases below are testing nothing.
-    expect(homeForRole('parent')).toBe('/dashboard/student');
+    expect(homeForRole('parent')).toBe('/dashboard/student/calendar');
   });
 
   it('admits her there when she is acting for a child', () => {

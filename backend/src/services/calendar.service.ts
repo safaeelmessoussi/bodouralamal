@@ -828,9 +828,21 @@ function sessionOccurrence(
  * Somebody who is both gets the union, which is the honest answer for a مؤطرة
  * who also studies (R79 makes that expressible).
  */
+/**
+ * **R256 (2026-10-29) — whose calendar, as whom.** The Owner: «in الجدولة in
+ * تقويمي in teacher dashboard, the filters and the calendar there should be
+ * filled with only what is being taught by the teacher … in her تقويمي in her
+ * student dashboard … what is being studied by her». `teacher` keeps the arms
+ * of what she is assigned (and the association-wide «عطلة» days, which say
+ * when nothing is taught); `student` keeps the arms of what her enrolments
+ * reach. Absent, both — the union every caller had before.
+ */
+export type PersonalRole = "teacher" | "student";
+
 async function personalFilters(
   prisma: PrismaClient,
   userId: string,
+  as?: PersonalRole,
 ): Promise<{
   event: Prisma.EventWhereInput;
   session: Prisma.SessionWhereInput;
@@ -844,23 +856,30 @@ async function personalFilters(
   // R172 §14 — the Levels she is IN: a completed one is behind her. (The
   // predicate already says `deletedAt: null`; it is restated here because the
   // soft-delete guard reads this call site, not the policy file.)
-  const enrolments = await prisma.enrollment.findMany({
-    where: { studentId: userId, deletedAt: null, ...inProgressEnrolmentWhere(userId) },
-    select: {
-      levelId: true,
-      branchId: true,
-      administrativeGroupId: true,
-      level: { select: { categoryId: true } },
-    },
-  });
-  const seats = await prisma.studentTeachingGroup.findMany({
-    where: {
-      studentId: userId,
-      deletedAt: null,
-      teachingGroup: { deletedAt: null },
-    },
-    select: { teachingGroupId: true },
-  });
+  // R256 — as a teacher, her enrolments are not this calendar's.
+  const enrolments =
+    as === "teacher"
+      ? []
+      : await prisma.enrollment.findMany({
+          where: { studentId: userId, deletedAt: null, ...inProgressEnrolmentWhere(userId) },
+          select: {
+            levelId: true,
+            branchId: true,
+            administrativeGroupId: true,
+            level: { select: { categoryId: true } },
+          },
+        });
+  const seats =
+    as === "teacher"
+      ? []
+      : await prisma.studentTeachingGroup.findMany({
+          where: {
+            studentId: userId,
+            deletedAt: null,
+            teachingGroup: { deletedAt: null },
+          },
+          select: { teachingGroupId: true },
+        });
 
   const levelIds = [...new Set(enrolments.map((e) => e.levelId))];
   const groupIds = enrolments
@@ -907,16 +926,23 @@ async function personalFilters(
     ],
   });
 
-  const event: Prisma.EventWhereInput = {
+  const everyone: Prisma.EventWhereInput = {
+    AND: [
+      { branchScopes: { none: {} } },
+      { categoryScopes: { none: {} } },
+      { levelScopes: { none: {} } },
+      { administrativeGroupScopes: { none: {} } },
+    ],
+  };
+  const event: Prisma.EventWhereInput = as === "teacher" ? {
     OR: [
-      {
-        AND: [
-          { branchScopes: { none: {} } },
-          { categoryScopes: { none: {} } },
-          { levelScopes: { none: {} } },
-          { administrativeGroupScopes: { none: {} } },
-        ],
-      },
+      { staff: { some: { userId, deletedAt: null } } },
+      // R256 — the days off the association announces to everyone.
+      { AND: [everyone, { schedulingType: { structuralKind: "holiday" } }] },
+    ],
+  } : {
+    OR: [
+      everyone,
       ...enrolments.map((e) => ({
         AND: [
           dimensionMatch("branchScopes", "branchId", e.branchId),
@@ -929,8 +955,8 @@ async function personalFilters(
           ),
         ],
       })),
-      // Her own assignments, whatever the scope says.
-      { staff: { some: { userId, deletedAt: null } } },
+      // Her own assignments, whatever the scope says — not on the student's calendar (R256).
+      ...(as === "student" ? [] : [{ staff: { some: { userId, deletedAt: null } } }]),
     ],
   };
 
@@ -966,8 +992,8 @@ async function personalFilters(
     OR: [
       // Assigned — the Session's OWN snapshot (R43.4), so a مؤطرة who covered
       // one occurrence keeps it and one merely removed from the schedule does
-      // not lose the ones she actually took.
-      { staff: { some: { userId, deletedAt: null } } },
+      // not lose the ones she actually took. Not on the student's calendar (R256).
+      ...(as === "student" ? [] : [{ staff: { some: { userId, deletedAt: null } } }]),
       ...(levelIds.length || groupIds.length || circleIds.length
         ? [
             {
@@ -1082,6 +1108,8 @@ async function personalFilters(
     ],
   };
 
+  // R256 — a student's calendar with nothing she studies holds nothing.
+  if (as === "student" && session.OR!.length === 0) session.OR = [{ id: { in: [] } }];
   return { event, session, isBeneficiary: enrolments.length > 0 };
 }
 
@@ -1210,11 +1238,15 @@ export interface PersonalCalendarOptions {
 export async function personalCalendarOptions(
   prisma: PrismaClient,
   userId: string,
+  as?: PersonalRole,
 ): Promise<PersonalCalendarOptions> {
   // R172 §14 — a completed Level is behind her: its filter options go with it
-  // (`deletedAt: null` restated for the soft-delete guard).
+  // (`deletedAt: null` restated for the soft-delete guard). R256 — as a
+  // teacher, none of what she studies; as a student, none of what she teaches.
+  const studying = as !== "teacher";
+  const teaching = as !== "student";
   const enrolments = await prisma.enrollment.findMany({
-    where: { studentId: userId, deletedAt: null, ...inProgressEnrolmentWhere(userId) },
+    where: { studentId: userId, deletedAt: null, ...inProgressEnrolmentWhere(userId), ...(studying ? {} : { id: { in: [] } }) },
     select: {
       levelId: true,
       branchId: true,
@@ -1223,13 +1255,15 @@ export async function personalCalendarOptions(
     },
   });
   const seats = await prisma.studentTeachingGroup.findMany({
-    where: { studentId: userId, deletedAt: null, teachingGroup: { deletedAt: null } },
+    where: { studentId: userId, deletedAt: null, teachingGroup: { deletedAt: null }, ...(studying ? {} : { id: { in: [] } }) },
     select: { teachingGroup: { select: { id: true, name: true } } },
   });
 
-  const taught = await teacherEventScope(prisma, userId);
+  const taught = teaching
+    ? await teacherEventScope(prisma, userId)
+    : { branchIds: [], levelIds: [], categoryIds: [], administrativeGroupIds: [] };
   const taughtSchedules = await prisma.recurringCourseSchedule.findMany({
-    where: { deletedAt: null, staff: { some: { userId, ...effectiveOn(new Date()) } } },
+    where: { deletedAt: null, staff: { some: { userId, ...effectiveOn(new Date()) } }, ...(teaching ? {} : { id: { in: [] } }) },
     select: {
       subjectId: true,
       subject: { select: { id: true, name: true } },
@@ -1244,7 +1278,7 @@ export async function personalCalendarOptions(
    * alone missed its other branches (`multi_dimension`), the occurrences she is
    * staffed on one by one, and the activities she is staffed on.
    */
-  const [scheduleBranches, staffedSessions, staffedEvents] = await Promise.all([
+  const [scheduleBranches, staffedSessions, staffedEvents] = teaching ? await Promise.all([
     prisma.courseScheduleBranch.findMany({
       where: { schedule: { deletedAt: null, staff: { some: { userId, ...effectiveOn(new Date()) } } } },
       select: { branchId: true },
@@ -1259,7 +1293,7 @@ export async function personalCalendarOptions(
       where: { userId, deletedAt: null, event: { deletedAt: null } },
       select: { event: { select: { branchScopes: { select: { branchId: true } } } } },
     }),
-  ]);
+  ]) : [[], [], []];
   const branchIds = new Set<string>([
     // R255 — and the branch of each Level she is enrolled in: a مؤطِّرة who is
     // also a beneficiary sees those occurrences (`personalFilters`), and with
@@ -1607,7 +1641,7 @@ export function examAudienceFilters(
 export async function readCalendar(
   prisma: PrismaClient,
   actor: CalendarActor | null,
-  query: CalendarQuery & { mine?: boolean; includeCancelled?: boolean },
+  query: CalendarQuery & { mine?: boolean; includeCancelled?: boolean; as?: PersonalRole },
 ): Promise<Occurrence[]> {
   if (query.to < query.from) {
     throw new AppError("VALIDATION_FAILED", "to must not precede from");
@@ -1631,7 +1665,7 @@ export async function readCalendar(
    */
   const personal =
     query.mine === true && actor !== null
-      ? await personalFilters(prisma, actor.userId)
+      ? await personalFilters(prisma, actor.userId, query.as)
       : null;
 
   /**
@@ -1870,7 +1904,13 @@ export async function readCalendar(
               ? { academicYearId: query.academicYearId }
               : {}),
             // R221 — Category, Level, group and circle, read as the list reads them.
-            AND: examAudienceFilters(query),
+            AND: [
+              ...examAudienceFilters(query),
+              // R256 — on her teaching calendar, the sittings she is assigned to.
+              ...(query.mine === true && query.as === "teacher" && actor !== null
+                ? [{ staff: { some: { userId: actor.userId, deletedAt: null } } }]
+                : []),
+            ],
           },
           include: {
             // R165 §2 — the one Surah this sitting examines, by name.

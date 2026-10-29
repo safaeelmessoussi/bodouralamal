@@ -72,7 +72,7 @@ const api = (path, init) =>
     return res;
   })()`);
 
-async function open(path = '/dashboard/student') {
+async function open(path = '/dashboard/student/calendar') {
   await send('Page.navigate', { url: `${BASE}${path}` });
   for (let i = 0; i < 120; i += 1) {
     const ok = await evaluate(`(() => document.querySelector('main') !== null)()`).catch(() => false);

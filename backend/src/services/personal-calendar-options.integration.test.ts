@@ -135,6 +135,25 @@ describe("a مؤطرة's own vocabulary", () => {
     await clearTeachingContext(prisma, `${TAG} تدريس`);
   });
 
+  it("R256 — as a teacher, only what she teaches; as a student, only what she studies", async () => {
+    const branchA = await makeBranch("فرع أ");
+    const branchB = await makeBranch("فرع ب");
+    const asStudent = await createTeachingContext(prisma, TAG, branchA);
+    const asTeacher = await createTeachingContext(prisma, `${TAG} تدريس`, branchB);
+    const personId = await person("مزدوجة");
+    await enrol(prisma, asStudent, personId);
+    await staffSchedule(prisma, asTeacher, personId);
+
+    const teaching = await personalCalendarOptions(prisma, personId, "teacher");
+    expect(teaching.levels.map((l) => l.id)).toEqual([asTeacher.levelId]);
+    expect(teaching.branches.map((b) => b.id)).toEqual([branchB]);
+    const studying = await personalCalendarOptions(prisma, personId, "student");
+    expect(studying.levels.map((l) => l.id)).toEqual([asStudent.levelId]);
+    expect(studying.branches.map((b) => b.id)).toEqual([branchA]);
+
+    await clearTeachingContext(prisma, `${TAG} تدريس`);
+  });
+
   it("R255 — a مؤطرة with no class to staff still gets the branch she is enrolled at", async () => {
     // The Owner's case: «الفرع» empty in «الجدولة» while her calendar showed
     // the occurrences of the Level she is enrolled in.

@@ -46,6 +46,13 @@ export interface TeachingProfileInput {
 export interface TeachingProfile {
   userId: string;
   /**
+   * **R256 — when she last saved her own profile** (ISO), or `null`. An
+   * administrator's save names the value it opened with; a different one means
+   * she saved meanwhile, and hers stands (the Owner: «if both of them trying to
+   * save at the same time, prioritize the teacher saving»).
+   */
+  self_saved_at: string | null;
+  /**
    * General willingness captured with the staff request (R115). It remains
    * read-only here: a weekly range and an approval-time preference answer
    * different planning questions, and neither is authority.
@@ -178,8 +185,47 @@ function assertNoOverlap(availability: readonly AvailabilityInput[]): void {
 /** The profile itself, with no authorization of its own — every caller above
  *  has already decided whose profile it may read, and doing it once is what
  *  keeps the two readers returning the same shape. */
+/**
+ * **R256 — her last save of her own profile**, read from the record every
+ * self-service write already leaves (`settings.change` on her own account,
+ * `self_service: true`): nothing new is stored to answer it.
+ */
+async function lastSelfSave(db: Pick<PrismaClient, 'auditLog'>, userId: string): Promise<string | null> {
+  const row = await db.auditLog.findFirst({
+    where: {
+      actorUserId: userId,
+      targetId: userId,
+      targetEntity: 'User',
+      actionType: 'settings.change',
+      detail: { path: ['self_service'], equals: true },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  });
+  return row?.createdAt.toISOString() ?? null;
+}
+
+/**
+ * **R256 — the administrator's save yields to hers.** `expected` is the
+ * `selfSavedAt` the administrator's form opened with (`undefined`: not stated,
+ * the older contract). Read under the R111 lock every planning writer takes,
+ * so her save and this one cannot interleave.
+ */
+async function assertTeacherHasNotSaved(
+  tx: Pick<PrismaClient, 'auditLog'>,
+  userId: string,
+  expected: string | null | undefined,
+): Promise<void> {
+  if (expected === undefined) return;
+  if ((await lastSelfSave(tx, userId)) !== expected) {
+    throw new AppError('VERSION_CONFLICT', 'she saved her own teaching profile since this form opened', {
+      reason: 'TEACHER_SAVED_FIRST',
+    });
+  }
+}
+
 async function loadProfile(prisma: PrismaClient, userId: string): Promise<TeachingProfile> {
-  const [framing, subjects, categories, availability, span] = await Promise.all([
+  const [framing, subjects, categories, availability, span, selfSavedAt] = await Promise.all([
     prisma.framingPreference.findUnique({ where: { userId }, select: FRAMING_SELECT }),
     prisma.teacherSubjectCapability.findMany({
       where: { userId },
@@ -196,10 +242,12 @@ async function loadProfile(prisma: PrismaClient, userId: string): Promise<Teachi
       orderBy: [{ weekday: 'asc' }, { startTime: 'asc' }],
     }),
     currentSpan(prisma),
+    lastSelfSave(prisma, userId),
   ]);
 
   return {
     userId,
+    self_saved_at: selfSavedAt,
     framing: framing ? framingView(framing, span) : null,
     subjects: subjects.map((r) => r.subject),
     categories: categories.map((r) => r.category),
@@ -273,6 +321,7 @@ export async function replaceTeachingProfile(
   actor: Actor,
   userId: string,
   input: TeachingProfileInput,
+  expectedSelfSave?: string | null,
 ): Promise<TeachingProfile> {
   assertMayManage(actor);
 
@@ -297,6 +346,7 @@ export async function replaceTeachingProfile(
     // deletion, then revalidate, so a stale profile save cannot recreate
     // planning satellites after final de-identification.
     await assertStaffAccountsAvailable(tx, [userId]);
+    await assertTeacherHasNotSaved(tx as unknown as Pick<PrismaClient, 'auditLog'>, userId, expectedSelfSave);
 
     // Replaced whole: three `deleteMany`s and three inserts express *this is her
     // profile now*, where a diff would invite the half-applied state.
@@ -546,11 +596,12 @@ export async function replaceFraming(
   actor: Actor,
   userId: string,
   framing: FramingPreferenceInput,
+  expectedSelfSave?: string | null,
 ): Promise<TeachingProfile> {
   assertMayManage(actor);
   const user = await prisma.user.findFirst({ where: { id: userId, deletedAt: null }, select: { id: true } });
   if (!user) throw new AppError('NOT_FOUND', 'no such user');
-  await saveFraming(prisma, actor, userId, framing, false);
+  await saveFraming(prisma, actor, userId, framing, false, expectedSelfSave);
   return readTeachingProfile(prisma, actor, userId);
 }
 
@@ -560,10 +611,12 @@ async function saveFraming(
   userId: string,
   framing: FramingPreferenceInput,
   selfService: boolean,
+  expectedSelfSave?: string | null,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     // The same R111 lock every planning writer takes.
     await assertStaffAccountsAvailable(tx, [userId]);
+    if (!selfService) await assertTeacherHasNotSaved(tx as unknown as Pick<PrismaClient, 'auditLog'>, userId, expectedSelfSave);
     await writeFramingPreference(tx, userId, framing);
     await audit.write(tx as unknown as Prisma.TransactionClient, {
       actorUserId: actor.userId,

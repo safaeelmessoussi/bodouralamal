@@ -83,18 +83,18 @@ try {
   const shelf = (id) => `/resources?content=${id}`;
   await send('Network.clearBrowserCookies');
   await width(390);
-  // R196 — the bare page opens «حسب السورة»; the Level shelves are «حسب المستوى».
+  // R196 — the bare page opens «تفسير»; the Level shelves are «محتوى المستويات».
   await open('/resources');
-  check('fresh anonymous library opens on «حسب السورة»', await waitFor(`document.querySelector('.content-modes [aria-selected="true"]')?.textContent.includes('حسب السورة')`));
+  check('fresh anonymous library opens on «تفسير»', await waitFor(`document.querySelector('.content-modes [aria-selected="true"]')?.textContent.includes('تفسير')`));
   // R207 — «نظرة شاملة» is public: an anonymous visitor has its tab and its timeline.
   await open('/resources?view=history');
-  check('anonymous «حسب الخط الزمني» opens its timeline', await waitFor(`document.querySelector('.content-modes [aria-selected="true"]')?.textContent.includes('حسب الخط الزمني') && document.querySelectorAll('.humanity__station').length > 0 && document.querySelectorAll('.humanity__era').length === 4`));
+  check('anonymous «الخط الزمني» opens its timeline', await waitFor(`document.querySelector('.content-modes [aria-selected="true"]')?.textContent.includes('الخط الزمني') && document.querySelectorAll('.humanity__station').length > 0 && document.querySelectorAll('.humanity__era').length === 4`));
   await open('/resources?view=levels');
   // R174 §3 — the library shows everything at once: the fixture Level is a
   // SHELF heading with its items beneath it, not a card that links away.
   check('fresh anonymous public library has real fixture level', await waitFor(`!!document.querySelector('#shelf-${fixture.levelId}') && document.querySelectorAll('#shelf-${fixture.levelId} ~ .content-year .content-card, section[aria-labelledby="shelf-${fixture.levelId}"] .content-card').length > 0`));
   check('the library filters read «الكل»', await evaluate(`[...document.querySelectorAll('.cal-toolbar select option[value=""]')].every((o) => o.textContent.trim() === 'الكل')`));
-  // R247 — «حسب السورة»: the years newest first, and the pages of what is heard.
+  // R247 — «تفسير»: the years newest first, and the pages of what is heard.
   const sp = fixture.surahPage;
   const yearToggles = "[...document.querySelectorAll('#surah-listen .surah-library__yearToggle')]";
   for (const w of [390, 1366]) {
@@ -119,11 +119,11 @@ try {
   // R248 — a recording's page is shown beside its recording only: not on a Level's shelf.
   await open('/resources?view=levels');
   const shelfTitles = `[...document.querySelectorAll('.content-card')].map((c) => c.textContent)`;
-  check('«حسب المستوى» lists the session image', await waitFor(`${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.pageTitles[0])}))`));
-  check("«حسب المستوى» leaves out a recording's page", await evaluate(`!${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.pageTitles[1])}))`));
-  // R250 — a recording about a Surah is read in «حسب السورة», not on a Level's shelf.
-  check('«حسب المستوى» leaves out a recording about a Surah', await evaluate(`!${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.lessonTitle)}))`));
-  check('«حسب المستوى» fits a phone with four views', await evaluate("document.querySelectorAll('.content-modes [role=tab]').length === 4") && await overflow());
+  check('«محتوى المستويات» lists the session image', await waitFor(`${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.pageTitles[0])}))`));
+  check("«محتوى المستويات» leaves out a recording's page", await evaluate(`!${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.pageTitles[1])}))`));
+  // R250 — a recording about a Surah is read in «تفسير», not on a Level's shelf.
+  check('«محتوى المستويات» leaves out a recording about a Surah', await evaluate(`!${shelfTitles}.some((t) => t.includes(${JSON.stringify(sp.lessonTitle)}))`));
+  check('«محتوى المستويات» fits a phone with four views', await evaluate("document.querySelectorAll('.content-modes [role=tab]').length === 4") && await overflow());
   for (const [kind, id] of Object.entries(fixture.items)) {
     await open(shelf(id));
     check(`${kind}: preview opens anonymously`, await waitFor("!!document.querySelector('dialog[open] .preview__actions button')"));
@@ -149,20 +149,43 @@ try {
     check(`${kind}: phone dialog fits`, fits, fits ? '' : (box ?? 'no dialog'));
     check(`${kind}: no runtime errors`, await evaluate('window.__readerErrors.length === 0'));
   }
+  // R256 — «محتوى عام»: by Subject, like «تفسير» by Surah — recordings first, files
+  // below, no filters; and «محتوى المستويات» holds none of it.
+  const gen = fixture.general;
+  await open('/resources?view=categories');
+  const pickedGeneral = await waitFor(`(() => { const b = [...document.querySelectorAll('.subject-library .surah-library__surah')].find((x) => x.textContent.includes(${JSON.stringify(gen.subject)})); if (!b) return false; b.click(); return true; })()`);
+  await waitFor(`document.querySelector('#subject-library-title')?.textContent.trim() === ${JSON.stringify(gen.subject)}`);
+  const general = JSON.parse(await evaluate(`JSON.stringify({
+    tab: document.querySelector('.content-modes [aria-selected="true"]')?.textContent.trim() ?? null,
+    title: document.querySelector('#subject-library-title')?.textContent.trim() ?? null,
+    firstTrack: document.querySelector('.subject-library .surah-track .surah-track__title')?.textContent.trim() ?? null,
+    cards: [...document.querySelectorAll('.subject-library .content-card__title')].map((x) => x.textContent.trim()),
+    trackBeforeCards: (() => { const t = document.querySelector('.subject-library .surah-track'); const c = document.querySelector('.subject-library .content-card'); return !!t && !!c && !!(t.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING); })(),
+    download: !!document.querySelector('.subject-library .surah-track .surah-player__button--download'),
+    filters: document.querySelectorAll('main .cal-toolbar, main .datatable__toolbar').length,
+  })`));
+  check('«محتوى عام» lists the seasonal course and opens its page', pickedGeneral && (general.tab ?? '').includes('محتوى عام') && general.title === gen.subject, JSON.stringify(general));
+  check('«محتوى عام»: its recording first, its file below, no filters', general.firstTrack === gen.lectureTitle && general.cards.includes(gen.notesTitle) && general.trackBeforeCards && general.filters === 0, JSON.stringify(general));
+  check('a recording downloads from its own row', general.download);
+  check('«محتوى عام» fits a phone', await overflow());
+  await open('/resources?view=levels');
+  await waitFor("document.querySelectorAll('.content-card').length > 0");
+  check('«محتوى المستويات» holds nothing general', await evaluate(`![...document.querySelectorAll('.content-card')].some((c) => c.textContent.includes(${JSON.stringify(gen.notesTitle)}))`));
+
   // R255 — a link opens the item where it is read: a recording about a Surah
   // (or one of its pages) over that Surah's page, the track marked; an item
-  // about no Surah over «حسب المستوى».
+  // about no Surah over «محتوى المستويات».
   const landing = () => evaluate(`JSON.stringify({ surah: new URLSearchParams(location.search).get('surah'), tab: document.querySelector('.content-modes [aria-selected="true"]')?.textContent.trim() ?? null, focused: document.querySelector('.surah-track.is-focused .surah-track__title')?.textContent.trim() ?? null, dialog: !!document.querySelector('dialog[open] .preview__actions button') })`).then(JSON.parse);
   for (const [label, id] of [['a Surah recording', sp.lesson], ["a recording's page", sp.page]]) {
     await open(shelf(id));
     await waitFor("!!document.querySelector('dialog[open] .preview__actions button')");
     const at = await landing();
-    check(`${label}: its link opens its Surah's page, the recording marked`, at.surah === String(sp.surah) && (at.tab ?? '').includes('حسب السورة') && at.focused === sp.lessonTitle && at.dialog, JSON.stringify(at));
+    check(`${label}: its link opens its Surah's page, the recording marked`, at.surah === String(sp.surah) && (at.tab ?? '').includes('تفسير') && at.focused === sp.lessonTitle && at.dialog, JSON.stringify(at));
   }
   await open(shelf(fixture.items.audio));
   await waitFor("!!document.querySelector('dialog[open] .preview__actions button')");
   const plain = await landing();
-  check('an item about no Surah opens over «حسب المستوى»', plain.surah === null && (plain.tab ?? '').includes('حسب المستوى') && plain.dialog, JSON.stringify(plain));
+  check('an item about no Surah opens over «محتوى المستويات»', plain.surah === null && (plain.tab ?? '').includes('محتوى المستويات') && plain.dialog, JSON.stringify(plain));
   await open(shelf(fixture.items.image));
   check('public content does not expose a hidden Session', await waitFor(`document.querySelectorAll('.preview__sessions a').length === 1`) && await evaluate(`!document.querySelector('a[href*="${fixture.privateSessionId}"]')`));
   await evaluate("document.querySelector('.preview__sessions a').click()");

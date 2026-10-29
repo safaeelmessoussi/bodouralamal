@@ -18,11 +18,9 @@ function code(source: string): string {
  * مؤطرة's said «ستُضاف لوحة مختصرة هنا لاحقاً».
  */
 describe('the beneficiary’s landing is its title only (R250)', () => {
-  it('prints the heading once — the layout owns it', () => {
-    const landing = code(STUDENT).slice(0, code(STUDENT).indexOf('function'));
-    expect(code(STUDENT)).toContain("<StudentLayout title={t('studentDashboard.title')}");
-    // The duplicate: an `<h1>` repeating the layout's own title.
-    expect(landing).not.toContain("<h1>{t('studentDashboard.title')}</h1>");
+  it('R256 — is withdrawn: its address leads to «تقويمي»', () => {
+    expect(code(STUDENT)).toContain('/dashboard/student/calendar');
+    expect(code(STUDENT)).not.toContain("title={t('studentDashboard.title')}");
   });
 
   it('offers no second copy of the menu', () => {

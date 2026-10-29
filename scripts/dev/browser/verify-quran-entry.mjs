@@ -352,7 +352,7 @@ check(
  */
 const rajaaToken = await tokenFor(process.env.RAJAA_COOKIE);
 await beIdentity(process.env.RAJAA_COOKIE);
-await open('/teacher', 'main');
+await open('/teacher/schedules', 'main');
 const rajaaMenu = await evaluate(`(() =>
   [...document.querySelectorAll('nav a')].map((a) => a.textContent.trim())
 )()`);

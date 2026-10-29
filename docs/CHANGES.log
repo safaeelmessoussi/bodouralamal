@@ -528,3 +528,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Frontend: `?content=` resolved in the library (Surah page with the item marked and opened, else the Level/Category view); `LevelView`, `ContentFilters`/`applyFilters`, the back link and two keys (ar + six locales) removed; «المادة» after «العنوان».
 - Production data: 25 roomless past/cancelled occurrences of 5 classes filled (dry run first; audit rows), 0 left.
 - CI fix: the R50 test that expected a split to clash with an occurrence it keeps now asserts the R255 rule; the calendar options' Subject read names `deletedAt` itself. Verified: integration 101/101, seed drill green.
+
+## 2026-10-29 — SRS Revision 256: calendars by role, no empty homes, one teaching-profile form (hers wins), type usage, library tabs + «محتوى عام» by Subject, downloads, «شهاداتي» spacing
+- Backend: `personalFilters`/`personalCalendarOptions(as)`; `?as=` on both /me/calendar routes; profile `self_saved_at` + `?self_saved_at=` → 409 `TEACHER_SAVED_FIRST`; type usage = events + classes + exams (list and delete); library rows `subject_seasonal`/`subject_shared`.
+- Frontend: `PersonalCalendar as`; `/teacher`, `/teacher/calendar`, `/dashboard/student` redirect; `useTeachingProfileForm` (page + dialog); `SubjectLibrary`/`isGeneralEntry`; tabs renamed (ar + 6 locales); a download button per recording; `.certificate-list*` restored.
+- Verified: integration 321/321 (journey, calendar options as teacher/student, teacher-wins 409, library flags, type usage) + public reader 226/226 with «محتوى عام»; seed drill; frontend 1708, backend 391; browser: portals 25/25, teaching dialog = her form, «شهاداتي» gaps 12 px.

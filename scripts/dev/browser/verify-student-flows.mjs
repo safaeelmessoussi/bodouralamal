@@ -112,7 +112,7 @@ check(
 /* ── the beneficiary sees it ────────────────────────────────────────────── */
 
 await as(process.env.STUDENT_COOKIE);
-await open('/dashboard/student');
+await open('/dashboard/student/calendar');
 const bell = await evaluate(`(async () => {
   const trigger = document.querySelector('.bell__trigger');
   if (!trigger) return { missing: true };
@@ -130,7 +130,7 @@ check(
 
 const unrelated = await (async () => {
   await as(process.env.UNRELATED_COOKIE);
-  await open('/dashboard/student');
+  await open('/dashboard/student/calendar');
   return evaluate(`(async () => {
     const trigger = document.querySelector('.bell__trigger');
     if (!trigger) return { missing: true };
@@ -149,10 +149,11 @@ check(
 /* ── her portal stays her portal ────────────────────────────────────────── */
 
 await as(process.env.STUDENT_COOKIE);
-await open('/dashboard/student');
+await open('/dashboard/student/calendar');
 const landing = await shell();
 check(
-  '6 · لوحة المستفيد(ة) carries none of the moved details',
+  // R256 — her portal opens on «تقويمي» (the dashboard is withdrawn).
+  '6 · her first page carries none of the moved details',
   !landing.text.includes('الفئة') && !landing.text.includes('المقر'),
   landing.text.slice(0, 140),
 );

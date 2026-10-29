@@ -1,46 +1,14 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useRef, type ReactNode } from 'react';
 
-import {
-  fetchTeachingProfile,
-  saveTeachingProfile,
-  saveUserFraming,
-  type AvailabilityRange,
-} from '../../adapters/teaching-profile.js';
+import { fetchTeachingProfile, saveTeachingProfile, saveUserFraming } from '../../adapters/teaching-profile.js';
 import { t } from '../../i18n/index.js';
-import { AvailabilityEditor } from '../teaching/availability-editor.js';
-import { FramingPreferenceEditor } from '../teaching/framing-preference-editor.js';
+import { LoadingState } from '../states.js';
+import {
+  TeachingProfileSaveError,
+  useTeachingProfileForm,
+  type TeachingProfileChange,
+} from '../teaching/teaching-profile-form.js';
 import { FormDialog } from '../ui/form-dialog.js';
-import { CapabilitiesEditor } from '../teaching/capabilities-editor.js';
-import { isDirty } from '../../lib/form-dirty.js';
-
-/**
- * The three things this form edits, in one comparable shape.
- *
- * The selections are **sorted** because `MultiSelectField` returns them in
- * click order: picking A then B and picking B then A are the same profile, and
- * `isDirty`'s array comparison is deliberately order-sensitive. Availability
- * ranges are **not** sorted — their order is what the teacher entered, and the
- * server stores the list as given.
- */
-interface ProfileSnapshot {
-  subjects: string[];
-  categories: string[];
-  ranges: AvailabilityRange[];
-}
-
-const EMPTY_SNAPSHOT: ProfileSnapshot = { subjects: [], categories: [], ranges: [] };
-
-function snapshot(
-  subjects: readonly string[],
-  categories: readonly string[],
-  ranges: readonly AvailabilityRange[],
-): ProfileSnapshot {
-  return {
-    subjects: [...subjects].sort(),
-    categories: [...categories].sort(),
-    ranges: ranges.map((r) => ({ ...r })),
-  };
-}
 
 /**
  * **الملف التدريسي — what she can teach, and when** (R88).
@@ -58,6 +26,13 @@ function snapshot(
  * administration choose one. That sentence is on the screen because the
  * distinction is invisible otherwise — a form that lists Subjects and Quran
  * looks exactly like a permissions form.
+
+ *
+ * **R256 — the same form as her «إدخال أوقات التوفّر»** (the Owner: «for them
+ * both same thing is opened, and they are both allowed to edit same thing»):
+ * `useTeachingProfileForm`, one «حفظ». The framing goes to her framing route,
+ * the Subjects, Categories and times to the profile route — each naming the
+ * `self_saved_at` it opened with, so a save she made meanwhile stands.
  */
 export function TeachingProfileDialog({
   userId,
@@ -67,7 +42,6 @@ export function TeachingProfileDialog({
   token,
   onClose,
   onSaved,
-  onFramingSaved,
 }: {
   userId: string;
   userName: string;
@@ -76,124 +50,53 @@ export function TeachingProfileDialog({
   token: string | null;
   onClose: () => void;
   onSaved: () => void;
-  /** R215 — the framing preference saved on its own (the dialog stays open). */
-  onFramingSaved?: () => void;
 }): ReactNode {
-  const [subjectIds, setSubjectIds] = useState<string[]>([]);
-  const [categoryIds, setCategoryIds] = useState<string[]>([]);
-  const [ranges, setRanges] = useState<AvailabilityRange[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  const [framing, setFraming] = useState<Awaited<ReturnType<typeof fetchTeachingProfile>>['framing']>(
-    null,
+  // The catalogue as it was when the dialog opened: a new array from the page
+  // on each render must not re-read the form (and lose what was typed).
+  const catalogue = useRef({ subjects, categories });
+  const load = useCallback(
+    async () => ({ profile: await fetchTeachingProfile(userId, token), ...catalogue.current }),
+    [userId, token],
   );
-  /**
-   * **What the server had when this dialog opened** — the pristine side of the
-   * comparison. Held in state rather than recomputed, because the values arrive
-   * from a fetch and there is nothing else to compare against.
-   */
-  const [pristine, setPristine] = useState<ProfileSnapshot>(EMPTY_SNAPSHOT);
-
-  const load = useCallback(async () => {
-    try {
-      const profile = await fetchTeachingProfile(userId, token);
-      const loadedSubjects = profile.subjects.map((s) => s.id);
-      const loadedCategories = profile.categories.map((c) => c.id);
-      const loadedRanges = profile.availability.map((a) => ({
-        weekday: a.weekday,
-        start_time: a.start_time,
-        end_time: a.end_time,
-        mode: a.mode,
-      }));
-      setSubjectIds(loadedSubjects);
-      setCategoryIds(loadedCategories);
-      setRanges(loadedRanges);
-      setFraming(profile.framing);
-      // The same values the fields were just reset to. Captured here rather
-      // than in a render, which is the timing trap `isDirty` documents.
-      setPristine(snapshot(loadedSubjects, loadedCategories, loadedRanges));
-      setLoaded(true);
-    } catch {
-      setError(t('admin.teachingProfile.loadFailed'));
-      setLoaded(true);
-    }
-  }, [userId, token]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  /**
-   * **Changed since it opened** — not *has any content*, which is what this
-   * asked before (NEW E). A مؤطِّرة who already had subjects, categories or an
-   * availability range opened the dialog already «dirty», so closing it without
-   * touching anything asked her to confirm discarding work she had not done.
-   * Rule AY is explicit that a pristine form must not nag, and the shared
-   * `isDirty` is the mechanism: compare against the record, so typing a change
-   * and undoing it correctly reports clean again.
-   */
-  const dirty = loaded && isDirty(snapshot(subjectIds, categoryIds, ranges), pristine);
+  const save = useCallback(
+    async (change: TeachingProfileChange) => {
+      if (change.framing) {
+        await saveUserFraming(userId, change.framing, token, change.selfSavedAt ?? null).catch((error: unknown) => {
+          throw new TeachingProfileSaveError('framing', error);
+        });
+      }
+      if (change.capabilities || change.availability) {
+        // One route replaces both, so it is sent the whole current state.
+        await saveTeachingProfile(
+          userId,
+          { subject_ids: change.all.subjectIds, category_ids: change.all.categoryIds, availability: change.all.ranges },
+          token,
+          change.selfSavedAt ?? null,
+        ).catch((error: unknown) => {
+          throw new TeachingProfileSaveError(change.capabilities ? 'capabilities' : 'availability', error);
+        });
+      }
+    },
+    [userId, token],
+  );
+  const form = useTeachingProfileForm({ load, save });
 
   return (
     <FormDialog
       open
       title={t('admin.teachingProfile.title').replace('{name}', userName)}
       submitLabel={t('common.save')}
-      busy={busy}
-      dirty={dirty}
-      notice={error}
+      busy={form.busy}
+      dirty={form.dirty}
+      notice={form.loadError ? t('admin.teachingProfile.loadFailed') : form.notice}
       onCancel={onClose}
       onSubmit={() => {
-        void (async () => {
-          setBusy(true);
-          setError(null);
-          try {
-            await saveTeachingProfile(
-              userId,
-              { subject_ids: subjectIds, category_ids: categoryIds, availability: ranges },
-              token,
-            );
-            onSaved();
-          } catch {
-            // The server owns the overlap rule and the reference checks; the
-            // form reports its refusal rather than re-implementing either.
-            setError(t('admin.teachingProfile.saveFailed'));
-          } finally {
-            setBusy(false);
-          }
-        })();
+        void form.saveAll().then((ok) => {
+          if (ok) onSaved();
+        });
       }}
     >
-      {/* R215 — the administration may say it too. */}
-      <FramingPreferenceEditor
-        framing={framing}
-        onSave={async (payload) => {
-          const saved = await saveUserFraming(userId, payload, token);
-          setFraming(saved.framing);
-          onFramingSaved?.();
-          return saved.framing;
-        }}
-      />
-
-      {/* **The shared editor**, for the same reason `AvailabilityEditor` is
-          shared: a مؤطِّرة now has these two controls on her own page, and a
-          second hand-written copy is how the pair drift (rule C). The
-          planning-only sentence travels with them. */}
-      <CapabilitiesEditor
-        subjects={subjects}
-        categories={categories}
-        subjectIds={subjectIds}
-        categoryIds={categoryIds}
-        onSubjects={setSubjectIds}
-        onCategories={setCategoryIds}
-      />
-
-      {/* **The shared editor** (R106). It was written out here, and the
-          moment a مؤطِّرة could edit her own ranges there would have been two
-          copies of R88's subtleties — one of which would drift. */}
-      <AvailabilityEditor ranges={ranges} onChange={setRanges} />
+      {form.loading ? <LoadingState /> : form.loadError ? null : form.fields}
     </FormDialog>
   );
-
 }

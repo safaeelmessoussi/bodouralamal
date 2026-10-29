@@ -24,8 +24,9 @@ describe('تقويمي reads its filter options from her own scoped vocabulary',
   });
 
   it('fetches it once, keyed only on the token — not on the visible month', () => {
-    expect(source).toMatch(/void fetchMyCalendarOptions\(token\)[\s\S]{0,60}\.then\(setOptions\)/);
-    expect(source).toMatch(/}, \[token\]\);/);
+    // R256 — and the role: her teaching calendar or her studying one.
+    expect(source).toMatch(/void fetchMyCalendarOptions\(token, as\)[\s\S]{0,60}\.then\(setOptions\)/);
+    expect(source).toMatch(/}, \[token, as\]\);/);
   });
 
   it('feeds CalendarFilters from options, not from the public bootstrap', () => {

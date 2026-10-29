@@ -1779,6 +1779,24 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
       createdContentIds.add(id);
       surahItems[name] = id;
     }
+    // R256 — «محتوى عام»: a «دورة موسمية» with a recording and a file of it.
+    const course = await prisma.subject.create({ data: { name: `${TAG} دورة موسمية`, isSeasonal: true } });
+    const generalItems: Record<string, string> = {};
+    for (const [name, mime, bytes] of [
+      ['lecture', 'audio/wav', audio],
+      ['notes', 'application/pdf', Buffer.from(pdf)],
+    ] as const) {
+      const id = randomUUID();
+      const key = buildStorageKey(id, `general.${mime.split('/')[1]}`);
+      trackObject('public', key);
+      await clients.internal.send(new PutObjectCommand({ Bucket: 'public', Key: key, Body: bytes, ContentType: mime }));
+      await prisma.educationalContent.create({ data: {
+        id, title: `${TAG} الدورة ${name}`, levelId, subjectId: course.id, academicYearId, branchId, visibility: 'public',
+        storageBucket: 'public', storageKey: key, originalFilename: `general.${name}`, mimeType: mime, sizeBytes: bytes.length,
+      } });
+      createdContentIds.add(id);
+      generalItems[name] = id;
+    }
     await prisma.sessionContent.create({ data: { sessionId, contentId: surahItems['lesson']! } });
     await setRecordingSlides(prisma, admin(), surahItems['lesson']!, [surahItems['page']!]);
     const years = await prisma.academicYear.findMany({ where: { id: { in: [academicYearId, earlierYear.id] } }, select: { label: true } });
@@ -1827,6 +1845,12 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
           },
           date: session.date.toISOString().slice(0, 10),
           restrictedId: restricted.id,
+          general: {
+            subject: course.name,
+            lecture: generalItems['lecture'],
+            lectureTitle: `${TAG} الدورة lecture`,
+            notesTitle: `${TAG} الدورة notes`,
+          },
           surahPage: {
             surah: 1,
             years: years.map((y) => y.label).sort().reverse(),

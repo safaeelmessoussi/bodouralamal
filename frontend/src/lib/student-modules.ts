@@ -47,21 +47,10 @@ export type StudentModule = PortalModule & { childContext: boolean };
 export const STUDENT_MODULES: readonly StudentModule[] = [
   {
     /**
-     * **لوحة المستفيدة — deliberately minimal, for now.**
-     *
-     * The Owner asked that it stay empty until it is designed, and that «حصص
-     * اليوم والقادمة» be removed from it: those occurrences are in تقويمي, and
-     * showing them twice makes one of the two the wrong place to look.
+     * Her own week, from `/me/calendar` (R82.8) — never the public timetable.
+     * **R256 — her portal opens here**: «لوحة المستفيدة», empty by the Owner's
+     * choice, is withdrawn and its address leads here.
      */
-    path: '/dashboard/student',
-    labelKey: 'student.nav.dashboard',
-    roles: STUDENT,
-    // Reads `activeChildId` and names the child in a banner (R62.10).
-    childContext: true,
-    status: 'ready',
-  },
-  {
-    /** Her own week, from `/me/calendar` (R82.8) — never the public timetable. */
     path: '/dashboard/student/calendar',
     // `/me/calendar` resolved for the acting student (R85).
     childContext: true,

@@ -28,13 +28,15 @@ if (!COOKIE || !API_COOKIE) {
 }
 
 /** The Owner's order, §5. Read independently of the registry on purpose. */
+// R256 — «مساحة التدريس» withdrawn, «إدخال أوقات التوفّر» last (and the
+// labels of R165 §6 / R124, which this list had not followed).
 const MENU = [
-  ['مساحة التدريس', '/teacher'],
-  ['إدخال أوقات التوفّر', '/teacher/availability'],
   ['إدخال حفظ المستفيدين والمستفيدات', '/teacher/quran'],
-  ['إدخال نقاط الامتحانات', '/teacher/exams'],
   ['الجدولة', '/teacher/schedules'],
   ['مكتبة المحتوى', '/teacher/content'],
+  ['بناء الاختبارات', '/teacher/assessments'],
+  ['نقاط الاختبارات', '/teacher/exams'],
+  ['إدخال أوقات التوفّر', '/teacher/availability'],
 ];
 
 const { send, evaluate, close } = await connect(process.env.PORT ?? '9249');
@@ -88,7 +90,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 /* ── The menu ────────────────────────────────────────────────────────────── */
 
-await goto('/teacher');
+await goto('/teacher/schedules');
 const menu = await readMenu();
 
 /**
