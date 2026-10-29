@@ -527,3 +527,4 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Backend: options add enrolment branches; `audienceNames` collapses a whole Category; `fillBlankSessionRooms` on a class edit (+ `ops:fill-session-rooms`, APPLY=1 to write); a split ignores clashes on retained dates.
 - Frontend: `?content=` resolved in the library (Surah page with the item marked and opened, else the Level/Category view); `LevelView`, `ContentFilters`/`applyFilters`, the back link and two keys (ar + six locales) removed; «المادة» after «العنوان».
 - Production data: 25 roomless past/cancelled occurrences of 5 classes filled (dry run first; audit rows), 0 left.
+- CI fix: the R50 test that expected a split to clash with an occurrence it keeps now asserts the R255 rule; the calendar options' Subject read names `deletedAt` itself. Verified: integration 101/101, seed drill green.

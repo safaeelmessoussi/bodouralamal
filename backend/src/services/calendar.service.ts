@@ -1299,7 +1299,7 @@ export async function personalCalendarOptions(
     const taught = await subjectsTaughtAt(prisma, [...levelIds]);
     const taughtIds = [...new Set([...taught.values()].flatMap((set) => [...set]))];
     const rows = await prisma.subject.findMany({
-      where: { id: { in: taughtIds } },
+      where: { id: { in: taughtIds }, deletedAt: null },
       select: { id: true, name: true },
     });
     for (const row of rows) subjects.set(row.id, row.name);

@@ -2204,13 +2204,14 @@ describe('SRS Revision 50 — "this session and all future sessions" splits the 
     expect(survivor?.scheduleId).toBe(id);
   });
 
-  it("a retained protected session still occupies its room — the split cannot silently double-book it", async () => {
-    // The room/staff conflict check must not be blinded to a session that
-    // R43.6 keeps alive under the predecessor. Overriding the SPLIT date's
-    // own occurrence (still in roomA, unchanged) and then splitting WITHOUT
-    // moving rooms means the successor's own materialization wants that exact
-    // room, on that exact date — a real clash the check must catch, not a
-    // clash with a row "about to stop existing".
+  it("R255 — a split from an occurrence it keeps, in the same room, is not refused as a clash with that occurrence", async () => {
+    // This asserted SCHEDULE_CONFLICT, reasoning that the successor's own
+    // materialization would want the kept occurrence's room on its date. It
+    // never does: the successor skips every date a kept occurrence holds (the
+    // test below), so the clash was with nothing — the Owner's 409 on
+    // «هذه الحصة وكل ما بعدها» from an occurrence carrying recordings
+    // (2026-10-28). The kept occurrence still occupies its room on its date
+    // for every OTHER class, through the ordinary check.
     const { id } = await createCourseSchedule(
       prisma,
       superAdmin(),
@@ -2225,23 +2226,19 @@ describe('SRS Revision 50 — "this session and all future sessions" splits the 
       data: { overridden: true },
     });
 
-    const err = await failure(() =>
-      updateCourseSchedule(
-        prisma,
-        superAdmin(),
-        id,
-        {
-          version: 0,
-          scope: "this_and_future",
-          fromDate: day(SPLIT),
-        },
-        NOW,
-      ),
+    await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      {
+        version: 0,
+        scope: "this_and_future",
+        fromDate: day(SPLIT),
+      },
+      NOW,
     );
-    expect(err.code).toBe("SCHEDULE_CONFLICT");
 
-    // And the split must have been refused outright, not half-applied: no
-    // successor, no second session for SPLIT under any schedule.
+    // One occurrence on the split date — the kept one, never a duplicate.
     const onSplitDate = await prisma.session.findMany({
       where: { date: day(SPLIT), deletedAt: null },
     });
