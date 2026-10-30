@@ -603,6 +603,44 @@ export function AudioTrack({
   /** Play as soon as the audio is ready (a click on a private lesson, or a cue). */
   const playWhenReady = useRef(false);
 
+  /**
+   * **R258 — read ahead what a press would wait for** (the Owner: «clicking on
+   * play some audios, takes some seconds before it starts»). An m4a stored with
+   * its index (`moov`) after the audio has to be read at its END before the
+   * first sound; so a visible m4a row reads its index now, and pointing at the
+   * play button warms any lesson. A private lesson mints its link then too.
+   * The files themselves are untouched (the Owner: «Not now»).
+   */
+  const rowRef = useRef<HTMLLIElement | null>(null);
+  const [warm, setWarm] = useState(false);
+  useEffect(() => {
+    if (!direct || !item.mime_type.includes('mp4')) return;
+    const node = rowRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (seen) => {
+        if (seen.some((entry) => entry.isIntersecting)) {
+          setWarm(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [direct, item.mime_type]);
+  const prefetching = useRef(false);
+  function warmUp(): void {
+    setWarm(true);
+    if (direct || url !== null || prefetching.current) return;
+    prefetching.current = true;
+    void mint().then((minted) => {
+      if (minted === null || url !== null) return;
+      setUrl(minted);
+      setState('ready');
+    });
+  }
+
   async function mint(): Promise<string | null> {
     try {
       return await fetchContentUrl(item.id, accessToken, activeChildId);
@@ -665,7 +703,7 @@ export function AudioTrack({
   const listened = total > 0 ? Math.min(100, (current / total) * 100) : 0;
 
   return (
-    <li className="surah-track" data-content-id={item.id}>
+    <li className="surah-track" data-content-id={item.id} ref={rowRef}>
       <span className="surah-track__index" aria-hidden="true">
         {index}
       </span>
@@ -688,6 +726,9 @@ export function AudioTrack({
               type="button"
               className="surah-player__button surah-player__button--play"
               disabled={state === 'loading'}
+              onPointerEnter={warmUp}
+              onFocus={warmUp}
+              onTouchStart={warmUp}
               onClick={() => (playing ? audioRef.current?.pause() : play())}
               aria-label={`${playing ? t('content.bySurah.pause') : t('content.bySurah.play')} — ${item.title}`}
             >
@@ -774,7 +815,7 @@ export function AudioTrack({
         {state === 'ready' && url ? (
           <audio
             ref={audioRef}
-            preload={direct ? 'none' : 'metadata'}
+            preload={direct && !warm ? 'none' : 'metadata'}
             src={url}
             onPlay={(event) => {
               pauseOthers(event.currentTarget);

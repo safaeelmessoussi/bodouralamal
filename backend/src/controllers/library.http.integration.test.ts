@@ -68,6 +68,8 @@ const ITEM_KEYS = [
   "category_name",
   "created_at",
   "description",
+  // R258 — its place among its Subject's items, or null.
+  "display_order",
   "id",
   "level_id",
   "level_name",
@@ -739,5 +741,22 @@ describe("R242 — «صاحب المحتوى»: author_id filters, author sorts"
     expect(sorted.indexOf(byA)).toBeLessThan(sorted.indexOf(byZ));
     expect(sorted.indexOf(byZ)).toBeLessThan(sorted.indexOf(ids.publicA));
     expect((await call(`${scoped}${academicYearId}&author_id=someone`)).status).toBe(400);
+  });
+});
+
+describe("R258 — PUT /content/order sets a Subject's order", () => {
+  it("gives each item its place, carries it on the library row, and refuses who may not edit", async () => {
+    const first = await content("ترتيب ب");
+    const second = await content("ترتيب أ");
+    const admin = bearer(await makeUser("مشرفة الترتيب"), [{ role: "super_admin", branches: null }]);
+    const refused = await httpCall(BASE, "PUT", "/content/order", { token: studentToken, body: { ids: [first, second] } });
+    expect(refused.status).toBe(404);
+    const done = await httpCall(BASE, "PUT", "/content/order", { token: admin, body: { ids: [first, second] } });
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    const rows = (await call(`${scoped}${academicYearId}&page_size=100`, admin)).body.data!;
+    const at = (id: string) => rows.find((r) => r["id"] === id)?.["display_order"];
+    expect([at(first), at(second)]).toEqual([1, 2]);
+    const twice = await httpCall(BASE, "PUT", "/content/order", { token: admin, body: { ids: [first, first] } });
+    expect(twice.status).toBe(400);
   });
 });

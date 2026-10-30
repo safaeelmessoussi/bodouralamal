@@ -13525,6 +13525,57 @@
         }
       }
     },
+    "/content/order": {
+      "put": {
+        "summary": "Set the order of a Subject's items",
+        "description": "**R258** — `{ ids: [uuid] }` (1–200): one Subject's items in the order wanted; each takes `display_order` 1…n (the library row's `display_order`), items left out keep theirs. Each id must be an item the caller may edit (else `404`, as for editing it); all of one Subject (`400 MIXED_SUBJECTS`), none twice (`DUPLICATE_ITEM`). Audited `content.reorder`.",
+        "responses": {
+          "200": {
+            "description": "{ data: [{ id, display_order }] }"
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/content/{id}/download-url": {
       "get": {
         "summary": "Read a public file or mint an authorized private URL",

@@ -830,20 +830,41 @@
   align-items: center;
   gap: var(--space-2);
 }
-/* R250 — four views on a phone. R257 — two to a row: the R256 labels are two
-   words («محتوى المستويات»), and four columns on one line made them overlap. */
+/* R258 — each tab framed, so it reads as something to press (the Owner: «add
+   frames on the tabs as it's not intuitive that those are clickable»); the
+   chosen one filled. */
+.content-modes {
+  gap: var(--space-1);
+  padding: var(--space-1);
+}
+.cal-segmented.content-modes .btn {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.cal-segmented.content-modes .btn.is-active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+/* R250 — the four views on a phone. R258 — on ONE row again (R257 made two),
+   each label on as many lines as it needs inside its own tab. */
 @media (max-width: 44rem) {
   .content-modes {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-1);
+    /* Each column at least its longest word («المستويات»), the rest shared. */
+    grid-template-columns: repeat(4, minmax(min-content, 1fr));
     inline-size: 100%;
   }
   .content-modes .btn {
     justify-content: center;
-    padding: var(--space-2) var(--space-1);
+    padding: var(--space-2) 2px;
+    font-size: var(--font-size-sm);
     text-align: center;
     line-height: 1.25;
+    /* Lines break between words only: an Arabic word split in two reads badly. */
+    white-space: normal;
   }
   .content-modes .btn .btn__icon,
   .content-modes .btn svg {
@@ -857,12 +878,6 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
-  }
-  /* A label wraps inside its own tab rather than running into the next one. */
-  .content-modes .btn {
-    white-space: normal;
-    overflow-wrap: anywhere;
-    min-inline-size: 0;
   }
 }
 

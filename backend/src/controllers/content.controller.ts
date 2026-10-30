@@ -7,6 +7,7 @@ import { ACTIVE_CHILD_HEADER } from '../middleware/child-context.js';
 import { requireActor } from '../middleware/authenticate.js';
 import * as content from '../services/content.service.js';
 import * as slides from '../services/recording-slides.service.js';
+import { setContentOrder } from '../services/content-order.service.js';
 import { completeUploadSchema, initiateUploadSchema } from '../validators/content.validators.js';
 import { z } from 'zod';
 
@@ -239,5 +240,18 @@ export function setSlides(prisma: PrismaClient) {
     const body = parse<{ slide_ids: string[] }>(recordingSlidesSchema, req.body);
     const data = await slides.setRecordingSlides(prisma, requireActor(req), idParam(req, 'id'), body.slide_ids);
     res.json({ data });
+  };
+}
+
+const contentOrderSchema = z.object({ ids: z.array(z.string().uuid()).min(1).max(200) }).strict();
+
+/**
+ * **R258 — `PUT /content/order`**: one Subject's items, in the order wanted
+ * (`display_order` 1…n). Each must be editable by the caller, all of one Subject.
+ */
+export function setOrder(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse<{ ids: string[] }>(contentOrderSchema, req.body);
+    res.json({ data: await setContentOrder(prisma, requireActor(req), body.ids) });
   };
 }

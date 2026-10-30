@@ -221,6 +221,8 @@ export interface LibraryItem {
    */
   subjectSeasonal: boolean;
   subjectShared: boolean;
+  /** R258 — its place among its Subject's items, or `null` (title order). */
+  displayOrder: number | null;
   /** R223 — a PUBLIC audio's storage key, so the list can carry its stable
    *  address (§3.1) and the page plays it in one click; `null` otherwise. */
   publicAudioKey: string | null;
@@ -550,6 +552,7 @@ export async function listLibrary(
              c."surah_id"                AS "surahId",
              q."name_arabic"             AS "surahName",
              COALESCE(s."is_seasonal", false) AS "subjectSeasonal",
+             c."display_order"           AS "displayOrder",
              EXISTS (
                SELECT 1 FROM "category_subject" cs
                WHERE cs."subject_id" = c."subject_id" AND cs."category_id" = l."category_id"

@@ -167,6 +167,8 @@ try {
   check('«محتوى عام» lists the seasonal course and opens its page', pickedGeneral && (general.tab ?? '').includes('محتوى عام') && general.title === gen.subject, JSON.stringify(general));
   check('«محتوى عام»: its recording first, its file below, no filters', general.firstTrack === gen.lectureTitle && general.cards.includes(gen.notesTitle) && general.trackBeforeCards && general.filters === 0, JSON.stringify(general));
   check('a recording downloads from its own row', general.download);
+  // R258 — a visible m4a row reads its index ahead: nothing waits on the first press.
+  check('a visible m4a recording loads its index before it is pressed', await waitFor(`(() => { const row = [...document.querySelectorAll('.subject-library .surah-track')].find((r) => r.querySelector('.surah-track__title')?.textContent.trim() === ${JSON.stringify(gen.secondTitle)}); const a = row?.querySelector('audio'); return !!a && a.preload === 'metadata' && a.readyState >= 1; })()`));
   check('«محتوى عام» fits a phone', await overflow());
   // R257 — the Subject's name has the row (the Surah list's number column squeezed it to a word a line).
   for (const w of [1366, 390]) {
@@ -297,6 +299,22 @@ try {
       })()`));
     }
     if (!authorized) check('student: forged private mint remains denied', await evaluate(`fetch('/api/v1/content/${fixture.restrictedId}/download-url', {headers:{Authorization:window.__readerToken}}).then(r=>r.status===404)`));
+    if (role === 'admin') {
+      // R258 — an administrator sets the order of a Subject's recordings.
+      const gen = fixture.general;
+      await open('/resources?view=categories');
+      await waitFor(`(() => { const b = [...document.querySelectorAll('.subject-library .surah-library__surah')].find((x) => x.textContent.includes(${JSON.stringify('دورة موسمية')})); if (!b) return false; b.click(); return true; })()`);
+      const offered = await waitFor("[...document.querySelectorAll('.subject-library button')].some((b) => b.textContent.trim() === 'ترتيب التسجيلات')");
+      check('admin: «ترتيب التسجيلات» is offered on a Subject with several recordings', offered);
+      await evaluate("[...document.querySelectorAll('.subject-library button')].find((b) => b.textContent.trim() === 'ترتيب التسجيلات').click()");
+      await waitFor("document.querySelectorAll('dialog[open] .admin-table__grip-btn').length === 2");
+      await evaluate("document.querySelectorAll('dialog[open] .admin-table__grip-btn')[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))");
+      const saved = await waitFor("window.__readerCalls.some((c) => c.url.includes('/api/v1/content/order') && c.status === 200)");
+      check('admin: moving a recording up saves the order', saved);
+      await open('/resources?view=categories');
+      await waitFor(`(() => { const b = [...document.querySelectorAll('.subject-library .surah-library__surah')].find((x) => x.textContent.includes(${JSON.stringify('دورة موسمية')})); if (!b) return false; b.click(); return true; })()`);
+      check('admin: the recordings keep that order after a reload', await waitFor(`document.querySelector('.subject-library .surah-track .surah-track__title')?.textContent.trim() === ${JSON.stringify(gen.secondTitle)}`));
+    }
     await calendarState(role);
     // Exercise the actual logout endpoint and browser navigation; never reuse
     // the original cookie after rotation. This affects disposable users only.

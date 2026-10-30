@@ -382,6 +382,7 @@ DELETE /content/{id}                          # TD-3.5 (R53), TD-5, BR-15
 GET /content/{id}/download-url                # TD-3.5, TD-12
 GET /content/{id}/slides                      # R247; a recording's slides, for whoever may edit it
 PUT /content/{id}/slides                      # R247; the whole ordered list of its images
+PUT /content/order                            # R258; one Subject's items in order («محتوى عام»)
 
 # ── Exams, grading & Quran (TD-3.6)
 GET /exams                                    # TD-3.6 (R58, R136) — scheduled OCCURRENCES, both modes now

@@ -537,3 +537,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-29 — SRS Revision 257: library tabs on a phone, «محتوى عام»'s Subject list
 - `.content-modes` two columns below 44rem, labels `white-space: normal`; `.subject-library .surah-library__surah` without the number column.
 - `verify-public-reader`: a Subject's name has its row at 1366/390; Localhost tabs measured at 320–412 px (no clip, no overlap).
+
+## 2026-10-30 — SRS Revision 258: framed tabs on one row, «محتوى عام» Subject and recording order, faster first play
+- Library tabs: one phone row (`minmax(min-content, 1fr)`), wrapping between words, framed; chosen filled.
+- `educational_content.display_order` (migration r258) + `PUT /content/order` (`content-order.service`); library rows `display_order`; «ترتيب التسجيلات» dialog (DataTable reorder) for admin/super admin; Subjects by the bootstrap's «المواد» order.
+- Player: a visible m4a preloads metadata; hover/focus/touch warms (a private lesson mints early). Stored files untouched (Owner: «Not now»).
+- Verified: integration 115/115 + public reader 232/232 (order dialog: offered, ↑ saves, survives reload; a visible m4a loads its index unpressed); tabs measured at 320–1366 px (one row, framed, no clip/overlap/split word); frontend 1711, backend 391.

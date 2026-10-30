@@ -3896,6 +3896,11 @@ export const ar = {
     generalEmpty: 'لا يوجد محتوى عام بعد.',
     generalListen: 'التسجيلات',
     generalRest: 'الملفات',
+    // المراجعة 258 — ترتيب تسجيلات مادة في «محتوى عام» (للإدارة).
+    generalOrder: 'ترتيب التسجيلات',
+    generalOrderTitle: 'ترتيب تسجيلات {subject}',
+    generalOrderHint: 'يُنقَل التسجيل بالسحب أو بالسهمين ↑ و↓، ويُحفظ كل نقل فورًا؛ وبهذا الترتيب تُعرض التسجيلات للجميع.',
+    generalOrderColumn: 'التسجيل',
     history: {
       timeline: 'الخط الزمني',
       gregorian: 'ميلادي',

@@ -1701,6 +1701,7 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
     expect(ffmpeg).toBeTruthy();
     const video = execFileSync(ffmpeg!, ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=blue:s=160x120:r=10', '-t', '2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-movflags', 'frag_keyframe+empty_moov', '-f', 'mp4', 'pipe:1'], { timeout: 30_000 });
     const audio = execFileSync(ffmpeg!, ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=8000', '-t', '2', '-f', 'wav', 'pipe:1'], { timeout: 30_000 });
+    const m4a = execFileSync(ffmpeg!, ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=8000', '-t', '2', '-c:a', 'aac', '-movflags', 'frag_keyframe+empty_moov', '-f', 'mp4', 'pipe:1'], { timeout: 30_000 });
     // A minimal genuine single-page PDF (not the magic-byte-only upload probe).
     let pdf = '%PDF-1.4\n';
     const offsets = [0];
@@ -1784,6 +1785,9 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
     const generalItems: Record<string, string> = {};
     for (const [name, mime, bytes] of [
       ['lecture', 'audio/wav', audio],
+      // R258 — a second recording, so the order can be set; an m4a, whose row
+      // reads its index ahead (the slow first play the Owner reported).
+      ['lecture2', 'audio/mp4', m4a],
       ['notes', 'application/pdf', Buffer.from(pdf)],
     ] as const) {
       const id = randomUUID();
@@ -1849,6 +1853,7 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
             subject: course.name,
             lecture: generalItems['lecture'],
             lectureTitle: `${TAG} الدورة lecture`,
+            secondTitle: `${TAG} الدورة lecture2`,
             notesTitle: `${TAG} الدورة notes`,
           },
           surahPage: {

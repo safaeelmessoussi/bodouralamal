@@ -13,6 +13,7 @@ import { HumanityTimeline } from '../components/history/humanity-timeline.js';
 import { Button } from '../components/ui/button.js';
 import { useActiveChild } from '../contexts/active-child.js';
 import { useSession } from '../contexts/session.js';
+import { useActiveRole } from '../contexts/active-role.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
 import { EmptyState, ErrorState, NoResultsState } from '../components/states.js';
@@ -230,7 +231,7 @@ function HistoryView({ tabs }: { tabs: ReactNode }): ReactNode {
 }
 
 /** The library's rows (`GET /library`), as the caller may see them. */
-function useLibraryEntries(accessToken: string | null): Load<LibraryEntry[]> {
+function useLibraryEntries(accessToken: string | null, refresh = 0): Load<LibraryEntry[]> {
   const [load, setLoad] = useState<Load<LibraryEntry[]>>({ kind: 'loading' });
   useWarmPdfPreview(load.kind === 'ready' && load.data.some((e) => e.item.kind === 'pdf'));
   useEffect(() => {
@@ -246,7 +247,7 @@ function useLibraryEntries(accessToken: string | null): Load<LibraryEntry[]> {
     return () => {
       cancelled = true;
     };
-  }, [accessToken]);
+  }, [accessToken, refresh]);
   return load;
 }
 
@@ -254,7 +255,25 @@ function useLibraryEntries(accessToken: string | null): Load<LibraryEntry[]> {
 function GeneralView({ tabs, focusId }: { tabs: ReactNode; focusId: string | null }): ReactNode {
   const { accessToken } = useSession();
   const { activeChildId } = useActiveChild();
-  const load = useLibraryEntries(accessToken);
+  const { activeRole } = useActiveRole();
+  // R258 — re-read after an administrator moves a recording.
+  const [refresh, setRefresh] = useState(0);
+  const load = useLibraryEntries(accessToken, refresh);
+  // R258 — the Subjects in the Super Admin's order («المواد», R188 §2), as
+  // «محتوى المستويات» reads it: the public bootstrap.
+  const [subjectRank, setSubjectRank] = useState<ReadonlyMap<string, number>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    const day = new Date().toISOString().slice(0, 10);
+    void fetchCalendarBootstrap({ from: day, to: day })
+      .then((bootstrap) => {
+        if (!cancelled) setSubjectRank(new Map(bootstrap.subjects.map((x, i) => [x.id, i])));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [open, setOpen] = useState<ContentItem | null>(null);
   const focus = load.kind === 'ready' && focusId ? (load.data.find((e) => e.item.id === focusId) ?? null) : null;
   const initialSubject = useMemo(
@@ -279,6 +298,9 @@ function GeneralView({ tabs, focusId }: { tabs: ReactNode; focusId: string | nul
           accessToken={accessToken}
           activeChildId={activeChildId}
           onOpen={setOpen}
+          subjectRank={subjectRank}
+          canOrder={activeRole === 'admin' || activeRole === 'super_admin'}
+          onOrdered={() => setRefresh((n) => n + 1)}
         />
       ) : null}
       <ContentPreviewDialog item={open} onClose={() => setOpen(null)} accessToken={accessToken} activeChildId={activeChildId} />

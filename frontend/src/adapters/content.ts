@@ -57,6 +57,8 @@ export type ContentKind = 'pdf' | 'video' | 'audio' | 'image' | 'document';
 export interface ContentItem {
   id: string;
   title: string;
+  /** R258 — its place among its Subject's items (`PUT /content/order`); absent or null: title order. */
+  display_order?: number | null;
   description: string | null;
   kind: ContentKind;
   /** The declared MIME type, for the `<source>` element and the download name. */
@@ -204,6 +206,7 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
       slide_of: row.slide_of ?? null,
       slide_position: row.slide_position ?? null,
       session_ids: row.session_ids ?? [],
+      display_order: row.display_order ?? null,
     };
     const shelves = row.whole_category
       ? [{ key: `category:${row.category_id}`, kind: 'whole_category' as const, id: row.category_id, name: '' }]
@@ -399,6 +402,8 @@ interface LibraryItemWire {
   surah_name?: string | null;
   /** R256 — absent from a server older than it. */
   subject_seasonal?: boolean;
+  /** R258 — absent from a server older than it. */
+  display_order?: number | null;
   subject_shared?: boolean;
   /** R223 — a public audio's stable address. */
   stream_url?: string | null;
@@ -513,6 +518,11 @@ async function shelfOf(
  * and not a field on `ContentItem`: a URL that expires in ten minutes must be
  * fetched when it is used, not when the list is drawn.
  */
+/** R258 — one Subject's items in the order wanted (each takes 1…n). */
+export async function saveContentOrder(ids: readonly string[], token: string | null): Promise<void> {
+  await api('/content/order', { method: 'PUT', token, body: { ids } });
+}
+
 export async function fetchContentUrl(
   contentId: string,
   token?: string | null,

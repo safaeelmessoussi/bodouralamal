@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import type { ContentItem, LibraryEntry } from '../../adapters/content.js';
+import { saveContentOrder, type ContentItem, type LibraryEntry } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
+import { Button } from '../ui/button.js';
+import { DataTable } from '../ui/data-table.js';
+import { Dialog } from '../ui/dialog.js';
 import { ContentCard } from './content-card.js';
 import { byTitle } from './surah-library.js';
 import { AudioTrack, slidesOf, type SurahItem } from './surah-page.js';
@@ -27,8 +30,28 @@ export interface SubjectGroup {
   items: SurahItem[];
 }
 
-/** The general items by Subject, each item once, recordings in title order. */
-export function groupBySubject(entries: readonly LibraryEntry[]): SubjectGroup[] {
+/**
+ * R258 — an item the administration placed comes first, in its place
+ * (`display_order`); the rest follow in title order.
+ */
+export function byPlace(a: SurahItem, b: SurahItem): number {
+  const pa = a.display_order ?? null;
+  const pb = b.display_order ?? null;
+  if (pa !== null && pb !== null) return pa - pb;
+  if (pa !== null) return -1;
+  if (pb !== null) return 1;
+  return byTitle(a, b);
+}
+
+/**
+ * The general items by Subject, each item once — placed items first, then
+ * title order — and the Subjects in the Super Admin's own order («المواد»,
+ * R188 §2; R258), a Subject with no place after, by name.
+ */
+export function groupBySubject(
+  entries: readonly LibraryEntry[],
+  subjectRank: ReadonlyMap<string, number> = new Map(),
+): SubjectGroup[] {
   const groups = new Map<string, SubjectGroup>();
   const seen = new Set<string>();
   for (const entry of entries) {
@@ -53,9 +76,10 @@ export function groupBySubject(entries: readonly LibraryEntry[]): SubjectGroup[]
       }
     }
     group.items.reverse();
-    group.items.sort(byTitle);
+    group.items.sort(byPlace);
   }
-  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  const rank = (id: string): number => subjectRank.get(id) ?? Number.MAX_SAFE_INTEGER;
+  return [...groups.values()].sort((a, b) => rank(a.id) - rank(b.id) || a.name.localeCompare(b.name, 'ar'));
 }
 
 /**
@@ -73,7 +97,15 @@ export function SubjectLibrary({
   accessToken,
   activeChildId,
   onOpen,
+  subjectRank,
+  canOrder = false,
+  onOrdered,
 }: {
+  /** R258 — the Subjects' order («المواد»). */
+  subjectRank?: ReadonlyMap<string, number>;
+  /** R258 — an administrator may set the order of a Subject's recordings. */
+  canOrder?: boolean;
+  onOrdered?: () => void;
   entries: readonly LibraryEntry[];
   /** `?subject=` — a shared link opens on its Subject; else the first. */
   initialSubject: string | null;
@@ -83,7 +115,7 @@ export function SubjectLibrary({
   activeChildId: string | null;
   onOpen: (item: ContentItem) => void;
 }): ReactNode {
-  const subjects = useMemo(() => groupBySubject(entries), [entries]);
+  const subjects = useMemo(() => groupBySubject(entries, subjectRank), [entries, subjectRank]);
   const [chosen, setChosen] = useState<string | null>(initialSubject);
   const current = subjects.find((s) => s.id === chosen) ?? subjects[0] ?? null;
   const panel = useRef<HTMLElement | null>(null);
@@ -133,6 +165,8 @@ export function SubjectLibrary({
           accessToken={accessToken}
           activeChildId={activeChildId}
           onOpen={onOpen}
+          canOrder={canOrder}
+          {...(onOrdered ? { onOrdered } : {})}
         />
       </section>
     </div>
@@ -145,7 +179,11 @@ function SubjectPage({
   accessToken,
   activeChildId,
   onOpen,
+  canOrder,
+  onOrdered,
 }: {
+  canOrder: boolean;
+  onOrdered?: () => void;
   group: SubjectGroup;
   focusId: string | null;
   accessToken: string | null;
@@ -157,6 +195,7 @@ function SubjectPage({
   const rest = group.items.filter((i) => i.kind !== 'audio' && !pages.ids.has(i.id));
   // After one recording ends, the next plays — as on a Surah's page (R239).
   const [cue, setCue] = useState<number | null>(null);
+  const [ordering, setOrdering] = useState(false);
 
   useEffect(() => {
     if (focusId === null) return;
@@ -170,6 +209,22 @@ function SubjectPage({
       <h2 id="subject-library-title" className="surah-library__title">
         {group.name}
       </h2>
+      {canOrder && recordings.length > 1 ? (
+        <div className="surah-library__toolbar">
+          <Button variant="secondary" onClick={() => setOrdering(true)}>
+            {t('content.generalOrder')}
+          </Button>
+        </div>
+      ) : null}
+      {ordering ? (
+        <OrderDialog
+          subject={group.name}
+          items={recordings}
+          token={accessToken}
+          onClose={() => setOrdering(false)}
+          {...(onOrdered ? { onSaved: onOrdered } : {})}
+        />
+      ) : null}
       {recordings.length > 0 ? (
         <section className="surah-library__section surah-library__section--listen" aria-label={t('content.generalListen')}>
           <ol className="surah-library__tracks">
@@ -201,5 +256,43 @@ function SubjectPage({
         </section>
       ) : null}
     </>
+  );
+}
+
+/**
+ * **R258 — «ترتيب التسجيلات»**: the Subject's recordings as the platform's one
+ * ordered list (rule AF: the grip, ↑/↓, and each move saved as it is made —
+ * `PUT /content/order`). For an administrator; the server checks each item.
+ */
+function OrderDialog({
+  subject,
+  items,
+  token,
+  onClose,
+  onSaved,
+}: {
+  subject: string;
+  items: readonly SurahItem[];
+  token: string | null;
+  onClose: () => void;
+  onSaved?: () => void;
+}): ReactNode {
+  const [rows, setRows] = useState<SurahItem[]>([...items]);
+  return (
+    <Dialog open title={t('content.generalOrderTitle').replace('{subject}', subject)} onClose={onClose} dismissible>
+      <p className="field__hint">{t('content.generalOrderHint')}</p>
+      <DataTable
+        caption={t('content.generalOrderTitle').replace('{subject}', subject)}
+        columns={[{ key: 'title', header: t('content.generalOrderColumn'), cell: (row: SurahItem) => row.title }]}
+        rows={rows}
+        rowKey={(row) => row.id}
+        status="ready"
+        onReorder={async (ids: string[]) => {
+          await saveContentOrder(ids, token);
+          setRows(ids.map((id) => rows.find((row) => row.id === id)!));
+          onSaved?.();
+        }}
+      />
+    </Dialog>
   );
 }

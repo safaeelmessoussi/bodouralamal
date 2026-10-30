@@ -1150,6 +1150,8 @@ export interface LibraryItemDto {
   /** R256 — the Subject is a «دورة موسمية» / offered to every Level of the Category («محتوى عام»). */
   subject_seasonal: boolean;
   subject_shared: boolean;
+  /** R258 — its place among its Subject's items (`PUT /content/order`); `null`: title order. */
+  display_order: number | null;
   /** R223 — a public audio's stable address (§3.1), played in one click;
    *  `null` for every other item, which mints through `download-url`. */
   stream_url: string | null;
@@ -1210,6 +1212,7 @@ export function libraryItemDto(row: {
   surahName: string | null;
   subjectSeasonal?: boolean;
   subjectShared?: boolean;
+  displayOrder?: number | null;
   streamUrl?: string | null;
   slideOfId: string | null;
   slidePosition: number | null;
@@ -1262,6 +1265,7 @@ export function libraryItemDto(row: {
     surah_name: row.surahName,
     subject_seasonal: row.subjectSeasonal ?? false,
     subject_shared: row.subjectShared ?? false,
+    display_order: row.displayOrder ?? null,
     stream_url: row.streamUrl ?? null,
     slide_of: row.slideOfId,
     slide_position: row.slidePosition,

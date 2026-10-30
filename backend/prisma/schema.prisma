@@ -3970,6 +3970,9 @@ model EducationalContent {
   /// filters by it. Partial index in the migration SQL.
   surahId Int?        @map("surah_id")
   surah   QuranSurah? @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
+  /// R258 — its place among its Subject's items in «محتوى عام» (`PUT /content/order`);
+  /// NULL keeps the title order. CHECK > 0.
+  displayOrder Int? @map("display_order")
 
   /// **R215 — who made it** (the Owner, 2026-10-10): the مؤطِّرة who recorded a
   /// class, or the teacher, administrator or student who prepared a file.
