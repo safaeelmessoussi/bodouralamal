@@ -214,6 +214,8 @@ export interface LibraryItem {
   /** R177 §7 — the one Surah the item is about, or none. */
   surahId: number | null;
   surahName: string | null;
+  /** R259 — the part of سورة البقرة (1 | 2), or `null`. */
+  surahPart: number | null;
   /**
    * R256 — «محتوى عام» holds the content of the «دورات موسمية» (a seasonal
    * Subject, R183 §1) and of the «مواد مشتركة في كل المستويات» (a Subject the
@@ -551,6 +553,7 @@ export async function listLibrary(
              b."name"                    AS "branchName",
              c."surah_id"                AS "surahId",
              q."name_arabic"             AS "surahName",
+             c."surah_part"              AS "surahPart",
              COALESCE(s."is_seasonal", false) AS "subjectSeasonal",
              c."display_order"           AS "displayOrder",
              EXISTS (

@@ -90,6 +90,8 @@ export interface UploadTicketClaims {
   /** R177 §7 — the one Surah the item is about, decided and checked at
    *  initiation like every other scope fact; absent means none. */
   surah_id?: number;
+  /** R259 — the part of سورة البقرة, decided at initiation. */
+  surah_part?: 1 | 2;
   /** R215 — who made it, and in which capacity. */
   author_id?: string;
   author_role?: string;

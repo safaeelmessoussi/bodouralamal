@@ -543,3 +543,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `educational_content.display_order` (migration r258) + `PUT /content/order` (`content-order.service`); library rows `display_order`; «ترتيب التسجيلات» dialog (DataTable reorder) for admin/super admin; Subjects by the bootstrap's «المواد» order.
 - Player: a visible m4a preloads metadata; hover/focus/touch warms (a private lesson mints early). Stored files untouched (Owner: «Not now»).
 - Verified: integration 115/115 + public reader 232/232 (order dialog: offered, ↑ saves, survives reload; a visible m4a loads its index unpressed); tabs measured at 320–1366 px (one row, framed, no clip/overlap/split word); frontend 1711, backend 391.
+
+## 2026-10-30 — SRS Revision 259: slides-dialog guard, part of سورة البقرة, titles built from their parts
+- `RecordingSlidesDialog` guards its upload form (`FileUploader onDirtyChange`).
+- `educational_content.surah_part` (migration r259, CHECK only with surah 2) through initiate claims, PATCH and library rows; `SURAH_PART_NOT_BAQARA`.
+- `lib/content-title.ts` (compose/parse) + `TitleNumbersFields`; per-file numbers in `FileUploader` (`titleParts`), copied to files chosen after; the edit dialog parses the title and rebuilds it on change.
+- Verified: integration 117/117 + reader 232/232 (upload part refused off Baqara, kept/cleared on edit); browser on Localhost: two files inherit session 7 / part 2, format from the file, titles built; edit form rewrites the title from format + session; unsaved-guard 24/24; frontend 1716, backend 391.

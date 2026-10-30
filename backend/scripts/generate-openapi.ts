@@ -1244,6 +1244,13 @@ document.paths['/library'].get.description +=
   ' **R250 — `?kind=pdf|audio|video|image|document`** narrows to what the screens call the file: `application/pdf`, `audio/*`, `video/*`, `image/*`, or any other type.';
 document.paths['/library'].get.description +=
   ' **R247 — slides:** an image carries `slide_of` (the live recording it is a page of) and `slide_position`, `null` otherwise; every item carries `session_ids`, the live class sessions it is attached to (`[]` for none) — a session\'s images are the slides of its recordings.';
+// R259 — the part of سورة البقرة.
+document.paths['/uploads/initiate'].post.description +=
+  ' **R259 — `content_meta.surah_part`** (1 | 2): the part of سورة البقرة the item is about, only with `surah_id: 2` (`400 SURAH_PART_NOT_BAQARA`; a CHECK besides).';
+document.paths['/content/{id}'].patch.description +=
+  ' **R259 — `surah_part`** (1 | 2 | null): the part of سورة البقرة; a Surah other than 2 clears it.';
+document.paths['/library'].get.description +=
+  ' **R259 — `surah_part`** on each row: the part of سورة البقرة, or null.';
 document.paths['/uploads/initiate'].post.description +=
   ' **R215 —** `content_meta.author_id` (a live account; `null`/absent names nobody) and `author_role` (`teacher` | `assistant` | `admin` | `student`, only beside an author) record who made the item; bound into the ticket like every other scope fact. A class recording names its main teacher automatically. **R217 — with no `author_role`, the server reads it off the person\'s roles** (teacher → `teacher`, else admin/super admin → `admin`, else student → `student`, else parent → `guardian`).';
 document.paths['/content/{id}'].patch.description +=

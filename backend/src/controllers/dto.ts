@@ -1147,6 +1147,8 @@ export interface LibraryItemDto {
   /** R177 §7 — the one Surah, or none. */
   surah_id: number | null;
   surah_name: string | null;
+  /** R259 — the part of سورة البقرة (1 | 2), or `null`. */
+  surah_part: number | null;
   /** R256 — the Subject is a «دورة موسمية» / offered to every Level of the Category («محتوى عام»). */
   subject_seasonal: boolean;
   subject_shared: boolean;
@@ -1210,6 +1212,7 @@ export function libraryItemDto(row: {
   branchName: string | null;
   surahId: number | null;
   surahName: string | null;
+  surahPart?: number | null;
   subjectSeasonal?: boolean;
   subjectShared?: boolean;
   displayOrder?: number | null;
@@ -1263,6 +1266,7 @@ export function libraryItemDto(row: {
     // R177 §7 — the one Surah the item is about, or none.
     surah_id: row.surahId,
     surah_name: row.surahName,
+    surah_part: row.surahPart ?? null,
     subject_seasonal: row.subjectSeasonal ?? false,
     subject_shared: row.subjectShared ?? false,
     display_order: row.displayOrder ?? null,

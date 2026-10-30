@@ -267,6 +267,17 @@ describe("R177 §7 — a Surah on an upload, decided at the boundary", () => {
     // An item about no Surah is the ordinary state even for a Quran Subject.
     expect((await initiate(payload())).status).toBe(201);
   });
+
+  it("R259 — names a part of سورة البقرة, and only of it", async () => {
+    await prisma.subject.update({ where: { id: taughtSubjectId }, data: { requiresSurahs: true } });
+    await prisma.levelSurah.createMany({ data: [{ levelId, surahId: 2 }, { levelId, surahId: 112 }], skipDuplicates: true });
+
+    expect((await initiate(payload({ surah_id: 2, surah_part: 2 }))).status).toBe(201);
+    const notBaqara = await initiate(payload({ surah_id: 112, surah_part: 1 }));
+    expect(notBaqara.status).toBe(400);
+    expect(notBaqara.body.error?.details?.["reason"]).toBe("SURAH_PART_NOT_BAQARA");
+    expect((await initiate(payload({ surah_id: 2, surah_part: 3 }))).status).toBe(400);
+  });
 });
 
 describe("the payload contract (TD-3.5)", () => {

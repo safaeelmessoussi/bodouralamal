@@ -46,6 +46,7 @@ export function RecordingSlidesDialog({
   const [images, setImages] = useState<{ id: string; title: string }[]>([]);
   const [choice, setChoice] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadEntered, setUploadEntered] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,8 +88,10 @@ export function RecordingSlidesDialog({
       ? []
       : [recording.branch_id, ...(recording.additional_branches ?? []).map((b) => b.id)];
 
-  // An image picked but not yet added is unsaved work, as in «مواد الحصة».
-  const guard = useUnsavedGuard({ open: true, dirty: choice !== '', busy, onCancel: onClose });
+  // An image picked but not yet added is unsaved work, as in «مواد الحصة» —
+  // and R259, so is the upload form open inside this dialog (a file chosen, a
+  // title typed): a click beside the dialog closed it with no question.
+  const guard = useUnsavedGuard({ open: true, dirty: choice !== '' || (uploading && uploadEntered), busy, onCancel: onClose });
 
   return (
     <Dialog
@@ -169,6 +172,7 @@ export function RecordingSlidesDialog({
           suggestedTitle={`${t('content.slides.pageTitle')} — ${recording.title}`.slice(0, 110)}
           token={token}
           submitLabel={t('content.slides.upload')}
+          onDirtyChange={setUploadEntered}
           onCancel={() => setUploading(false)}
           onUploaded={(uploaded) =>
             void save([...ids, ...uploaded]).then(async () => {

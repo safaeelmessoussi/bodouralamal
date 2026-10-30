@@ -98,6 +98,8 @@ const ITEM_KEYS = [
   // R177 §7 — the one Surah the item is about, or none.
   "surah_id",
   "surah_name",
+  // R259 — the part of سورة البقرة, or null.
+  "surah_part",
   "title",
   "visibility",
   // R167 §5 — addressed to every Level of its Category.
@@ -758,5 +760,22 @@ describe("R258 — PUT /content/order sets a Subject's order", () => {
     expect([at(first), at(second)]).toEqual([1, 2]);
     const twice = await httpCall(BASE, "PUT", "/content/order", { token: admin, body: { ids: [first, first] } });
     expect(twice.status).toBe(400);
+  });
+});
+
+describe("R259 — PATCH /content/{id} and the part of سورة البقرة", () => {
+  it("carries the part on the row, and refuses a part on another Surah", async () => {
+    const id = await content("جزء البقرة");
+    await prisma.educationalContent.update({ where: { id }, data: { surahId: 2, surahPart: 2 } });
+    const admin = bearer(await makeUser("مشرفة الأجزاء"), [{ role: "super_admin", branches: null }]);
+    const listed = (await call(`${scoped}${academicYearId}&page_size=100`, admin)).body.data!.find((r) => r["id"] === id);
+    expect(listed?.["surah_part"]).toBe(2);
+
+    await prisma.educationalContent.update({ where: { id }, data: { surahId: null, surahPart: null } });
+    const refused = await httpCall(BASE, "PATCH", `/content/${id}`, { token: admin, body: { surah_part: 1 } });
+    expect(refused.status, JSON.stringify(refused.body)).toBe(400);
+    expect((refused.body as { error?: { details?: { reason?: string } } }).error?.details?.reason).toBe("SURAH_PART_NOT_BAQARA");
+
+    // Clearing it with the Surah is the content suite's (an edit checks the stored file).
   });
 });

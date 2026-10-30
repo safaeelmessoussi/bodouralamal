@@ -940,3 +940,16 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
   gap: var(--space-3);
 }
+
+/* R259 — the title's format and three numbers: one row on a computer, two
+   to a row on a phone. */
+.title-numbers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+@media (width >= 44rem) {
+  .title-numbers {
+    grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+  }
+}

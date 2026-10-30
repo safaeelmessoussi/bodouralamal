@@ -36,6 +36,8 @@ export interface UploadMeta {
   visibility?: 'public' | 'private' | 'hidden';
   /** R177 §7 — the one Surah the item is about (1–114); absent means none. */
   surah_id?: number;
+  /** R259 — the part of سورة البقرة (1 | 2); only with `surah_id: 2`. */
+  surah_part?: 1 | 2;
   /** R215 — who made it, and in which capacity; absent names nobody. */
   author_id?: string;
   author_role?: 'teacher' | 'assistant' | 'admin' | 'student';
@@ -216,6 +218,8 @@ export interface ContentMetadataPatch {
   origin?: 'uploaded' | 'session_recording';
   /** R177 §7 — the one Surah; `null` clears it. */
   surah_id?: number | null;
+  /** R259 — the part of سورة البقرة; `null` clears it. */
+  surah_part?: 1 | 2 | null;
   /** R167 §5 — addressed to every Level of its Level's Category. */
   whole_category?: boolean;
   /** R169 §10 — the item's OTHER Levels; REPLACES the set. `level_id` is its

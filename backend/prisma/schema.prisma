@@ -3973,6 +3973,9 @@ model EducationalContent {
   /// R258 — its place among its Subject's items in «محتوى عام» (`PUT /content/order`);
   /// NULL keeps the title order. CHECK > 0.
   displayOrder Int? @map("display_order")
+  /// R259 — the part of سورة البقرة it is about (1 | 2, as R232's syllabus names
+  /// them); NULL is the whole Surah or another one. CHECK: only with surah_id = 2.
+  surahPart Int? @map("surah_part") @db.SmallInt
 
   /// **R215 — who made it** (the Owner, 2026-10-10): the مؤطِّرة who recorded a
   /// class, or the teacher, administrator or student who prepared a file.

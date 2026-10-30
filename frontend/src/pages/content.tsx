@@ -37,6 +37,8 @@ import { api, ApiError } from '../lib/api.js';
 import { Feedback } from '../components/ui/feedback.js';
 import { Badge } from '../components/ui/badge.js';
 import { GLOBAL } from '../components/content/content-scope-fields.js';
+import { TitleNumbersFields } from '../components/content/title-numbers-fields.js';
+import { composeTitle, parseTitle, type TitleNumbers } from '../lib/content-title.js';
 import { subjectWorksBySurah, surahChoices } from '../components/scheduling/surahs.js';
 
 /**
@@ -134,6 +136,7 @@ function ContentEditDialog({
     wholeCategory: boolean;
     additionalLevelIds: string[];
     surahId: number | null;
+    surahPart: 1 | 2 | null;
     description: string;
     academicYearId: string;
     branchIds: string[];
@@ -153,6 +156,8 @@ function ContentEditDialog({
     wholeCategory: row.whole_category,
     // R177 §7 — hydrated from the row, like everything else here.
     surahId: row.surah_id ?? null,
+    // R259 — its part of سورة البقرة, from the row.
+    surahPart: ((row.surah_part ?? null) as 1 | 2 | null),
     // R169 §10 — the item's OTHER Levels, hydrated from the row.
     additionalLevelIds: (row.additional_levels ?? []).map((level) => level.id),
     // R201 — the description, the year and the branches (home first), from the row.
@@ -164,6 +169,25 @@ function ContentEditDialog({
   };
   const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
+  /**
+   * R259 — the format and numbers live only in the title: read from it when
+   * the form opens, and changing one writes the title again from its parts
+   * (the Subject, the Surah and its part, and the description, as they stand).
+   */
+  const [numbers, setNumbers] = useState<TitleNumbers>(() => parseTitle(row.title));
+  const surahNameOf = (id: number | null): string | null =>
+    id === null
+      ? null
+      : (surahChoices(facts, [form.levelId, ...form.additionalLevelIds]).find((s) => s.id === id)?.name ??
+        (id === row.surah_id ? (row.surah_name ?? null) : null));
+  const rebuild = (next: TitleNumbers, f: typeof form): string =>
+    composeTitle({
+      numbers: next,
+      subject: subjects.find((o) => o.value === f.subjectId)?.label ?? '',
+      surahName: surahNameOf(f.surahId),
+      surahPart: f.surahId === 2 ? f.surahPart : null,
+      description: f.description,
+    });
   const error = form.title.trim() === '' ? t('common.required') : null;
   const branchError = !mayAssignGlobal && form.branchIds.length === 0 ? t('common.required') : null;
 
@@ -183,6 +207,15 @@ function ContentEditDialog({
     >
       <p className="field__hint">{t('content.edit.fileUnchanged')}</p>
 
+      {/* R259 — the title's parts that are kept only in it. */}
+      <TitleNumbersFields
+        value={numbers}
+        onChange={(next) => {
+          setNumbers(next);
+          setForm((f) => ({ ...f, title: rebuild(next, f) }));
+        }}
+      />
+      <p className="field__hint">{t('content.titleParts.hint')}</p>
       <TextField
         label={t('content.col.title')}
         value={form.title}
@@ -237,13 +270,36 @@ function ContentEditDialog({
         <SearchableSelect
           label={t('content.upload.surah')}
           value={form.surahId === null ? '' : String(form.surahId)}
-          onChange={(v) => setForm((f) => ({ ...f, surahId: v === '' ? null : Number(v) }))}
+          onChange={(v) => setForm((f) => ({ ...f, surahId: v === '' ? null : Number(v), surahPart: v === '2' ? f.surahPart : null }))}
           hint={t('content.upload.surahHint')}
           placeholder={t('content.upload.noSurah')}
           options={surahChoices(facts, [form.levelId, ...form.additionalLevelIds]).map((s) => ({
             value: String(s.id),
             label: s.name,
           }))}
+        />
+      ) : null}
+
+      {/* R259 — سورة البقرة is taught in two parts (R232): which one. */}
+      {form.surahId === 2 && subjectWorksBySurah(facts, form.subjectId) ? (
+        <SelectField
+          label={t('content.upload.surahPart')}
+          value={form.surahPart === null ? '' : String(form.surahPart)}
+          onChange={(v) => {
+            const surahPart = v === '' ? null : (Number(v) as 1 | 2);
+            setForm((f) => {
+              const next = { ...f, surahPart };
+              // A built title follows the part too.
+              return numbers.format !== '' || numbers.session !== '' || numbers.part !== '' || numbers.page !== ''
+                ? { ...next, title: rebuild(numbers, next) }
+                : next;
+            });
+          }}
+          placeholder={t('content.upload.surahPartWhole')}
+          options={[
+            { value: '1', label: t('content.upload.surahPart1') },
+            { value: '2', label: t('content.upload.surahPart2') },
+          ]}
         />
       ) : null}
 
@@ -349,6 +405,8 @@ interface LibraryRow {
   /** R177 §7 — the one Surah the item is about, or none. */
   surah_id?: number | null;
   surah_name?: string | null;
+  /** R259 — the part of سورة البقرة, or null. */
+  surah_part?: number | null;
 }
 
 /** R250 — a row as the shared previewer reads an item. */
@@ -615,6 +673,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     wholeCategory: boolean;
     additionalLevelIds: string[];
     surahId: number | null;
+    surahPart: 1 | 2 | null;
     description: string;
     academicYearId: string;
     branchIds: string[];
@@ -646,6 +705,8 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
             : {}),
           // R177 §7 — sent only when it changed; `null` clears it.
           ...(patch.surahId !== (editing.surah_id ?? null) ? { surah_id: patch.surahId } : {}),
+          // R259 — sent only when it changed; `null` clears it.
+          ...(patch.surahPart !== (editing.surah_part ?? null) ? { surah_part: patch.surahPart } : {}),
           // R169 §10 — sent only when the SET changed, like every field here.
           // «كل مستويات الفئة» makes naming Levels redundant, so it clears them.
           ...additionalLevelsPatch(editing, patch),

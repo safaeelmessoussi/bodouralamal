@@ -745,6 +745,19 @@ describe("R202 — an audio file is stored as what its bytes prove", () => {
   });
 });
 
+describe("R259 — the part of سورة البقرة on an edit", () => {
+  it("keeps it while the Surah stays 2, clears it with the Surah, refuses it on another", async () => {
+    const { id } = await uploadPdf(admin(), "جزء البقرة");
+    await prisma.educationalContent.update({ where: { id }, data: { surahId: 2, surahPart: 2 } });
+    await updateContentMetadata(prisma, clients, admin(), id, { title: "جزء البقرة — معدّل" });
+    expect((await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { surahPart: true } })).surahPart).toBe(2);
+    await updateContentMetadata(prisma, clients, admin(), id, { surahId: null });
+    expect((await prisma.educationalContent.findUniqueOrThrow({ where: { id }, select: { surahPart: true } })).surahPart).toBeNull();
+    const refused = await failure(() => updateContentMetadata(prisma, clients, admin(), id, { surahPart: 1 }));
+    expect(refused.details?.["reason"]).toBe("SURAH_PART_NOT_BAQARA");
+  });
+});
+
 describe("R201 — editing the description, year and branches", () => {
   it("rewrites them, home branch first, and clears the description with null", async () => {
     const { id } = await uploadPdf(admin(), "تعديل النطاق", {});

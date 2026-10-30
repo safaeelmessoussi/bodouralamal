@@ -63,6 +63,15 @@ export interface ContentScope {
   problem: string | null;
   /** Every required field (marked *) holds a value. */
   complete: boolean;
+  /** R259 — what a built title takes from the scope (`composeTitle`). */
+  titleParts: TitleParts;
+}
+
+/** R259 — the scope's share of a built title. */
+export interface TitleParts {
+  subject: string;
+  surahName: string | null;
+  surahPart: 1 | 2 | null;
 }
 
 export function useContentScope({
@@ -103,6 +112,8 @@ export function useContentScope({
   const { levelId, subjectId, academicYearId, surahId } = scope.value;
   // R223 — «عام» chosen from the start (R217 waited for a Level to propose it).
   const [visibility, setVisibility] = useState<string | null>(lockedVisibility ?? 'public');
+  // R259 — the part of سورة البقرة, offered while Surah 2 is chosen.
+  const [surahPart, setSurahPart] = useState<'' | '1' | '2'>('');
 
   /**
    * **R198 §2 — the branches the item is for; none chosen is Global.** The
@@ -140,8 +151,18 @@ export function useContentScope({
         ? {}
         : { visibility: visibility as 'public' | 'private' | 'hidden' }),
       ...(surahApplies && surahNumber !== null ? { surah_id: surahNumber } : {}),
+      ...(surahApplies && surahNumber === 2 && surahPart !== '' ? { surah_part: Number(surahPart) as 1 | 2 } : {}),
     }),
-    [levelId, wholeOf, subjectId, academicYearId, chosenBranches, visibility, locked, surahApplies, surahNumber],
+    [levelId, wholeOf, subjectId, academicYearId, chosenBranches, visibility, locked, surahApplies, surahNumber, surahPart],
+  );
+
+  const titleParts = useMemo<TitleParts>(
+    () => ({
+      subject: scope.options.subjectId.find((o) => o.value === subjectId)?.label ?? '',
+      surahName: surahApplies && surahNumber !== null ? (scope.surahNames[surahNumber] ?? null) : null,
+      surahPart: surahApplies && surahNumber === 2 && surahPart !== '' ? (Number(surahPart) as 1 | 2) : null,
+    }),
+    [scope.options.subjectId, scope.surahNames, subjectId, surahApplies, surahNumber, surahPart],
   );
 
   const suggestedTitle = useMemo(() => {
@@ -180,6 +201,20 @@ export function useContentScope({
         searchable={['surahId']}
       />
 
+      {/* R259 — سورة البقرة is taught in two parts (R232): which one. */}
+      {surahApplies && surahNumber === 2 && !locked ? (
+        <SelectField
+          label={t('content.upload.surahPart')}
+          value={surahPart}
+          onChange={(v) => setSurahPart(v as '' | '1' | '2')}
+          placeholder={t('content.upload.surahPartWhole')}
+          options={[
+            { value: '1', label: t('content.upload.surahPart1') },
+            { value: '2', label: t('content.upload.surahPart2') },
+          ]}
+        />
+      ) : null}
+
       {/* R172 §11 — said HERE, under the selectors, the moment «كل مستويات
           الفئة» is chosen for a Category taught nothing whole: the person is
           choosing the scope now, not saving later. */}
@@ -213,5 +248,5 @@ export function useContentScope({
     </>
   );
 
-  return { fields, meta, problem, suggestedTitle, complete };
+  return { fields, meta, problem, suggestedTitle, complete, titleParts };
 }

@@ -247,6 +247,8 @@ export interface InitiateInput {
     origin?: ContentOrigin;
     /** R177 §7 — the one Surah the item is about; checked here, bound into the ticket. */
     surahId?: number;
+    /** R259 — the part of سورة البقرة; only with `surahId` 2. */
+    surahPart?: 1 | 2;
     /** TD-9: replacing a file mints a NEW key and quarantines the old object. */
     replacesContentId?: string;
     /** R215 — who made it, and in which capacity. */
@@ -402,6 +404,7 @@ export async function initiateUpload(
   // it is in the syllabus of a Level the item is filed under: the one policy
   // every other Surah write uses (`resolveSurahs`), asked only when one is
   // named — an item about no Surah is the ordinary state.
+  assertSurahPart(input.meta.surahId ?? null, input.meta.surahPart ?? null);
   if (input.meta.surahId !== undefined) {
     await resolveSurahs(prisma, {
       subjectId: input.meta.subjectId,
@@ -468,6 +471,7 @@ export async function initiateUpload(
       origin: input.meta.origin ?? 'uploaded',
       ...(wholeCategory ? { whole_category: true } : {}),
       ...(input.meta.surahId !== undefined ? { surah_id: input.meta.surahId } : {}),
+      ...(input.meta.surahPart !== undefined ? { surah_part: input.meta.surahPart } : {}),
       ...(input.meta.replacesContentId ? { replaces: input.meta.replacesContentId } : {}),
       ...(replacesVersion === undefined ? {} : { replaces_version: replacesVersion }),
       // R215 — decided at initiation, like every other fact here.
@@ -868,6 +872,8 @@ async function createContentFromFinalization(
           : {}),
         // R177 §7 — decided at initiation, like every other fact here.
         surahId: claims.surah_id ?? null,
+        // R259 — its part of سورة البقرة, decided at initiation.
+        surahPart: claims.surah_part ?? null,
         // R215 — who made it, decided at initiation.
         authorId: claims.author_id ?? null,
         authorRole: claims.author_id ? ((claims.author_role as ContentAuthorRoleValue | undefined) ?? null) : null,
@@ -1105,6 +1111,16 @@ export async function abortUpload(
   await discardStagingObject(prisma, clients, claims);
 }
 
+/**
+ * **R259 — a part only of سورة البقرة** (R232: the one Surah the syllabus
+ * teaches in two parts). The CHECK says it too; this says it in words.
+ */
+function assertSurahPart(surahId: number | null, surahPart: number | null): void {
+  if (surahPart !== null && surahId !== 2) {
+    throw new AppError('VALIDATION_FAILED', 'only سورة البقرة has parts', { reason: 'SURAH_PART_NOT_BAQARA' });
+  }
+}
+
 /* ── Replace and delete (Revision 53) ────────────────────────────────────── */
 
 /**
@@ -1325,6 +1341,8 @@ export interface ContentMetadataPatch {
   wholeCategory?: boolean;
   /** R177 §7 — the one Surah; `null` clears it, absent leaves it alone. */
   surahId?: number | null;
+  /** R259 — the part of سورة البقرة; `null` clears it, absent leaves it (a Surah other than 2 clears it). */
+  surahPart?: 1 | 2 | null;
   /** R169 §10 — the item's OTHER Levels; replaces the set. */
   additionalLevelIds?: string[];
   /** R201 — the description; `null` clears it. */
@@ -1484,6 +1502,7 @@ export async function updateContentMetadata(
       subjectId: true,
       wholeCategory: true,
       surahId: true,
+      surahPart: true,
       additionalLevels: { select: { levelId: true } },
     },
   });
@@ -1496,6 +1515,12 @@ export async function updateContentMetadata(
   // Subject or the home Level moves: a فقه lesson cannot keep a Surah, and a
   // Surah outside the new Level's syllabus is refused in words (`resolveSurahs`).
   const surahId = patch.surahId === undefined ? placed.surahId : patch.surahId;
+  // R259 — the part the row WILL carry: named, kept while it stays سورة البقرة, else cleared.
+  const surahPart =
+    patch.surahPart !== undefined ? patch.surahPart : surahId === 2 ? ((placed.surahPart as 1 | 2 | null) ?? null) : null;
+  assertSurahPart(surahId, surahPart);
+  const surahPartData =
+    patch.surahPart !== undefined || patch.surahId !== undefined ? { surahPart } : {};
   if (
     surahId !== null &&
     (patch.surahId !== undefined || patch.subjectId !== undefined || patch.levelId !== undefined)
@@ -1592,6 +1617,7 @@ export async function updateContentMetadata(
           ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
           ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
           ...(patch.surahId !== undefined ? { surahId: patch.surahId } : {}),
+          ...surahPartData,
           ...(patch.visibility !== undefined ? { visibility: nextVisibility as never } : {}),
           ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
           ...(patch.wholeCategory !== undefined ? { wholeCategory: patch.wholeCategory } : {}),
@@ -1656,6 +1682,7 @@ export async function updateContentMetadata(
           ...(patch.levelId !== undefined ? { levelId: patch.levelId } : {}),
           ...(patch.subjectId !== undefined ? { subjectId: patch.subjectId } : {}),
           ...(patch.surahId !== undefined ? { surahId: patch.surahId } : {}),
+          ...surahPartData,
           visibility: nextVisibility as never,
           ...(patch.origin !== undefined ? { origin: patch.origin as never } : {}),
           ...(patch.wholeCategory !== undefined ? { wholeCategory: patch.wholeCategory } : {}),

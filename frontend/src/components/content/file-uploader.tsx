@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { kindOf } from '../../adapters/content.js';
 import { uploadFile, type UploadMeta, type UploadStage } from '../../adapters/uploads.js';
+import { composeTitle, EMPTY_TITLE_NUMBERS, formatForKind, type TitleNumbers } from '../../lib/content-title.js';
+import type { TitleParts } from './content-scope-fields.js';
+import { TitleNumbersFields } from './title-numbers-fields.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
@@ -94,11 +98,14 @@ interface Item {
   contentId: string | null;
   /** R199 §1 — the connection dropped and the upload is being retried on its own. */
   retrying: boolean;
+  /** R259 — the title's format and numbers (kept only in the title). */
+  numbers: TitleNumbers;
 }
 
 let nextKey = 1;
-function blankItem(title: string, touched: boolean, description: string): Item {
+function blankItem(title: string, touched: boolean, description: string, numbers: TitleNumbers = EMPTY_TITLE_NUMBERS): Item {
   return {
+    numbers,
     key: nextKey++,
     file: null,
     isRecording: false,
@@ -133,7 +140,17 @@ export function FileUploader({
   incomplete = false,
   single = false,
   accept = ACCEPT,
-}: FileUploaderProps): ReactNode {
+  onDirtyChange,
+  titleParts,
+}: FileUploaderProps & {
+  /**
+   * R259 — build each title from its parts (`composeTitle`): the scope's
+   * Subject and Surah, and per file its format, page, session and part.
+   */
+  titleParts?: TitleParts;
+  /** R259 — whether anything was entered (a file, a title, a description), for a guard around it. */
+  onDirtyChange?: (dirty: boolean) => void;
+}): ReactNode {
   // R248 — «إلغاء» asks first when the dialog around holds typed work.
   const discardCheck = useDiscardCheck();
   // There is always one item, so the title and description are there from
@@ -143,6 +160,38 @@ export function FileUploader({
   ]);
   const [running, setRunning] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const entered =
+    items.length > 1 ||
+    items.some(
+      (item) =>
+        item.file !== null ||
+        item.titleTouched ||
+        item.description !== initialDescription ||
+        (item.numbers.page + item.numbers.session + item.numbers.part) !== '',
+    );
+
+  /** R259 — the title an item's parts compose, or `''` when there is nothing to build from. */
+  const built = (item: Item): string =>
+    titleParts ? composeTitle({ numbers: item.numbers, ...titleParts, description: item.description }) : '';
+  // An untouched title follows its parts as they change.
+  useEffect(() => {
+    if (!titleParts) return;
+    setItems((current) => {
+      let changed = false;
+      const next = current.map((item) => {
+        if (item.titleTouched) return item;
+        const title = built(item);
+        if (title === '' || title === item.title) return item;
+        changed = true;
+        return { ...item, title };
+      });
+      // The same array when nothing moved, so this does not run again.
+      return changed ? next : current;
+    });
+  }, [titleParts?.subject, titleParts?.surahName, titleParts?.surahPart, items]);
+  useEffect(() => {
+    onDirtyChange?.(entered);
+  }, [entered, onDirtyChange]);
 
   // An untouched title follows the composed one as the scope above changes.
   useEffect(() => {
@@ -166,16 +215,25 @@ export function FileUploader({
       const empty = current.filter((item) => item.file === null);
       const filled = single ? [] : current.filter((item) => item.file !== null);
       const slots = [...empty];
-      while (slots.length < picked.length) slots.push(blankItem('', false, ''));
+      // R259 — what was entered before the files were chosen is copied to
+      // each of them (empty stays empty), so it is not typed once per file.
+      const template = current[current.length - 1]?.numbers ?? EMPTY_TITLE_NUMBERS;
+      while (slots.length < picked.length) slots.push(blankItem('', false, '', template));
       const placed = picked.map((file, i) => {
         const slot = slots[i] as Item;
         // The filename is the best first guess when nothing is composed — and
         // the worst thing to leave a person retyping. The extension names the
         // format, which the card already shows.
         const fallback = file.name.replace(/\.[^.]+$/, '');
+        // R259 — a format not chosen yet is suggested by what the file is.
+        const numbers =
+          titleParts && slot.numbers.format === ''
+            ? { ...slot.numbers, format: formatForKind(kindOf(file.type)) }
+            : slot.numbers;
         return {
           ...slot,
           file,
+          numbers,
           stage: 'idle' as const,
           percent: 0,
           error: null,
@@ -284,6 +342,17 @@ export function FileUploader({
               disabled={locked}
             />
 
+            {titleParts ? (
+              <>
+                <TitleNumbersFields
+                  value={item.numbers}
+                  // Changing a part writes the title again from its parts.
+                  onChange={(numbers) => update(item.key, { numbers, titleTouched: false })}
+                  disabled={locked}
+                />
+                <p className="field__hint">{t('content.titleParts.hint')}</p>
+              </>
+            ) : null}
             <TextField
               label={t('content.upload.title')}
               value={item.title}
