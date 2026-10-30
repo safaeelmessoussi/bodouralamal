@@ -125,6 +125,13 @@ async function retrying<T>(run: () => Promise<T>, policy: RetryPolicy, beforeRet
 class StorageRefused extends Error {}
 
 /**
+ * R261 — the storage answered, with a failure of its own (5xx): the
+ * connection is fine, the server could not save (on 2026-10-30, a full disk).
+ * Still retried, but said as what it is when the retries run out.
+ */
+export class StorageUnavailable extends Error {}
+
+/**
  * Uploads one file and returns the content id.
  *
  * `onProgress` receives 0–100 for the PUT only. The two API calls around it are
@@ -278,7 +285,7 @@ function putPart(url: string, blob: Blob, onLoaded: (bytes: number) => void): Pr
       const etag = xhr.getResponseHeader('ETag');
       if (xhr.status >= 200 && xhr.status < 300 && etag) resolve(etag);
       else if (xhr.status >= 400 && xhr.status < 500) reject(new StorageRefused(`storage responded ${xhr.status}`));
-      else reject(new Error(`storage responded ${xhr.status}`));
+      else reject(xhr.status >= 500 ? new StorageUnavailable(`storage responded ${xhr.status}`) : new Error(`storage responded ${xhr.status}`));
     });
     xhr.addEventListener('error', () => reject(new Error('network error during upload')));
     xhr.addEventListener('abort', () => reject(new Error('upload aborted')));
@@ -371,7 +378,7 @@ function putWithProgress(
     xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else if (xhr.status >= 400 && xhr.status < 500) reject(new StorageRefused(`storage responded ${xhr.status}`));
-      else reject(new Error(`storage responded ${xhr.status}`));
+      else reject(xhr.status >= 500 ? new StorageUnavailable(`storage responded ${xhr.status}`) : new Error(`storage responded ${xhr.status}`));
     });
     xhr.addEventListener('error', () => reject(new Error('network error during upload')));
     xhr.addEventListener('abort', () => reject(new Error('upload aborted')));

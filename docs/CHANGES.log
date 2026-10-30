@@ -556,3 +556,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `parseFileName` (session/part/page/format) fills `FileUploader` items.
 - Multipart (§10.1, R-9 retired): storage create/presign-part/complete/abort; ticket `multipart_id`; `POST /uploads/{id}/parts`; complete joins every part first; client 8 MB parts with per-part retries.
 - Verified: integration 140/140 + reader 238/238 (9 MB PDF in two parts through the edge; a missing part refused; «1/2», corner arrows, swipe → «2/2»; ±10 and the full-width bar); a real browser on Localhost sent a 17 MB PDF in 3 parts (ETags) and completed (probe item deleted); frontend 1721, backend 391.
+
+## 2026-10-30 — SRS Revision 261: the recording card's order, a quiet pages link, the Baqara part under «السورة», storage failures named
+- `AudioTrack`: title/line → `.surah-track__seek` (its own grid row) → `.surah-track__rest` (player, pages, quiz); the pages' toggle is an underlined secondary-colour link, no chevron.
+- `ContentScopeFields`: the part select renders right after `surahId`.
+- Uploads: a 5xx from storage rejects `StorageUnavailable` → `content.upload.serverFailed`; `retrying` no longer blames the connection.
+- Cause of the Owner's failures: the server's disk was full (SeaweedFS «No writable volumes»); 41 old release images removed with the Owner's leave → 15 GB free.
+- Verified: integration 91/91 + reader 240/240 (bar under the title and above play and the pages at 390/1366 px, no «+», underlined link weight 500); frontend 1721; guards; Localhost upload form shows «جزء سورة البقرة» under «السورة».

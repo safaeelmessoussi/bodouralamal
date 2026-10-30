@@ -483,9 +483,7 @@ function SlideViewer({
             {at + 1}/{slides.length}
           </span>
         ) : null}
-        <span className="surah-library__chevron" aria-hidden="true">
-          {open ? '−' : '+'}
-        </span>
+        {/* R261 — no «+»: the link itself says it opens. */}
       </button>
       {open ? (
         <figure
@@ -762,6 +760,30 @@ export function AudioTrack({
             <span>{authorLine(item)}</span>
           </p>
         ) : null}
+      </div>
+      {/* R260 — the bar along the whole card, in a thin row of its own: an
+          hour in a short line made minute 24 hard to hit. R261 — right under
+          the title and its line, above the buttons and the pages. */}
+      {state === 'missing' ? null : (
+        <input
+          type="range"
+          className="surah-player__bar surah-track__seek"
+          min={0}
+          max={total || 1}
+          step={1}
+          value={Math.min(current, total || 1)}
+          disabled={state !== 'ready' || total === 0}
+          style={{ ['--listened' as string]: `${String(listened)}%` }}
+          aria-label={t('content.bySurah.seek')}
+          aria-valuetext={`${clock(current)} / ${clock(total)}`}
+          onChange={(event) => {
+            const at = Number(event.target.value);
+            setCurrent(at);
+            if (audioRef.current) audioRef.current.currentTime = at;
+          }}
+        />
+      )}
+      <div className="surah-track__body surah-track__rest">
         {state === 'missing' ? (
           <p className="surah-track__error" role="status">
             {t('content.bySurah.unavailable')}
@@ -915,27 +937,6 @@ export function AudioTrack({
           </audio>
         ) : null}
       </div>
-      {/* R260 — the bar along the whole card, in a thin row of its own: an
-          hour in a short line made minute 24 hard to hit. */}
-      {state === 'missing' ? null : (
-        <input
-          type="range"
-            className="surah-player__bar surah-track__seek"
-            min={0}
-            max={total || 1}
-            step={1}
-            value={Math.min(current, total || 1)}
-            disabled={state !== 'ready' || total === 0}
-            style={{ ['--listened' as string]: `${String(listened)}%` }}
-            aria-label={t('content.bySurah.seek')}
-            aria-valuetext={`${clock(current)} / ${clock(total)}`}
-            onChange={(event) => {
-              const at = Number(event.target.value);
-              setCurrent(at);
-              if (audioRef.current) audioRef.current.currentTime = at;
-            }}
-          />
-      )}
     </li>
   );
 }

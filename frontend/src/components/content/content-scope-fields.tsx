@@ -187,15 +187,19 @@ export function useContentScope({
   // Surah. A Subject that is not has no Surah to choose.
   const showsSurah = subjectId === '' || subjectWorksBySurah(scope, subjectId);
   const rendered = SCOPE_FIELDS.filter((field) => field !== 'surahId' || (showsSurah && !locked));
+  // Everything up to the Surah (or up to where it would be), then the rest.
+  const upToSurah = rendered.includes('surahId') ? rendered.indexOf('surahId') + 1 : rendered.indexOf('academicYearId');
 
   const fields = (
     <>
+      {/* R261 — «جزء سورة البقرة» stands right under «السورة»: the
+          selectors up to it, the part, then the rest. */}
       <ScopeSelectors
         scope={scope}
-        fields={rendered}
+        fields={rendered.slice(0, upToSurah)}
         mode="form"
         required={['levelId', 'subjectId', 'academicYearId']}
-        {...(locked ? { locked: rendered } : {})}
+        {...(locked ? { locked: rendered.slice(0, upToSurah) } : {})}
         blankLabels={{ surahId: t('content.upload.noSurah') }}
         // R219 — the Surah list is long: the platform's own searchable list.
         searchable={['surahId']}
@@ -214,6 +218,17 @@ export function useContentScope({
           ]}
         />
       ) : null}
+
+      <ScopeSelectors
+        scope={scope}
+        fields={rendered.slice(upToSurah)}
+        mode="form"
+        required={['levelId', 'subjectId', 'academicYearId']}
+        {...(locked ? { locked: rendered.slice(upToSurah) } : {})}
+        blankLabels={{ surahId: t('content.upload.noSurah') }}
+        // R219 — the Surah list is long: the platform's own searchable list.
+        searchable={['surahId']}
+      />
 
       {/* R172 §11 — said HERE, under the selectors, the moment «كل مستويات
           الفئة» is chosen for a Category taught nothing whole: the person is

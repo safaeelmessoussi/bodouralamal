@@ -1256,20 +1256,29 @@
   background: var(--color-surface-raised);
 }
 .surah-slides__toggle {
-  display: flex;
+  /* R261 — a quiet link: it leads somewhere, so it does not draw the eye
+     before the lesson does — and a dotted underline says it can be pressed. */
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  inline-size: 100%;
+  justify-self: start;
   padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
-  color: var(--color-primary-strong);
+  color: var(--color-text-secondary);
   font: inherit;
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: 500;
   text-align: start;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.3em;
   cursor: pointer;
+}
+.surah-slides__toggle:hover,
+.surah-slides__toggle[aria-expanded='true'] {
+  color: var(--color-primary-strong);
+  text-decoration-style: solid;
 }
 .surah-slides__count {
   color: var(--color-text-secondary);
@@ -1684,7 +1693,7 @@
   grid-column: 1 / -1;
   inline-size: 100%;
   block-size: 1.5rem;
-  margin-block: calc(-1 * var(--space-2)) 0;
+  margin-block: calc(-1 * var(--space-2));
   background-color: transparent;
   background-size: 100% 0.5rem;
   background-position: center;
@@ -1695,4 +1704,14 @@
   background-size: 100% 0.5rem;
   background-position: center;
   background-repeat: no-repeat;
+}
+/* R261 — under the bar, the buttons, the pages and the quiz, under the title. */
+.surah-track__rest {
+  grid-column: 2 / -1;
+}
+@media (max-width: 44rem) {
+  /* A phone's card is one column (no index). */
+  .surah-track__rest {
+    grid-column: 1 / -1;
+  }
 }

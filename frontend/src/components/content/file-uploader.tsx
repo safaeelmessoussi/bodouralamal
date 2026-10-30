@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { kindOf } from '../../adapters/content.js';
-import { uploadFile, type UploadMeta, type UploadStage } from '../../adapters/uploads.js';
+import { StorageUnavailable, uploadFile, type UploadMeta, type UploadStage } from '../../adapters/uploads.js';
 import { composeTitle, EMPTY_TITLE_NUMBERS, parseFileName, type TitleNumbers } from '../../lib/content-title.js';
 import type { TitleParts } from './content-scope-fields.js';
 import { TitleNumbersFields } from './title-numbers-fields.js';
@@ -456,6 +456,9 @@ export function FileUploader({
  * teacher who cannot publish Globally must be told that, not told to try again.
  */
 export function uploadErrorMessage(error: unknown): string {
+  // R261 — the server answered and could not save: not a connection problem.
+  if (error instanceof StorageUnavailable) return t('content.upload.serverFailed');
+  if (error instanceof ApiError && error.status >= 500) return t('content.upload.serverFailed');
   if (!(error instanceof ApiError)) return t('content.upload.networkFailed');
   const reason = error.details?.['reason'];
   if (reason === 'GLOBAL_SCOPE_FORBIDDEN') return t('content.upload.globalForbidden');
