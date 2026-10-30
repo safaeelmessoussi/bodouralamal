@@ -763,25 +763,37 @@ export function AudioTrack({
       </div>
       {/* R260 — the bar along the whole card, in a thin row of its own: an
           hour in a short line made minute 24 hard to hit. R261 — right under
-          the title and its line, above the buttons and the pages. */}
+          the title and its line, above the buttons and the pages. R262 —
+          the time heard above the bar's start, the recording's length above
+          its end. */}
       {state === 'missing' ? null : (
-        <input
-          type="range"
-          className="surah-player__bar surah-track__seek"
-          min={0}
-          max={total || 1}
-          step={1}
-          value={Math.min(current, total || 1)}
-          disabled={state !== 'ready' || total === 0}
-          style={{ ['--listened' as string]: `${String(listened)}%` }}
-          aria-label={t('content.bySurah.seek')}
-          aria-valuetext={`${clock(current)} / ${clock(total)}`}
-          onChange={(event) => {
-            const at = Number(event.target.value);
-            setCurrent(at);
-            if (audioRef.current) audioRef.current.currentTime = at;
-          }}
-        />
+        <div className="surah-track__timeline">
+          <p className="surah-track__times" aria-hidden="true">
+            <span className="surah-player__time" dir="ltr">
+              {clock(current)}
+            </span>
+            <span className="surah-player__time" dir="ltr">
+              {clock(total)}
+            </span>
+          </p>
+          <input
+            type="range"
+            className="surah-player__bar surah-track__seek"
+            min={0}
+            max={total || 1}
+            step={1}
+            value={Math.min(current, total || 1)}
+            disabled={state !== 'ready' || total === 0}
+            style={{ ['--listened' as string]: `${String(listened)}%` }}
+            aria-label={t('content.bySurah.seek')}
+            aria-valuetext={`${clock(current)} / ${clock(total)}`}
+            onChange={(event) => {
+              const at = Number(event.target.value);
+              setCurrent(at);
+              if (audioRef.current) audioRef.current.currentTime = at;
+            }}
+          />
+        </div>
       )}
       <div className="surah-track__body surah-track__rest">
         {state === 'missing' ? (
@@ -845,9 +857,6 @@ export function AudioTrack({
                 <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
               </svg>
             </button>
-            <span className="surah-player__time" dir="ltr">
-              {clock(current)} / {clock(total)}
-            </span>
             {/* R256 — every item downloads, a recording too: one more button in
                 this row, so the row does not grow. A separate `attachment` URL,
                 as the preview's own «تنزيل الملف» mints. */}

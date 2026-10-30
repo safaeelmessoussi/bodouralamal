@@ -1690,10 +1690,10 @@
 /* R260 — the seek bar along the whole card: a thin line, a finger-sized hit
    area around it (the line is drawn only in the middle 0.5rem). */
 .surah-track__seek {
-  grid-column: 1 / -1;
+  display: block;
   inline-size: 100%;
   block-size: 1.5rem;
-  margin-block: calc(-1 * var(--space-2));
+  margin-block: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
   background-color: transparent;
   background-size: 100% 0.5rem;
   background-position: center;
@@ -1704,6 +1704,17 @@
   background-size: 100% 0.5rem;
   background-position: center;
   background-repeat: no-repeat;
+}
+/* R262 — the bar's row: the time heard over its start, the length over its end. */
+.surah-track__timeline {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+.surah-track__times {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  line-height: 1.2;
 }
 /* R261 — under the bar, the buttons, the pages and the quiz, under the title. */
 .surah-track__rest {

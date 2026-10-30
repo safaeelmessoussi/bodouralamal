@@ -563,3 +563,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Uploads: a 5xx from storage rejects `StorageUnavailable` → `content.upload.serverFailed`; `retrying` no longer blames the connection.
 - Cause of the Owner's failures: the server's disk was full (SeaweedFS «No writable volumes»); 41 old release images removed with the Owner's leave → 15 GB free.
 - Verified: integration 91/91 + reader 240/240 (bar under the title and above play and the pages at 390/1366 px, no «+», underlined link weight 500); frontend 1721; guards; Localhost upload form shows «جزء سورة البقرة» under «السورة».
+
+## 2026-10-30 — SRS Revision 262: the time on the bar
+- `AudioTrack`: `.surah-track__timeline` holds `.surah-track__times` (heard at the start, length at the end, `aria-hidden`; the slider's `aria-valuetext` unchanged) over `.surah-track__seek`; the time span left the buttons' row.
+- Verified: integration 91/91 + reader 242/242 (both times above the bar, flush with its ends, none in the row, at 390/1366 px); frontend tsc, lint, content tests.
