@@ -86,3 +86,56 @@ export function parseTitle(title: string): TitleNumbers {
   const part = /(?:^| )الجزء (\d+)(?= |$)/.exec(text)?.[1] ?? '';
   return { format, page, session, part };
 }
+
+/** Arabic ordinals a file name may spell a session with, both genders. */
+const ORDINALS: Record<string, number> = {
+  الأولى: 1, الاولى: 1, الأول: 1, الاول: 1,
+  الثانية: 2, الثاني: 2,
+  الثالثة: 3, الثالث: 3,
+  الرابعة: 4, الرابع: 4,
+  الخامسة: 5, الخامس: 5,
+  السادسة: 6, السادس: 6,
+  السابعة: 7, السابع: 7,
+  الثامنة: 8, الثامن: 8,
+  التاسعة: 9, التاسع: 9,
+  العاشرة: 10, العاشر: 10,
+};
+/** «الحادية عشرة» … «التاسعة عشرة»: the unit's ordinal before «عشرة/عشر». */
+const TEEN_UNITS: Record<string, number> = {
+  الحادية: 1, الحادي: 1, الثانية: 2, الثاني: 2, الثالثة: 3, الثالث: 3, الرابعة: 4, الرابع: 4,
+  الخامسة: 5, الخامس: 5, السادسة: 6, السادس: 6, السابعة: 7, السابع: 7, الثامنة: 8, الثامن: 8,
+  التاسعة: 9, التاسع: 9,
+};
+
+/**
+ * **R260 — the numbers a file's own name already says** (the Owner, with
+ * «Z0000121الحصة الأولى من تفسير سورة البقرة ج 1.mp3», «ح 7 ج 2 من تفسير سورة
+ * ال عمران.mp3», «الحصة_الثالثة_تفسير_سورة_البقرة_ج2.mp3»): «الحصة n» or «ح n»
+ * — a number or an ordinal word — is the session; «الجزء n» or «ج n» (a number)
+ * is the session's part, never the Surah's; «صفحة n» or «ص n» is the page.
+ * The format is the file's kind. Whatever the name does not say stays empty.
+ */
+export function parseFileName(name: string, kind: string): TitleNumbers {
+  const text = ` ${name
+    .replace(/\.[^.]+$/, '')
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[_\-.]+/g, ' ')
+    .replace(/(\D)(\d)/g, '$1 $2')
+    .replace(/(\d)(\D)/g, '$1 $2')
+    .replace(/\s+/g, ' ')} `;
+  const number = (pattern: RegExp): string => pattern.exec(text)?.[1] ?? '';
+  let session = number(/ (?:الحصة|حصة|ح) (\d+) /);
+  if (session === '') {
+    const words = / (?:الحصة|حصة) (\S+)(?: (عشرة|عشر))? /.exec(text);
+    if (words) {
+      const value = words[2] ? (TEEN_UNITS[words[1]!] ?? 0) + 10 : ORDINALS[words[1]!];
+      if (value) session = String(value);
+    }
+  }
+  return {
+    format: formatForKind(kind),
+    page: number(/ (?:صفحة|الصفحة|ص) (\d+) /),
+    session,
+    part: number(/ (?:الجزء|جزء|ج) (\d+) /),
+  };
+}

@@ -1070,9 +1070,18 @@
   cursor: pointer;
 }
 .surah-player__button--play {
-  border-color: var(--color-listened-strong);
-  background: var(--color-listened-strong);
+  border-color: transparent;
+  /* R260 — a soft amber, light at the top and deeper at the foot. */
+  background: linear-gradient(180deg, var(--color-play-light), var(--color-play-deep));
   color: var(--color-text-inverse);
+  box-shadow: var(--shadow-sm);
+}
+/* R260 — «−10» and «+10», a size down from play. */
+.surah-player__button--skip {
+  min-inline-size: 2.25rem;
+  block-size: 2rem;
+  padding: 0 0.35rem;
+  font-size: var(--font-size-xs);
 }
 .surah-player__glyph {
   inline-size: 1em;
@@ -1291,16 +1300,68 @@
   max-block-size: 70vh;
   object-fit: contain;
 }
-.surah-slides__nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
+/* R260 — the page turns on the page itself: two small arrows on its lower
+   corners, a sideways swipe on a phone, and on a computer a shade on each
+   side that can still turn while pointing at it. Nothing below the page. */
+.surah-slides__stage {
+  position: relative;
 }
-.surah-slides__where {
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-secondary);
+.surah-slides__stage--many .surah-slides__page {
+  touch-action: pan-y;
+}
+.surah-slides__arrow {
+  position: absolute;
+  inset-block-end: var(--space-2);
+  display: inline-grid;
+  place-items: center;
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-surface-raised) 88%, transparent);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.surah-slides__arrow--previous {
+  inset-inline-start: var(--space-2);
+}
+.surah-slides__arrow--next {
+  inset-inline-end: var(--space-2);
+}
+.surah-slides__arrow:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+.surah-slides__arrow:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+.surah-slides__edge {
+  position: absolute;
+  inset-block: 1px;
+  inline-size: 2.5rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.surah-slides__edge--previous {
+  inset-inline-start: 1px;
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
+  background: linear-gradient(to left, var(--color-shadow-edge), transparent);
+}
+.surah-slides__edge--next {
+  inset-inline-end: 1px;
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+  background: linear-gradient(to right, var(--color-shadow-edge), transparent);
+}
+@media (hover: hover) {
+  .surah-slides__stage:hover .surah-slides__edge {
+    opacity: 1;
+  }
 }
 
 /* R247 — «صفحات المطبوع» of one recording, in مكتبة المحتوى. */
@@ -1615,4 +1676,23 @@
    row (the Surah list's 2rem number column squeezed it to one word a line). */
 .subject-library .surah-library__surah {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+/* R260 — the seek bar along the whole card: a thin line, a finger-sized hit
+   area around it (the line is drawn only in the middle 0.5rem). */
+.surah-track__seek {
+  grid-column: 1 / -1;
+  inline-size: 100%;
+  block-size: 1.5rem;
+  margin-block: calc(-1 * var(--space-2)) 0;
+  background-color: transparent;
+  background-size: 100% 0.5rem;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+:dir(rtl) .surah-track__seek,
+.surah-track__seek:dir(rtl) {
+  background-size: 100% 0.5rem;
+  background-position: center;
+  background-repeat: no-repeat;
 }

@@ -60,7 +60,16 @@ interface InitiateResponse {
   key: string;
   put_url: string;
   expires_in: number;
+  /** R260 — present for a multipart upload. */
+  multipart?: { part_size: number; part_count: number };
 }
+
+/**
+ * **R260 — a file over one part goes in parts** (the Owner, 2026-10-30:
+ * «تعذّر الرفع بعد عدة محاولات بسبب انقطاع الاتصال»). Each 8 MB part is its own
+ * PUT with its own retries, so a drop costs that part, never the file.
+ */
+const MULTIPART_THRESHOLD = 8 * 1024 * 1024;
 
 /**
  * **R199 §1 — a dropped connection is retried here, not by the person.**
@@ -132,6 +141,7 @@ export async function uploadFile(
   retry: RetryPolicy = NO_RETRY,
 ): Promise<string> {
   onStage('preparing');
+  const multipart = file.size > MULTIPART_THRESHOLD;
   const initiate = (): Promise<InitiateResponse> =>
     api<InitiateResponse>('/uploads/initiate', {
       token,
@@ -144,10 +154,35 @@ export async function uploadFile(
         // the type, rather than the client inventing one and failing the
         // magic-byte check later for a reason nobody can act on.
         mime: file.type,
+        ...(multipart ? { multipart: true } : {}),
         content_meta: meta,
       },
     });
   let initiated = await retrying(initiate, retry);
+
+  if (initiated.multipart) {
+    onStage('uploading');
+    let parts: { part_number: number; etag: string }[];
+    try {
+      parts = await uploadParts(file, initiated, token, onProgress, retry);
+    } catch (error) {
+      await abortUpload(initiated.upload_id, token);
+      onStage('failed');
+      throw error;
+    }
+    onStage('finalising');
+    const created = await retrying(
+      () =>
+        api<{ id: string }>(`/uploads/${encodeURIComponent(initiated.upload_id)}/complete`, {
+          token,
+          method: 'POST',
+          body: { ...fields, parts },
+        }),
+      retry,
+    );
+    onStage('done');
+    return created.id;
+  }
 
   onStage('uploading');
   try {
@@ -186,6 +221,69 @@ export async function uploadFile(
   );
   onStage('done');
   return created.id;
+}
+
+/**
+ * R260 — the parts, one after another. A part's URL is asked for when it is
+ * next (and asked for again once refused — an expired URL); a dropped part is
+ * retried alone, waiting for the connection to come back.
+ */
+async function uploadParts(
+  file: File,
+  initiated: InitiateResponse,
+  token: string | null,
+  onProgress: (percent: number) => void,
+  retry: RetryPolicy,
+): Promise<{ part_number: number; etag: string }[]> {
+  const { part_size: size, part_count: count } = initiated.multipart!;
+  const urlFor = async (partNumber: number): Promise<string> => {
+    const body = await retrying(
+      () =>
+        api<{ data: { part_number: number; url: string }[] }>(
+          `/uploads/${encodeURIComponent(initiated.upload_id)}/parts`,
+          { token, method: 'POST', body: { part_numbers: [partNumber] } },
+        ),
+      retry,
+    );
+    return body.data[0]!.url;
+  };
+  const done: { part_number: number; etag: string }[] = [];
+  let sent = 0;
+  onProgress(0);
+  for (let partNumber = 1; partNumber <= count; partNumber += 1) {
+    const blob = file.slice((partNumber - 1) * size, Math.min(file.size, partNumber * size));
+    let url = await urlFor(partNumber);
+    const etag = await retrying(
+      () => putPart(url, blob, (loaded) => onProgress(Math.round(((sent + loaded) / file.size) * 100))),
+      // A part's own patience is the whole file's before: a long drop is waited out.
+      { ...retry, attempts: Math.max(retry.attempts, 12) },
+      async (error) => {
+        if (error instanceof StorageRefused) url = await urlFor(partNumber);
+      },
+    );
+    sent += blob.size;
+    onProgress(Math.round((sent / file.size) * 100));
+    done.push({ part_number: partNumber, etag });
+  }
+  return done;
+}
+
+/** R260 — one part's PUT; its ETag is what completion joins it by. */
+function putPart(url: string, blob: Blob, onLoaded: (bytes: number) => void): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.upload.addEventListener('progress', (event) => onLoaded(event.loaded));
+    xhr.addEventListener('load', () => {
+      const etag = xhr.getResponseHeader('ETag');
+      if (xhr.status >= 200 && xhr.status < 300 && etag) resolve(etag);
+      else if (xhr.status >= 400 && xhr.status < 500) reject(new StorageRefused(`storage responded ${xhr.status}`));
+      else reject(new Error(`storage responded ${xhr.status}`));
+    });
+    xhr.addEventListener('error', () => reject(new Error('network error during upload')));
+    xhr.addEventListener('abort', () => reject(new Error('upload aborted')));
+    xhr.send(blob);
+  });
 }
 
 export async function abortUpload(uploadId: string, token: string | null): Promise<void> {

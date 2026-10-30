@@ -109,6 +109,10 @@
   --color-listened: var(--brand-logo-orange);
   /* The play button carries a symbol: the ink orange keeps it legible (4.7:1). */
   --color-listened-strong: var(--brand-logo-orange-ink);
+  /* R260 — the play button: the same orange, deepened from a lighter amber at
+     its top to the ink at its foot (the flat ink read heavy). */
+  --color-play-light: color-mix(in srgb, var(--brand-logo-orange) 72%, var(--brand-logo-orange-ink));
+  --color-play-deep: color-mix(in srgb, var(--brand-logo-orange-ink) 88%, #000);
   --color-listened-ahead: color-mix(in srgb, var(--brand-logo-orange) 22%, var(--color-surface-raised));
 
   /* Focus and selection — one ring colour everywhere, so «this is the thing

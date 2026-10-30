@@ -92,6 +92,8 @@ export interface UploadTicketClaims {
   surah_id?: number;
   /** R259 — the part of سورة البقرة, decided at initiation. */
   surah_part?: 1 | 2;
+  /** R260 — the storage's id of a multipart upload on `key`; absent for a single PUT. */
+  multipart_id?: string;
   /** R215 — who made it, and in which capacity. */
   author_id?: string;
   author_role?: string;

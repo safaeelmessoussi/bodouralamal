@@ -1094,6 +1094,14 @@ const document = {
     '/uploads/{uploadId}/complete': {
       post: op('Complete an upload', 'TD-3.5, §4.9 (Revision 8), TD-9. **Phase two.** Verifies the object that was actually stored: a **ranged GET of `bytes=0-511`** for the magic bytes and a **HEAD** for the true size — the server **never streams or buffers the file** to validate it. A mismatch **deletes the object and creates no row**, answering **`409 VALIDATION_FAILED`**: the request was well-formed, the object was not what it claimed (TD-3.8 records this as the "409 variant on upload complete"). On success the `EducationalContent` row is created, or **updated when the ticket carries `replaces_content_id`** (R53). Body: `{ title, description? }` and **nothing else** — the scope, type, size and key were bound into the ticket at `/initiate` and are not re-openable from the body, for the same reason §4.1b refuses an email from the registration body. **The ticket is checked for ownership**, so one teacher cannot complete another\'s upload into their own scope.', { '201': 'Created; `{ id }` addresses the `EducationalContent` record.', '401': ENVELOPE, '404': `${ENVELOPE} NOT_FOUND — the ticket is malformed, expired, forged, or belongs to another caller; details.reason is MALFORMED, EXPIRED or BAD_SIGNATURE.`, '409': `${ENVELOPE} VALIDATION_FAILED for a magic-byte or size mismatch (object deleted, no row created), or UPLOAD_INCOMPLETE when nothing was ever PUT to the key.` }),
     },
+    '/uploads/{uploadId}/parts': {
+      post: op('Presign parts of a multipart upload', '**R260** (SRS §10.1, risk R-9 retired) — `{ part_numbers: [int] }` (1–100 per call): presigned PUT URLs, through the same `/storage` proxy, for those parts of the caller\'s multipart upload (`/uploads/initiate` with `multipart: true`). A part may be asked for again — that is how a dropped part is retried without restarting the file. Answers `{ data: [{ part_number, url }] }`; `400 NOT_MULTIPART` / `PART_OUT_OF_RANGE`; `404` for a ticket not the caller\'s.', {
+        '200': '{ data: [{ part_number, url }] }',
+        '400': ENVELOPE,
+        '401': ENVELOPE,
+        '404': ENVELOPE,
+      }),
+    },
     '/uploads/{uploadId}/abort': {
       post: op('Abort an upload', 'TD-3.5. Removes the object at the ticket\'s key so an abandoned upload leaves nothing behind. **Deliberately best-effort:** aborting an upload that never started is a success from the caller\'s point of view, and `upload.gc` (TD-7) sweeps anything a client abandons without telling the server — reaping **strictly** older than 48 h, so an in-progress slow upload is never collected.', { '204': 'Aborted.', '401': ENVELOPE, '404': `${ENVELOPE} NOT_FOUND for a ticket that is malformed, expired, forged or another caller\'s.` }),
     },
@@ -1245,6 +1253,10 @@ document.paths['/library'].get.description +=
 document.paths['/library'].get.description +=
   ' **R247 — slides:** an image carries `slide_of` (the live recording it is a page of) and `slide_position`, `null` otherwise; every item carries `session_ids`, the live class sessions it is attached to (`[]` for none) — a session\'s images are the slides of its recordings.';
 // R259 — the part of سورة البقرة.
+document.paths['/uploads/initiate'].post.description +=
+  ' **R260 — `multipart: true`** starts a multipart upload on the same staging key: `put_url` is then `\'\'` and the answer carries `multipart: { part_size, part_count }`; the parts are presigned by `POST /uploads/{upload_id}/parts`.';
+document.paths['/uploads/{uploadId}/complete'].post.description +=
+  ' **R260 — `parts: [{ part_number, etag }]`** completes a multipart upload (joined, then validated exactly as a single PUT); a retried completion finds the joined object; `409 UPLOAD_PARTS_INCOMPLETE` when the parts are not all there.';
 document.paths['/uploads/initiate'].post.description +=
   ' **R259 — `content_meta.surah_part`** (1 | 2): the part of سورة البقرة the item is about, only with `surah_id: 2` (`400 SURAH_PART_NOT_BAQARA`; a CHECK besides).';
 document.paths['/content/{id}'].patch.description +=

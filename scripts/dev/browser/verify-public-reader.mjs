@@ -111,6 +111,15 @@ try {
     check(`${w}: a session page decodes`, await waitFor(`document.querySelector('#surah-listen .surah-slides--session .surah-slides__page img')?.naturalWidth > 0`));
     await evaluate(`document.querySelector('#surah-listen .surah-track .surah-slides__toggle').click()`);
     check(`${w}: the recording's own page decodes`, await waitFor(`document.querySelector('#surah-listen .surah-track .surah-slides__page img')?.naturalWidth > 0`));
+    // R260 — no icon, «1/2» in the heading; the page turns on itself, nothing below it.
+    const viewer = "document.querySelector('#surah-listen .surah-track .surah-slides__viewer')";
+    const pages = JSON.parse(await evaluate(`JSON.stringify((() => { const v = ${viewer}; const stage = v.querySelector('.surah-slides__stage'); const page = v.querySelector('.surah-slides__page').getBoundingClientRect(); const arrows = [...stage.querySelectorAll('.surah-slides__arrow')].map((a) => a.getBoundingClientRect()); return { count: v.querySelector('.surah-slides__count')?.textContent.trim(), icon: !!v.querySelector('.surah-slides__toggle svg'), arrows: arrows.length, onPage: arrows.every((a) => a.bottom <= page.bottom + 1 && a.top >= page.top), below: Math.round(stage.getBoundingClientRect().bottom - page.bottom) }; })())`));
+    check(`${w}: the pages read «1/2», with no icon, the arrows on the page and nothing below it`, pages.count === '1/2' && !pages.icon && pages.arrows === 2 && pages.onPage && pages.below <= 1, JSON.stringify(pages));
+    await evaluate(`(() => { const s = ${viewer}.querySelector('.surah-slides__stage'); const r = s.getBoundingClientRect(); const y = r.top + r.height / 2; s.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: r.left + 40, clientY: y })); s.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: r.left + 160, clientY: y })); })()`);
+    check(`${w}: a sideways swipe turns to the next page`, await waitFor(`${viewer}.querySelector('.surah-slides__count')?.textContent.trim() === '2/2'`));
+    // R260 — «+10» beside «−10», and the bar along the whole card.
+    const bar = JSON.parse(await evaluate(`JSON.stringify((() => { const track = document.querySelector('#surah-listen .surah-track'); const b = track.querySelector('.surah-track__seek'); const skips = track.querySelectorAll('.surah-player__button--skip').length; return { skips, bar: b ? Math.round(b.getBoundingClientRect().width) : 0, card: Math.round(track.clientWidth) }; })())`));
+    check(`${w}: «−10» and «+10», and the bar across the card`, bar.skips === 2 && bar.bar >= bar.card * 0.85, JSON.stringify(bar));
     check(`${w}: a page is on no shelf`, await evaluate(`![...document.querySelectorAll('.surah-tile__title')].some((t) => ${JSON.stringify(sp.pageTitles)}.includes(t.textContent.trim()))`));
     check(`${w}: Surah page has no document overflow`, await overflow());
     check(`${w}: Surah page has no runtime errors`, await evaluate('window.__readerErrors.length === 0'));

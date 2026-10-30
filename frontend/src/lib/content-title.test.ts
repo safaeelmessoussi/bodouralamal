@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeTitle, EMPTY_TITLE_NUMBERS, parseTitle } from './content-title.js';
+import { composeTitle, EMPTY_TITLE_NUMBERS, parseFileName, parseTitle } from './content-title.js';
 
 /** R259 — the Owner's two examples, both ways. */
 describe('a content title from its parts', () => {
@@ -51,5 +51,43 @@ describe('a content title from its parts', () => {
 
   it('reads nothing from a title written another way', () => {
     expect(parseTitle('تفسير القرآن — سورة الفاتحة — الاثنين 19 أكتوبر 2026')).toEqual(EMPTY_TITLE_NUMBERS);
+  });
+});
+
+/** R260 — the Owner's three file names. */
+describe('the numbers a file name says', () => {
+  it('reads «Z0000121الحصة الأولى من تفسير سورة البقرة ج 1.mp3»', () => {
+    expect(parseFileName('Z0000121الحصة الأولى من تفسير سورة البقرة ج 1.mp3', 'audio')).toEqual({
+      format: 'تسجيل صوتي',
+      page: '',
+      session: '1',
+      part: '1',
+    });
+  });
+
+  it('reads «ح 7 ج 2 من تفسير سورة ال عمران.mp3»', () => {
+    expect(parseFileName('ح 7 ج 2 من تفسير سورة ال عمران.mp3', 'audio')).toEqual({
+      format: 'تسجيل صوتي',
+      page: '',
+      session: '7',
+      part: '2',
+    });
+  });
+
+  it('reads «الحصة_الثالثة_تفسير_سورة_البقرة_ج2.mp3»', () => {
+    expect(parseFileName('الحصة_الثالثة_تفسير_سورة_البقرة_ج2.mp3', 'audio')).toEqual({
+      format: 'تسجيل صوتي',
+      page: '',
+      session: '3',
+      part: '2',
+    });
+  });
+
+  it('reads a teen ordinal, a page, and Arabic-Indic digits', () => {
+    expect(parseFileName('الحصة الحادية عشرة ص ٦.png', 'image')).toEqual({ format: 'صورة', page: '6', session: '11', part: '' });
+  });
+
+  it('says nothing the name does not say', () => {
+    expect(parseFileName('recording-0042.m4a', 'audio')).toEqual({ format: 'تسجيل صوتي', page: '', session: '', part: '' });
   });
 });

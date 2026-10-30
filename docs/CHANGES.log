@@ -549,3 +549,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `educational_content.surah_part` (migration r259, CHECK only with surah 2) through initiate claims, PATCH and library rows; `SURAH_PART_NOT_BAQARA`.
 - `lib/content-title.ts` (compose/parse) + `TitleNumbersFields`; per-file numbers in `FileUploader` (`titleParts`), copied to files chosen after; the edit dialog parses the title and rebuilds it on change.
 - Verified: integration 117/117 + reader 232/232 (upload part refused off Baqara, kept/cleared on edit); browser on Localhost: two files inherit session 7 / part 2, format from the file, titles built; edit form rewrites the title from format + session; unsaved-guard 24/24; frontend 1716, backend 391.
+
+## 2026-10-30 — SRS Revision 260: page viewer, player, file names fill the title, uploads in parts
+- `SlideViewer`: «1/n» in the heading, corner arrows on the page, swipe (pointer), hover edges; no row below.
+- Player: `--skip` buttons, «+10», `.surah-track__seek` full-width (thin line, 1.5rem hit area); `--color-play-light/deep`.
+- `parseFileName` (session/part/page/format) fills `FileUploader` items.
+- Multipart (§10.1, R-9 retired): storage create/presign-part/complete/abort; ticket `multipart_id`; `POST /uploads/{id}/parts`; complete joins every part first; client 8 MB parts with per-part retries.
+- Verified: integration 140/140 + reader 238/238 (9 MB PDF in two parts through the edge; a missing part refused; «1/2», corner arrows, swipe → «2/2»; ±10 and the full-width bar); a real browser on Localhost sent a 17 MB PDF in 3 parts (ETags) and completed (probe item deleted); frontend 1721, backend 391.

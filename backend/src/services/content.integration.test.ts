@@ -59,6 +59,7 @@ import {
   completeUpload,
   deleteContent,
   initiateUpload,
+  presignUploadParts,
   mintDownloadUrl,
   updateContentMetadata,
   UPLOAD_QUOTA,
@@ -742,6 +743,61 @@ describe("R202 — an audio file is stored as what its bytes prove", () => {
   it("a PDF named .mp3 is still refused", async () => {
     const e = await failure(() => upload(Buffer.from("%PDF-1.4\n" + "x".repeat(2000), "latin1"), "fake.mp3", "audio/mpeg"));
     expect(e.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("R260 — a file sent in parts", () => {
+  it("joins the parts, then validates and files the result like any upload; a missing part is refused", async () => {
+    // A PDF over one 8 MB part: its magic bytes in the first part, padding after.
+    const bytes = Buffer.concat([pdfBytes(), Buffer.alloc(9 * 1024 * 1024, 0x20)]);
+    const start = async () => {
+      const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+        filename: "درس طويل.pdf",
+        size: bytes.length,
+        mime: "application/pdf",
+        multipart: true,
+        meta: meta({}) as never,
+      });
+      trackTicket(initiated.uploadId);
+      return initiated;
+    };
+    const initiated = await start();
+    expect(initiated.putUrl).toBe("");
+    expect(initiated.multipart).toEqual({ partSize: 8 * 1024 * 1024, partCount: 2 });
+    const urls = await presignUploadParts(clients, KEY, admin(), initiated.uploadId, [1, 2]);
+    const parts: { partNumber: number; etag: string }[] = [];
+    for (const { partNumber, url } of urls) {
+      expect(url.startsWith(config.STORAGE_BASE_URL)).toBe(true);
+      const slice = bytes.subarray((partNumber - 1) * 8 * 1024 * 1024, partNumber * 8 * 1024 * 1024);
+      const res = await fetch(url, { method: "PUT", body: slice });
+      expect(res.status).toBe(200);
+      parts.push({ partNumber, etag: res.headers.get("etag") ?? "" });
+    }
+    const created = await completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+      title: `${TAG} درس طويل`,
+      description: null,
+      parts,
+    });
+    createdContentIds.add(created.id);
+    const stored = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: created.id },
+      select: { storageBucket: true, storageKey: true, sizeBytes: true },
+    });
+    trackObject(stored.storageBucket, stored.storageKey);
+    expect(Number(stored.sizeBytes)).toBe(bytes.length);
+
+    // Only the first part sent: the join is refused, nothing is filed.
+    const half = await start();
+    const [first] = await presignUploadParts(clients, KEY, admin(), half.uploadId, [1]);
+    const sent = await fetch(first!.url, { method: "PUT", body: bytes.subarray(0, 8 * 1024 * 1024) });
+    const refused = await failure(() =>
+      completeUpload(prisma, clients, KEY, admin(), half.uploadId, {
+        title: `${TAG} ناقص`,
+        description: null,
+        parts: [{ partNumber: 1, etag: sent.headers.get("etag") ?? "" }],
+      }),
+    );
+    expect(refused.details?.["reason"]).toBe("UPLOAD_PARTS_INCOMPLETE");
   });
 });
 
@@ -1779,6 +1835,8 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
     for (const [name, mime, bytes, yearId] of [
       ['lesson', 'audio/wav', audio, academicYearId],
       ['page', 'image/png', readFileSync('../frontend/public/favicon-32.png'), academicYearId],
+      // R260 — a second page, so the viewer has one to turn to.
+      ['page2', 'image/png', readFileSync('../frontend/public/favicon-32.png'), academicYearId],
       ['earlier', 'audio/wav', audio, earlierYear.id],
     ] as const) {
       const id = randomUUID();
@@ -1815,7 +1873,7 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
       generalItems[name] = id;
     }
     await prisma.sessionContent.create({ data: { sessionId, contentId: surahItems['lesson']! } });
-    await setRecordingSlides(prisma, admin(), surahItems['lesson']!, [surahItems['page']!]);
+    await setRecordingSlides(prisma, admin(), surahItems['lesson']!, [surahItems['page']!, surahItems['page2']!]);
     const years = await prisma.academicYear.findMany({ where: { id: { in: [academicYearId, earlierYear.id] } }, select: { label: true } });
     // Private material is visible to the teacher because it is used in the
     // exact Session she staffs, not because the browser fixture grants a wider

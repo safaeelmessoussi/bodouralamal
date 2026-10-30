@@ -8,7 +8,7 @@ import { requireActor } from '../middleware/authenticate.js';
 import * as content from '../services/content.service.js';
 import * as slides from '../services/recording-slides.service.js';
 import { setContentOrder } from '../services/content-order.service.js';
-import { completeUploadSchema, initiateUploadSchema } from '../validators/content.validators.js';
+import { completeUploadSchema, initiateUploadSchema, uploadPartsSchema } from '../validators/content.validators.js';
 import { z } from 'zod';
 
 import { AppError } from '../lib/errors.js';
@@ -38,6 +38,7 @@ export function initiate(prisma: PrismaClient, clients: StorageClients, config: 
       requireActor(req),
       {
         filename: body.filename,
+        ...(body.multipart ? { multipart: true } : {}),
         size: body.size,
         mime: body.mime,
         meta: {
@@ -75,6 +76,10 @@ export function initiate(prisma: PrismaClient, clients: StorageClients, config: 
       key: result.key,
       put_url: result.putUrl,
       expires_in: result.expiresIn,
+      // R260 — present for a multipart upload: its parts are presigned one by one.
+      ...(result.multipart
+        ? { multipart: { part_size: result.multipart.partSize, part_count: result.multipart.partCount } }
+        : {}),
     });
   };
 }
@@ -88,9 +93,28 @@ export function complete(prisma: PrismaClient, clients: StorageClients, config: 
       config.JWT_SIGNING_KEY,
       requireActor(req),
       String(req.params['uploadId'] ?? ''),
-      { title: body.title, description: body.description ?? null },
+      {
+        title: body.title,
+        description: body.description ?? null,
+        ...(body.parts ? { parts: body.parts.map((p) => ({ partNumber: p.part_number, etag: p.etag })) } : {}),
+      },
     );
     res.status(201).json({ id: result.id });
+  };
+}
+
+/** **R260 — `POST /uploads/{upload_id}/parts`**: presigned URLs for the parts named. */
+export function parts(clients: StorageClients, config: AppConfig) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(uploadPartsSchema, req.body);
+    const urls = await content.presignUploadParts(
+      clients,
+      config.JWT_SIGNING_KEY,
+      requireActor(req),
+      String(req.params['uploadId'] ?? ''),
+      body.part_numbers,
+    );
+    res.json({ data: urls.map((u) => ({ part_number: u.partNumber, url: u.url })) });
   };
 }
 

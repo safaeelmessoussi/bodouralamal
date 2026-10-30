@@ -1,5 +1,8 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
   CopyObjectCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
@@ -7,6 +10,7 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable } from 'node:stream';
@@ -151,6 +155,74 @@ export async function presignPutUrl(
     { expiresIn },
   );
   return toProxyUrl(signed, clients.storagePrefix);
+}
+
+/* ── R260 — multipart uploads (SRS §10.1's first storage item, risk R-9) ── */
+
+/**
+ * **A long file in parts, each retried on its own** (the Owner, 2026-10-30:
+ * «تعذّر الرفع بعد عدة محاولات بسبب انقطاع الاتصال» — one PUT restarted from
+ * zero on every drop). The same staging key, bucket and completion checks as a
+ * single PUT; only the transfer is in parts.
+ */
+export const MULTIPART_PART_SIZE = 8 * 1024 * 1024;
+
+export async function createMultipartUpload(
+  clients: StorageClients,
+  bucket: BucketName,
+  key: string,
+): Promise<string> {
+  const out = await clients.internal.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key }));
+  if (!out.UploadId) throw new Error('storage returned no multipart upload id');
+  return out.UploadId;
+}
+
+/** One part's presigned PUT, through the same `/storage` proxy as a single PUT. */
+export async function presignUploadPartUrl(
+  clients: StorageClients,
+  bucket: BucketName,
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  expiresIn: number = PRESIGN_TTL_SECONDS.put,
+): Promise<string> {
+  const signed = await getSignedUrl(
+    clients.publicOrigin,
+    new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: partNumber }),
+    { expiresIn },
+  );
+  return toProxyUrl(signed, clients.storagePrefix);
+}
+
+export async function completeMultipartUpload(
+  clients: StorageClients,
+  bucket: BucketName,
+  key: string,
+  uploadId: string,
+  parts: readonly { partNumber: number; etag: string }[],
+): Promise<void> {
+  await clients.internal.send(
+    new CompleteMultipartUploadCommand({
+      Bucket: bucket,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: [...parts].sort((a, b) => a.partNumber - b.partNumber).map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })),
+      },
+    }),
+  );
+}
+
+/** Best effort: the parts of an abandoned upload are discarded with it. */
+export async function abortMultipartUpload(
+  clients: StorageClients,
+  bucket: BucketName,
+  key: string,
+  uploadId: string,
+): Promise<void> {
+  await clients.internal
+    .send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }))
+    .catch(() => undefined);
 }
 
 export async function presignGetUrl(

@@ -457,8 +457,17 @@ function SlideViewer({
     };
   }, [open, slide?.id]);
 
+  /**
+   * R260 — a sideways swipe on the page turns it (the image keeps its size; a
+   * vertical drag still scrolls the page). Right to left: a swipe towards the
+   * right brings the next page, as a page turns in an Arabic book.
+   */
+  const swipe = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const go = (to: number): void => setAt(Math.max(0, Math.min(slides.length - 1, to)));
+
   if (!slide) return null;
   const url = urls[slide.id];
+  const many = slides.length > 1;
   return (
     <div className="surah-slides__viewer">
       <button
@@ -467,47 +476,84 @@ function SlideViewer({
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <Icon name="image" size={16} />
+        {/* R260 — no icon; the page shown of how many («1/5»). */}
         {label}
-        <span className="surah-slides__count">({slides.length})</span>
+        {many ? (
+          <span className="surah-slides__count" dir="ltr">
+            {at + 1}/{slides.length}
+          </span>
+        ) : null}
         <span className="surah-library__chevron" aria-hidden="true">
           {open ? '−' : '+'}
         </span>
       </button>
       {open ? (
-        <figure className="surah-slides__stage">
-          <button type="button" className="surah-slides__page" onClick={() => onOpen(slide)} aria-label={slide.title}>
-            {url ? <img src={url} alt={slide.title} /> : <Icon name="image" size={32} />}
+        <figure
+          className={`surah-slides__stage${many ? ' surah-slides__stage--many' : ''}`}
+          onPointerDown={(event) => {
+            swipe.current = { x: event.clientX, y: event.clientY, moved: false };
+          }}
+          onPointerUp={(event) => {
+            const start = swipe.current;
+            if (!start || !many) return;
+            const dx = event.clientX - start.x;
+            const dy = event.clientY - start.y;
+            if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) {
+              start.moved = true;
+              go(dx > 0 ? at + 1 : at - 1);
+            }
+          }}
+          onKeyDown={(event) => {
+            if (!many) return;
+            if (event.key === 'ArrowLeft') go(at + 1);
+            if (event.key === 'ArrowRight') go(at - 1);
+          }}
+        >
+          <button
+            type="button"
+            className="surah-slides__page"
+            onClick={() => {
+              // A swipe is not a press.
+              if (swipe.current?.moved) {
+                swipe.current = null;
+                return;
+              }
+              onOpen(slide);
+            }}
+            aria-label={slide.title}
+          >
+            {url ? <img src={url} alt={slide.title} draggable={false} /> : <Icon name="image" size={32} />}
           </button>
-          {slides.length > 1 ? (
-            <figcaption className="surah-slides__nav">
-              {/* Right to left: the previous page is on the right, pointing right. */}
+          {many ? (
+            <>
+              {/* R260 — on a computer, pointing at the page shows that it turns. */}
+              {at > 0 ? <span className="surah-slides__edge surah-slides__edge--previous" aria-hidden="true" /> : null}
+              {at < slides.length - 1 ? <span className="surah-slides__edge surah-slides__edge--next" aria-hidden="true" /> : null}
+              {/* R260 — on the page's lower corners; right to left, the previous
+                  page is on the right, pointing right. */}
               <button
                 type="button"
-                className="surah-player__button"
+                className="surah-slides__arrow surah-slides__arrow--previous"
                 disabled={at === 0}
-                onClick={() => setAt(at - 1)}
+                onClick={() => go(at - 1)}
                 aria-label={t('content.bySurah.slidePrev')}
               >
                 <svg className="surah-player__glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                   <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="2" />
                 </svg>
               </button>
-              <span className="surah-slides__where" dir="ltr">
-                {at + 1} / {slides.length}
-              </span>
               <button
                 type="button"
-                className="surah-player__button"
+                className="surah-slides__arrow surah-slides__arrow--next"
                 disabled={at >= slides.length - 1}
-                onClick={() => setAt(at + 1)}
+                onClick={() => go(at + 1)}
                 aria-label={t('content.bySurah.slideNext')}
               >
                 <svg className="surah-player__glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                   <path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" strokeWidth="2" />
                 </svg>
               </button>
-            </figcaption>
+            </>
           ) : null}
         </figure>
       ) : null}
@@ -739,7 +785,7 @@ export function AudioTrack({
             </button>
             <button
               type="button"
-              className="surah-player__button"
+              className="surah-player__button surah-player__button--skip"
               disabled={state !== 'ready'}
               onClick={() => {
                 const audio = audioRef.current;
@@ -757,23 +803,26 @@ export function AudioTrack({
               </svg>
               <span aria-hidden="true">10</span>
             </button>
-            <input
-              type="range"
-              className="surah-player__bar"
-              min={0}
-              max={total || 1}
-              step={1}
-              value={Math.min(current, total || 1)}
-              disabled={state !== 'ready' || total === 0}
-              style={{ ['--listened' as string]: `${String(listened)}%` }}
-              aria-label={t('content.bySurah.seek')}
-              aria-valuetext={`${clock(current)} / ${clock(total)}`}
-              onChange={(event) => {
-                const at = Number(event.target.value);
-                setCurrent(at);
-                if (audioRef.current) audioRef.current.currentTime = at;
+            {/* R260 — and forward 10 seconds, beside it (to its left, the way
+                the reading goes on). */}
+            <button
+              type="button"
+              className="surah-player__button surah-player__button--skip"
+              disabled={state !== 'ready'}
+              onClick={() => {
+                const audio = audioRef.current;
+                if (!audio) return;
+                const end = Number.isFinite(audio.duration) ? audio.duration : Infinity;
+                audio.currentTime = Math.min(end, audio.currentTime + 10);
               }}
-            />
+              aria-label={t('content.bySurah.forward10')}
+              title={t('content.bySurah.forward10')}
+            >
+              <span aria-hidden="true">10</span>
+              <svg className="surah-player__glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
+              </svg>
+            </button>
             <span className="surah-player__time" dir="ltr">
               {clock(current)} / {clock(total)}
             </span>
@@ -866,6 +915,27 @@ export function AudioTrack({
           </audio>
         ) : null}
       </div>
+      {/* R260 — the bar along the whole card, in a thin row of its own: an
+          hour in a short line made minute 24 hard to hit. */}
+      {state === 'missing' ? null : (
+        <input
+          type="range"
+            className="surah-player__bar surah-track__seek"
+            min={0}
+            max={total || 1}
+            step={1}
+            value={Math.min(current, total || 1)}
+            disabled={state !== 'ready' || total === 0}
+            style={{ ['--listened' as string]: `${String(listened)}%` }}
+            aria-label={t('content.bySurah.seek')}
+            aria-valuetext={`${clock(current)} / ${clock(total)}`}
+            onChange={(event) => {
+              const at = Number(event.target.value);
+              setCurrent(at);
+              if (audioRef.current) audioRef.current.currentTime = at;
+            }}
+          />
+      )}
     </li>
   );
 }

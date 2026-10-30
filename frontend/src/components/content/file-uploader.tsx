@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { kindOf } from '../../adapters/content.js';
 import { uploadFile, type UploadMeta, type UploadStage } from '../../adapters/uploads.js';
-import { composeTitle, EMPTY_TITLE_NUMBERS, formatForKind, type TitleNumbers } from '../../lib/content-title.js';
+import { composeTitle, EMPTY_TITLE_NUMBERS, parseFileName, type TitleNumbers } from '../../lib/content-title.js';
 import type { TitleParts } from './content-scope-fields.js';
 import { TitleNumbersFields } from './title-numbers-fields.js';
 import { t } from '../../i18n/index.js';
@@ -225,11 +225,19 @@ export function FileUploader({
         // the worst thing to leave a person retyping. The extension names the
         // format, which the card already shows.
         const fallback = file.name.replace(/\.[^.]+$/, '');
-        // R259 — a format not chosen yet is suggested by what the file is.
-        const numbers =
-          titleParts && slot.numbers.format === ''
-            ? { ...slot.numbers, format: formatForKind(kindOf(file.type)) }
-            : slot.numbers;
+        // R260 — what the file's name says (its session, its part, its page,
+        // its kind) fills that file's fields; what it does not say keeps what
+        // was entered before the files were chosen (R259), and a format
+        // chosen then stays.
+        const named = parseFileName(file.name, kindOf(file.type));
+        const numbers: TitleNumbers = titleParts
+          ? {
+              format: slot.numbers.format || named.format,
+              page: named.page || slot.numbers.page,
+              session: named.session || slot.numbers.session,
+              part: named.part || slot.numbers.part,
+            }
+          : slot.numbers;
         return {
           ...slot,
           file,

@@ -886,6 +886,8 @@ export function createApp(
   // (`lib/upload-token.ts`), which is why no pending-upload table exists.
   guarded.post('/uploads/initiate', contentCtl.initiate(prisma, storage, config));
   guarded.post('/uploads/:uploadId/complete', contentCtl.complete(prisma, storage, config));
+  // R260 — a multipart upload's parts, presigned one by one.
+  guarded.post('/uploads/:uploadId/parts', contentCtl.parts(storage, config));
   guarded.post('/uploads/:uploadId/abort', contentCtl.abort(prisma, storage, config));
   // R53: replacement reuses the upload flow (`replaces_content_id`); deletion is
   // its own route because it moves no bytes in.

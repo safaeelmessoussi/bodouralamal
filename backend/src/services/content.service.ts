@@ -26,6 +26,12 @@ import {
   stablePublicUrl,
   presignPutUrl,
   statObjectStrict,
+  statObject,
+  abortMultipartUpload,
+  completeMultipartUpload,
+  createMultipartUpload,
+  MULTIPART_PART_SIZE,
+  presignUploadPartUrl,
   PRESIGN_TTL_SECONDS,
   type BucketName,
   type StorageClients,
@@ -234,6 +240,8 @@ export interface InitiateInput {
   filename: string;
   size: number;
   mime: string;
+  /** R260 — send the file in parts (`POST /uploads/{id}/parts`), each retried alone. */
+  multipart?: boolean;
   meta: ({ levelId: string; categoryId?: undefined } | { categoryId: string; levelId?: undefined }) & {
     /** R195 — `null` is «عام»: material of a class of all its Level's Subjects. */
     subjectId: string | null;
@@ -289,8 +297,11 @@ async function resolveAuthor(
 export interface InitiateResult {
   uploadId: string;
   key: string;
+  /** `''` for a multipart upload: its parts are presigned one by one. */
   putUrl: string;
   expiresIn: number;
+  /** R260 — the part size and count of a multipart upload. */
+  multipart?: { partSize: number; partCount: number };
 }
 
 /**
@@ -444,11 +455,18 @@ export async function initiateUpload(
   const bucket = bucketFor(visibility);
   const finalizationId = randomUUID();
 
+  // R260 — a multipart upload is started on the SAME staging key; the browser
+  // then asks for each part's URL with the ticket that names it.
+  let multipartId: string | null = null;
   const putUrl = await prisma.$transaction(async (tx) => {
     await assertUploadAccountAvailable(tx, actor.userId);
     await consumeUploadQuota(tx, actor.userId, new Date());
     // Minting inside the transaction keeps the quota and the grant atomic: a URL
     // handed out after a failed increment would be an unaccounted upload.
+    if (input.multipart) {
+      multipartId = await createMultipartUpload(clients, bucket, key);
+      return '';
+    }
     return presignPutUrl(clients, bucket, key);
   });
 
@@ -477,11 +495,48 @@ export async function initiateUpload(
       // R215 — decided at initiation, like every other fact here.
       ...(input.meta.authorId ? { author_id: input.meta.authorId } : {}),
       ...(input.meta.authorId && authorRole ? { author_role: authorRole } : {}),
+      ...(multipartId !== null ? { multipart_id: multipartId } : {}),
     },
     signingKey,
   );
 
-  return { uploadId: token, key, putUrl, expiresIn: PRESIGN_TTL_SECONDS.put };
+  return {
+    uploadId: token,
+    key,
+    putUrl,
+    expiresIn: PRESIGN_TTL_SECONDS.put,
+    ...(multipartId !== null
+      ? { multipart: { partSize: MULTIPART_PART_SIZE, partCount: Math.max(1, Math.ceil(input.size / MULTIPART_PART_SIZE)) } }
+      : {}),
+  };
+}
+
+/**
+ * **R260 — `POST /uploads/{upload_id}/parts`**: presigned URLs for the parts
+ * named, of the caller's own multipart upload. A part may be asked for again:
+ * that is how a dropped part is retried without restarting the file.
+ */
+export async function presignUploadParts(
+  clients: StorageClients,
+  signingKey: string,
+  actor: Actor,
+  uploadId: string,
+  partNumbers: readonly number[],
+): Promise<{ partNumber: number; url: string }[]> {
+  const claims = claimsOf(uploadId, signingKey, actor);
+  if (!claims.multipart_id) {
+    throw new AppError('VALIDATION_FAILED', 'this upload is not in parts', { reason: 'NOT_MULTIPART' });
+  }
+  const partCount = Math.max(1, Math.ceil(claims.size / MULTIPART_PART_SIZE));
+  if (partNumbers.some((n) => n < 1 || n > partCount)) {
+    throw new AppError('VALIDATION_FAILED', 'no such part', { reason: 'PART_OUT_OF_RANGE' });
+  }
+  return Promise.all(
+    partNumbers.map(async (partNumber) => ({
+      partNumber,
+      url: await presignUploadPartUrl(clients, claims.bucket as BucketName, claims.key, claims.multipart_id!, partNumber),
+    })),
+  );
 }
 
 /* ── POST /uploads/{upload_id}/complete ──────────────────────────────────── */
@@ -600,6 +655,8 @@ async function streamAndVerifyObject(
 export interface CompleteInput {
   title: string;
   description: string | null;
+  /** R260 — a multipart upload's parts (number and ETag), joined before the checks. */
+  parts?: { partNumber: number; etag: string }[];
 }
 
 /** Narrow deterministic barriers for concurrency tests. Production passes no
@@ -941,6 +998,27 @@ export async function completeUpload(
     );
   }
 
+  // R260 — the parts become the one staging object the checks below read. A
+  // completion retried after the join finds the object there already.
+  if (claims.multipart_id) {
+    const parts = input.parts ?? [];
+    // Every part, each once: a store joins whatever subset it is given, and a
+    // file short of a part must be refused as such, not as a size mismatch.
+    const partCount = Math.max(1, Math.ceil(claims.size / MULTIPART_PART_SIZE));
+    const numbers = new Set(parts.map((part) => part.partNumber));
+    const whole = parts.length === partCount && numbers.size === partCount && [...numbers].every((n) => n >= 1 && n <= partCount);
+    try {
+      if (!whole) throw new Error('not every part');
+      await completeMultipartUpload(clients, claims.bucket as BucketName, claims.key, claims.multipart_id, parts);
+    } catch {
+      if ((await statObject(clients, claims.bucket, claims.key)) === null) {
+        throw new AppError('STATE_CONFLICT', 'the parts of this upload are not all there', {
+          reason: 'UPLOAD_PARTS_INCOMPLETE',
+        });
+      }
+    }
+  }
+
   let replacement: WritableContent | null = null;
   if (claims.replaces) {
     replacement = await loadWritableContent(prisma, actor, claims.cid);
@@ -1107,7 +1185,8 @@ export async function abortUpload(
   const claims = claimsOf(uploadId, signingKey, actor);
   // Best-effort by design: aborting an upload that never started is a success
   // from the caller's point of view, and `upload.gc` (TD-7) sweeps anything a
-  // client abandons without telling us.
+  // client abandons without telling us. R260 — and its parts, if it had any.
+  if (claims.multipart_id) await abortMultipartUpload(clients, claims.bucket as BucketName, claims.key, claims.multipart_id);
   await discardStagingObject(prisma, clients, claims);
 }
 

@@ -30,6 +30,8 @@ export const initiateUploadSchema = z
   .object({
     filename,
     size: z.number().int().positive(),
+    /** R260 — send the file in parts, each retried on its own. */
+    multipart: z.boolean().optional(),
     // R200 — may be empty: a file the browser could not type is read by its
     // extension (`canonicalUploadMime`), and its bytes are checked at completion.
     mime: z.string().trim().max(120),
@@ -113,4 +115,19 @@ export const initiateUploadSchema = z
  * reason §4.1b refuses an email from the registration body: a field the server
  * already decided must not be re-openable by the client.
  */
-export const completeUploadSchema = z.object({ title, description }).strict();
+export const completeUploadSchema = z
+  .object({
+    title,
+    description,
+    /** R260 — a multipart upload's parts: each number and the ETag its PUT answered. */
+    parts: z
+      .array(z.object({ part_number: z.number().int().min(1).max(10000), etag: z.string().min(1).max(200) }).strict())
+      .max(10000)
+      .optional(),
+  })
+  .strict();
+
+/** R260 — `POST /uploads/{upload_id}/parts`: which parts to presign. */
+export const uploadPartsSchema = z
+  .object({ part_numbers: z.array(z.number().int().min(1).max(10000)).min(1).max(100) })
+  .strict();
