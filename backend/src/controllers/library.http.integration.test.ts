@@ -82,6 +82,8 @@ const ITEM_KEYS = [
      not updated with it, so the gate was red on develop before R119 touched
      anything. It states what the file IS, never consent state. */
   "origin",
+  // R263 — an image cut from a «مطبوع».
+  "print_page",
   // R247 — the live sessions it is attached to (a session's images are its recordings' pages).
   "session_ids",
   "size_bytes",
