@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Occurrence } from '../../adapters/calendar.js';
-import { chipTaxonomy, chipText, hiddenChipParts, type ChipDetail } from './chip-parts.js';
+import { chipTaxonomy, chipText, type ChipDetail } from './chip-parts.js';
 
 /**
  * **R179 §6 (Owner, 2026-09-29) — a month chip says everything the
@@ -30,24 +30,6 @@ const session = (over: Partial<Occurrence> = {}): Occurrence =>
 
 const texts = (details: ChipDetail[]): string[] => details.map((d) => d.text);
 const parts = (details: ChipDetail[]): string[] => details.map((d) => d.part);
-
-describe('hiddenChipParts — one rule for every calendar surface', () => {
-  it('hides nothing with no filter, and each part under its own filter', () => {
-    expect([...hiddenChipParts({})]).toEqual([]);
-    expect([...hiddenChipParts({ branchId: 'b' })]).toEqual(['branch']);
-    expect([...hiddenChipParts({ levelId: 'l' })]).toEqual(['level', 'category']);
-    expect([...hiddenChipParts({ categoryId: 'c' })]).toEqual(['category']);
-    expect([...hiddenChipParts({ subjectId: 's' })]).toEqual(['subject']);
-    expect([...hiddenChipParts({ surahId: '1' })]).toEqual(['surah']);
-    expect([...hiddenChipParts({ groupId: 'g' })]).toEqual(['audience']);
-    expect([...hiddenChipParts({ circleId: 'c' })]).toEqual(['audience']);
-    expect([...hiddenChipParts({ type: 'exam' })]).toEqual(['kind']);
-  });
-
-  it('treats an empty string as «الكل», as every filter hook holds it', () => {
-    expect([...hiddenChipParts({ branchId: '', levelId: '', subjectId: '' })]).toEqual([]);
-  });
-});
 
 describe('chipText — the words, in reading order', () => {
   it('a class: Subject, then its Surahs in one part (R208), the circle, the Level, who leads, the branch — each part typed', () => {
@@ -96,9 +78,6 @@ describe('chipText — the words, in reading order', () => {
       level_names: ['وميض الأمل', 'نور الأمل', 'براعم', 'مستوى آخر'],
     });
     expect(texts(chipText(mixed, new Set(), taxonomy).details)).toEqual(['السور: الفاتحة، البقرة', 'الحلقة 1', 'المرأة', 'الأطفال', 'مستوى آخر', 'فاطمة بوخبزى', 'مقر أمرشيش']);
-    // A Category filter hides the collapsed word; a Level filter hides both.
-    expect(texts(chipText(whole, hiddenChipParts({ categoryId: 'women' }), taxonomy).details)).not.toContain('المرأة');
-    expect(parts(chipText(mixed, hiddenChipParts({ levelId: 'l1' }), taxonomy).details)).not.toContain('level');
     // No taxonomy: listed as they come.
     expect(texts(chipText(whole, new Set()).details)).toContain('نور الأمل');
   });
@@ -143,7 +122,6 @@ describe('chipText — the words, in reading order', () => {
     // Scoped to the Category itself, with no Level: the Category is named.
     const forWomen = session({ ...activity, level_ids: [], level_names: [], level_name: null });
     expect(texts(chipText(forWomen, new Set()).details)).toEqual(['المرأة', 'مقر أمرشيش', 'مقر تاركة']);
-    expect(texts(chipText(forWomen, hiddenChipParts({ categoryId: 'women' })).details)).toEqual(['مقر أمرشيش', 'مقر تاركة']);
   });
 
   it('reads the singular name where a server sends no plural list', () => {

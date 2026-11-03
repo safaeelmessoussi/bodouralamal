@@ -197,7 +197,8 @@ check(
 
 /* ── a deep link arrives already filtered ───────────────────────────────── */
 
-await goto(`/calendar?level_id=${pub.value}&view=list`, '.cal-header');
+// R263 — the public calendar has one view; the link names only the filter.
+await goto(`/calendar?level_id=${pub.value}`, '.cal-header');
 const deep = await shown();
 check(
   '11 · a filtered calendar is a link somebody can send',

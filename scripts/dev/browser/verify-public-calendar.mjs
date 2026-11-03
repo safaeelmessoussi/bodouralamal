@@ -69,88 +69,26 @@ const api = (path) =>
     return { status: res.status, body: await res.text() };
   })()`);
 
-/* ── the two views exist and switch, anonymously ─────────────────────────── */
+/* ── R263 — one view, the month, anonymously ──────────────────────────────── */
 
 await anonymous();
 const reached = await goto('/calendar');
 check('the public calendar loads with no session at all', reached === true);
 
-const views = await evaluate(`(() => {
-  const tabs = [...document.querySelectorAll('.cal-segmented [role="tab"]')].map((b) => ({
-    label: b.textContent.trim(),
-    selected: b.getAttribute('aria-selected'),
-  }));
-  return {
-    tabs,
-    hasGrid: document.querySelector('.calendar-grid, table') !== null,
-    hasNav: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'اليوم'),
-  };
-})()`);
-check('1 · both قائمة and تقويم are offered', (views.tabs ?? []).length === 2, JSON.stringify(views.tabs));
-check('2 · تقويم is the public default, and the grid is rendered', views.hasGrid === true && views.tabs.some((t) => t.selected === 'true'), JSON.stringify(views));
-check('3 · السابق/اليوم/التالي remain available in the calendar view', views.hasNav === true);
+const views = await evaluate(`(() => ({
+  tabs: document.querySelectorAll('.cal-segmented [role="tab"]').length,
+  hasGrid: document.querySelector('.calendar-grid, .cal-grid') !== null,
+  hasNav: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'اليوم'),
+  dir: getComputedStyle(document.documentElement).direction,
+}))()`);
+check('1 · R263 — no «قائمة / تقويم» switch on the public calendar', views.tabs === 0, JSON.stringify(views));
+check('2 · the month grid is rendered, right to left', views.hasGrid === true && views.dir === 'rtl', JSON.stringify(views));
+check('3 · السابق/اليوم/التالي remain on a wide screen', views.hasNav === true);
 
-/**
- * **قائمة is the shared `OccurrenceTable`, restated 2026-08-19.**
- *
- * This read `.occurrence-list` / `.occurrence-list__item` — the page's own
- * hand-rolled markup, which **R84 replaced with the platform's `DataTable`** so
- * the list would finally have empty, error and retry states (rule AL, *قائمة is
- * a table everywhere*). The rendering rule is unchanged and the selector is.
- */
-const list = await evaluate(`(async () => {
-  const tab = [...document.querySelectorAll('.cal-segmented [role="tab"]')]
-    .find((b) => b.textContent.trim() === 'قائمة');
-  tab.click();
-  await new Promise((r) => setTimeout(r, 1500));
-  return {
-    url: window.location.search,
-    hasList: document.querySelector('.admin-table') !== null,
-    hasGrid: document.querySelector('.calendar-grid') !== null,
-    monthNav: [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'اليوم'),
-    items: [...document.querySelectorAll('.admin-table tbody tr')].length,
-    first: document.querySelector('.admin-table tbody tr')?.textContent?.trim()?.slice(0, 90) ?? null,
-  };
-})()`);
-check('4 · قائمة renders the shared occurrence table', list.hasList === true, JSON.stringify(list));
-check('5 · the chosen view is in the URL, so a reload and a shared link keep it', list.url.includes('view=list'), list.url);
-/**
- * **Inverted 2026-08-19 — the property itself changed, and the reason is
- * recorded rather than the check deleted.** It asserted stepping was *withheld*
- * in the list. R84 established that the public, beneficiary and مؤطرة lists are
- * *this month's occurrences*, so stepping is exactly how a reader moves through
- * them; only the back office's list — a table of recurring definitions with no
- * month at all — omits it, and it does so by passing no month.
- */
-check('6 · month stepping REMAINS in the list, which is month-scoped', list.monthNav === true);
-check('7 · the list carries occurrences with their date and time', list.items > 0, list.first);
-
-/**
- * **The direction, and that the table reads with it.** The old check measured a
- * `border-inline-start` marker on the hand-rolled row; that row no longer
- * exists. What survives the change is the property worth pinning: the document
- * is RTL and the table's first cell sits at the inline start, which is what an
- * `.occurrence-list__item` border was standing in for.
- */
-const rtl = await evaluate(`(() => {
-  const row = document.querySelector('.admin-table tbody tr');
-  if (!row) return { none: true };
-  // **Cell against cell, not cell against container.** Measuring the first cell
-  // against the table's own box compared it with a scroll container whose edge
-  // is not the row's; comparing the first and last cells asks the question
-  // directly — in RTL the first column is the RIGHTMOST one.
-  const cells = [...row.querySelectorAll('td')];
-  const first = cells[0];
-  const last = cells[cells.length - 1];
-  return {
-    dir: getComputedStyle(document.documentElement).direction,
-    columns: cells.length,
-    firstCellAtStart:
-      cells.length > 1 &&
-      first.getBoundingClientRect().right > last.getBoundingClientRect().right,
-  };
-})()`);
-check('8 · RTL, and the table reads from the inline start', rtl.dir === 'rtl' && rtl.firstCellAtStart === true, JSON.stringify(rtl));
+// An old shared link naming the list still opens the month.
+await goto('/calendar?view=list');
+const old = await evaluate(`({ grid: document.querySelector('.calendar-grid, .cal-grid') !== null, table: document.querySelector('.admin-table') !== null })`);
+check('4 · an old «?view=list» link opens the month, not a table', old.grid === true && old.table === false, JSON.stringify(old));
 
 /* ── what a public reader must NOT see ───────────────────────────────────── */
 

@@ -4,7 +4,7 @@ import type { HijriDay, Occurrence } from '../../adapters/calendar.js';
 import { monthGrid, toIsoDate } from '../../lib/dates.js';
 import { t, tList } from '../../i18n/index.js';
 import { CalendarDayCell } from './calendar-day-cell.js';
-import type { ChipPart, ChipTaxonomy } from './chip-parts.js';
+import type { ChipTaxonomy } from './chip-parts.js';
 
 /**
  * The monthly grid — a real `<table>`, because a calendar month *is* tabular
@@ -25,7 +25,6 @@ export function CalendarGrid({
   status = 'ready',
   emptyMessage = t('calendar.monthEmpty'),
   onRetry,
-  hiddenChipParts,
   chipTaxonomy,
 }: {
   month: Date;
@@ -40,8 +39,6 @@ export function CalendarGrid({
   status?: 'loading' | 'ready' | 'error';
   emptyMessage?: string;
   onRetry?: () => void;
-  /** R179 §6 — what this surface's active filters already say, left off every chip. */
-  hiddenChipParts?: ReadonlySet<ChipPart>;
   /** R179 §9 — this surface's taxonomy, so a whole-Category audience reads as the Category. */
   chipTaxonomy?: ChipTaxonomy;
 }): ReactNode {
@@ -85,7 +82,6 @@ export function CalendarGrid({
                   isSelected={date && selected ? toIsoDate(date) === toIsoDate(selected) : false}
                   onSelect={onSelect}
                   onOpenEvent={onOpenEvent}
-                  {...(hiddenChipParts ? { hiddenChipParts } : {})}
                   {...(chipTaxonomy ? { chipTaxonomy } : {})}
                 />
               ))}

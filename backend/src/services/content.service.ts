@@ -7,6 +7,7 @@ import {
   buildServerFinalizationKey,
   buildUploadStagingKey,
   canonicalUploadMime,
+  downloadDisposition,
   isUploadableMime,
   mimeEssence,
   sizeCapFor,
@@ -164,12 +165,24 @@ async function assertUploadScope(
  *
  * The lock is the point (TD-15.2). Reading the count outside the transaction
  * would let two initiations at the boundary both see 29 and both pass, which is
- * exactly the check-then-write race the row lock exists to close. Revision 14 is
+ * exactly the check-then-write race the row lock exists to close (30, or 200
+ * for staff since R263). Revision 14 is
  * equally explicit about where this may *not* live: not in process memory (dies
  * with the container, wrong across replicas) and not in pg-boss (a quota
  * decision is synchronous).
  */
-export const UPLOAD_QUOTA = { bucket: 'upload.initiate', perHour: 30 } as const;
+export const UPLOAD_QUOTA = { bucket: 'upload.initiate', perHour: 30, staffPerHour: 200 } as const;
+
+/**
+ * R263 — the staff who file the library (Super Admin, Admin, Teacher) may start
+ * 200 uploads an hour: a Surah's recordings and their pages, with retries,
+ * passed 30 in one sitting. Everyone else keeps 30.
+ */
+export function uploadQuotaPerHour(roles: readonly string[]): number {
+  return roles.some((role) => role === 'super_admin' || role === 'admin' || role === 'teacher')
+    ? UPLOAD_QUOTA.staffPerHour
+    : UPLOAD_QUOTA.perHour;
+}
 
 /**
  * R111 final-deletion boundary for upload authority.
@@ -204,6 +217,7 @@ function windowStartOf(now: Date): Date {
 async function consumeUploadQuota(
   tx: Prisma.TransactionClient,
   userId: string,
+  limit: number,
   now: Date,
 ): Promise<void> {
   const windowStart = windowStartOf(now);
@@ -219,9 +233,9 @@ async function consumeUploadQuota(
       DO UPDATE SET "updated_at" = "rate_limit_counter"."updated_at"
     RETURNING "count"`;
 
-  if ((row?.count ?? 0) >= UPLOAD_QUOTA.perHour) {
+  if ((row?.count ?? 0) >= limit) {
     throw new AppError('RATE_LIMITED', 'upload quota exhausted for this hour (TD-4.12)', {
-      limit: UPLOAD_QUOTA.perHour,
+      limit,
       window: 'hour',
     });
   }
@@ -460,7 +474,7 @@ export async function initiateUpload(
   let multipartId: string | null = null;
   const putUrl = await prisma.$transaction(async (tx) => {
     await assertUploadAccountAvailable(tx, actor.userId);
-    await consumeUploadQuota(tx, actor.userId, new Date());
+    await consumeUploadQuota(tx, actor.userId, uploadQuotaPerHour(actor.roles), new Date());
     // Minting inside the transaction keeps the quota and the grant atomic: a URL
     // handed out after a failed increment would be an unaccounted upload.
     if (input.multipart) {
@@ -1980,19 +1994,17 @@ export async function mintDownloadUrl(
       // Nginx when the file itself is requested (including stale signed URLs).
       ...(fresh === null ? { visibility: 'public', storageBucket: 'public' } : {}),
     },
-    select: { storageBucket: true, storageKey: true },
+    select: { storageBucket: true, storageKey: true, title: true },
   });
   if (!row) throw new AppError('NOT_FOUND', 'no such content');
 
-  // The storage key's own last segment is already a slugified original
-  // filename plus extension (`buildStorageKey`), so it needs no further
-  // lookup — just forwarding as the saved-as name.
+  // R263 — saved under its title, with the stored file's extension.
   // R223 — a public item read in place gets its stable address; a download
   // still needs the signed `attachment` disposition, minted on the click.
   if (row.storageBucket === 'public' && disposition === 'inline') {
     return { url: await stablePublicUrl(clients, row.storageKey), expiresIn: null };
   }
-  const filename = disposition === 'attachment' ? row.storageKey.split('/').pop() : undefined;
+  const filename = disposition === 'attachment' ? downloadDisposition(row.title, row.storageKey) : undefined;
   const url = await presignGetUrl(
     clients,
     row.storageBucket as BucketName,

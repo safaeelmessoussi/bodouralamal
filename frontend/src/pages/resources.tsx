@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { fetchLibraryEntries, type ContentItem } from '../adapters/content.js';
+import { fetchLibraryEntries, withoutWaitingPages, type ContentItem } from '../adapters/content.js';
 import { fetchCalendarBootstrap } from '../adapters/calendar.js';
 import type { LibraryEntry } from '../adapters/content.js';
 import { normalizeArabic } from '../components/content/content-filters.js';
@@ -239,7 +239,7 @@ function useLibraryEntries(accessToken: string | null, refresh = 0): Load<Librar
     void (async () => {
       try {
         const rows = await fetchLibraryEntries(accessToken);
-        if (!cancelled) setLoad({ kind: 'ready', data: rows });
+        if (!cancelled) setLoad({ kind: 'ready', data: withoutWaitingPages(rows) });
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
       }
@@ -481,7 +481,7 @@ function LibraryView({
     void (async () => {
       try {
         const rows = await fetchLibraryEntries(accessToken);
-        if (!cancelled) setLoad({ kind: 'ready', data: rows });
+        if (!cancelled) setLoad({ kind: 'ready', data: withoutWaitingPages(rows) });
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
       }

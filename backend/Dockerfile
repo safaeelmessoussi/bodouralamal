@@ -37,8 +37,9 @@ RUN npx prisma generate && npm run build && npm prune --omit=dev
 FROM mwader/static-ffmpeg:7.1@sha256:a8090df5f5608daef387e1b2e93b98aaacb4d92153ad904e7d715c725724fca4 AS ffmpeg
 
 FROM node:24.11.0-slim@sha256:76d0ed0ed93bed4f4376211e9d8fddac4d8b3fbdb54cc45955696001a3c91152 AS runtime
+# R263 — poppler-utils for `pdftoppm` (`ops:cut-print-pages`: a «مطبوع», one image a page).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      tzdata ca-certificates openssl curl \
+      tzdata ca-certificates openssl curl poppler-utils \
   && rm -rf /var/lib/apt/lists/*
 # Before anything that changes per release, so the layer is shared.
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg

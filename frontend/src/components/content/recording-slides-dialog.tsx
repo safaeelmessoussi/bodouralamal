@@ -5,6 +5,7 @@ import { t } from '../../i18n/index.js';
 import { api } from '../../lib/api.js';
 import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 import { Button } from '../ui/button.js';
+import { DataTable } from '../ui/data-table.js';
 import { Dialog } from '../ui/dialog.js';
 import { SearchableSelect } from '../ui/searchable-select.js';
 import { FileUploader } from './file-uploader.js';
@@ -78,11 +79,6 @@ export function RecordingSlidesDialog({
   }
 
   const ids = slides.map((slide) => slide.id);
-  const move = (index: number, by: -1 | 1): void => {
-    const next = [...ids];
-    [next[index], next[index + by]] = [next[index + by]!, next[index]!];
-    void save(next);
-  };
   const branchIds =
     recording.branch_id === null
       ? []
@@ -114,24 +110,29 @@ export function RecordingSlidesDialog({
         {slides.length === 0 ? (
           <p className="muted">{t('content.slides.none')}</p>
         ) : (
-          <ol className="materials__list recording-slides__list">
-            {slides.map((slide, index) => (
-              <li key={slide.id}>
-                <span>{slide.title}</span>
-                <span className="recording-slides__actions">
-                  <Button variant="ghost" disabled={busy || index === 0} onClick={() => move(index, -1)}>
-                    {t('content.slides.earlier')}
-                  </Button>
-                  <Button variant="ghost" disabled={busy || index === slides.length - 1} onClick={() => move(index, 1)}>
-                    {t('content.slides.later')}
-                  </Button>
+          /* R263 — dragged into place (the row's handle, or ↑/↓ on it), in
+             place of «تقديم» / «تأخير». */
+          <DataTable
+            caption={t('content.slides.title')}
+            columns={[
+              { key: 'title', header: t('content.slides.pageTitle'), cell: (slide: RecordingSlide) => slide.title },
+              {
+                key: 'remove',
+                header: t('content.slides.remove'),
+                cell: (slide: RecordingSlide) => (
                   <Button variant="ghost" disabled={busy} onClick={() => void save(ids.filter((id) => id !== slide.id))}>
                     {t('content.slides.remove')}
                   </Button>
-                </span>
-              </li>
-            ))}
-          </ol>
+                ),
+              },
+            ]}
+            rows={slides}
+            rowKey={(slide) => slide.id}
+            status="ready"
+            onReorder={async (next: string[]) => {
+              setSlides(await saveRecordingSlides(recording.id, next, token));
+            }}
+          />
         )}
         {slides.length > 0 ? <p className="field__hint">{t('content.slides.removeHint')}</p> : null}
       </section>

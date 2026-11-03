@@ -251,8 +251,8 @@ await new Promise((r) => setTimeout(r, 600));
 const publicCal = await controls();
 
 check(
-  '5a . the public calendar renders BOTH control groups as segmented units',
-  publicCal.length === 2,
+  '5a . R263 — the public calendar renders ONE control group (the month stepping; no view switch)',
+  publicCal.length === 1,
   JSON.stringify(publicCal.map((g) => g.role)),
 );
 check(
@@ -274,9 +274,9 @@ check(
   JSON.stringify(publicCal.map((g) => g.rows)),
 );
 check(
-  '5e . exactly one view is marked selected, so "where am I" is answerable',
+  '5e . R263 — no view is offered to select on the public calendar',
   await evaluate(
-    `document.querySelectorAll('.cal-segmented [aria-selected="true"]').length === 1`,
+    `document.querySelectorAll('.cal-segmented [aria-selected="true"]').length === 0`,
   ),
   'aria-selected count',
 );

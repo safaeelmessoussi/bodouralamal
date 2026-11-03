@@ -309,19 +309,35 @@ export function FileUploader({
       {disabledReason ? <Feedback>{disabledReason}</Feedback> : null}
 
       <div className="field">
-        <label className="field__label" htmlFor="uploader-file">
+        <span className="field__label" id="uploader-file-label">
           {t(single ? 'content.upload.file' : 'content.upload.files')}
-        </label>
-        <input
-          id="uploader-file"
-          ref={inputRef}
-          className="field__control"
-          type="file"
-          accept={accept}
-          multiple={!single}
-          disabled={running}
-          onChange={(e) => chooseFiles([...(e.target.files ?? [])])}
-        />
+        </span>
+        {/* R263 — the browser's own «Choose Files / No file chosen» speaks the
+            system's language; the field speaks Arabic and looks like the others. */}
+        <div className="field__control uploader__picker">
+          <input
+            id="uploader-file"
+            ref={inputRef}
+            className="visually-hidden"
+            tabIndex={-1}
+            type="file"
+            accept={accept}
+            multiple={!single}
+            disabled={running}
+            aria-labelledby="uploader-file-label"
+            onChange={(e) => chooseFiles([...(e.target.files ?? [])])}
+          />
+          <Button variant="secondary" className="uploader__choose" disabled={running} onClick={() => inputRef.current?.click()}>
+            {t(single ? 'content.upload.chooseFile' : 'content.upload.chooseFiles')}
+          </Button>
+          <span className="uploader__chosen" aria-live="polite">
+            {withFiles.length === 0
+              ? t('content.upload.noFileChosen')
+              : withFiles.length === 1
+                ? withFiles[0]!.file!.name
+                : t('content.upload.filesChosen').replace('{count}', String(withFiles.length))}
+          </span>
+        </div>
         <p className="field__hint">{t('content.upload.limits')}</p>
       </div>
 

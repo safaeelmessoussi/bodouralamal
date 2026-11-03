@@ -7,7 +7,7 @@
   border-block-start: 1px solid var(--color-border-subtle);
   /* R218 — a thin band (was 2.5rem above and below); the links keep their
      touch height. */
-  padding-block: var(--space-3);
+  padding-block: var(--space-1);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
@@ -15,6 +15,17 @@
   min-block-size: var(--tap-min);
   display: inline-flex;
   align-items: center;
+}
+/* R263 — lower still: no paragraph margins, and the links' touch height
+   only where a finger is the pointer. */
+.site-footer p {
+  margin: 0;
+}
+@media (pointer: fine) {
+  .site-footer a {
+    min-block-size: 0;
+    padding-block: var(--space-1);
+  }
 }
 .site-footer__row {
   display: flex;

@@ -23,10 +23,18 @@
 }
 @media (width >= 60rem) {
   .admin {
-    /* The sidebar is a fixed reading width; the module takes the rest. */
-    grid-template-columns: 17rem 1fr;
-    gap: var(--space-8);
+    /* R263 — the whole window: the sidebar against the start edge, as wide as
+       its longest entry and a little more, and the module takes every
+       remaining column up to a thin margin at the far edge, so a wide table
+       reads without scrolling sideways. */
+    width: 100%;
+    padding-inline: var(--space-3) var(--space-4);
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-6);
     padding-block: var(--space-5) var(--space-10);
+  }
+  .admin-nav {
+    padding-inline-end: var(--space-3);
   }
   /* **R138 correction #3** — a portal whose final, permission-filtered
      module list is empty (`PortalShell`'s `sidebar` prop is `null`) reclaims

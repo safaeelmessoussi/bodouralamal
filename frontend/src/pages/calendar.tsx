@@ -9,15 +9,13 @@ import {
   type Occurrence,
 } from '../adapters/calendar.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
-import { chipTaxonomy, hiddenChipParts } from '../components/calendar/chip-parts.js';
+import { chipTaxonomy } from '../components/calendar/chip-parts.js';
 import { CalendarHeader } from '../components/calendar/calendar-header.js';
-import { OccurrenceTable } from '../components/calendar/occurrence-table.js';
 import {
   schedulingTypeOptions,
   schedulingTypeQuery,
   withUnlistedValue,
 } from '../components/calendar/scheduling-type-filter.js';
-import { viewFromUrl, type CalendarView } from '../components/calendar/view-switch.js';
 import { CalendarFilters } from '../components/calendar/calendar-filters.js';
 import { useCalendarFilters } from '../hooks/use-calendar-filters.js';
 import { DayEventsDialog } from '../components/calendar/day-events-dialog.js';
@@ -108,7 +106,6 @@ export function CalendarPage(): ReactNode {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [openDay, setOpenDay] = useState<Date | null>(null);
   /** `calendar` is the public default: the month grid is what §5.1 links to. */
-  const [view, setView] = useState<CalendarView>(() => viewFromUrl('calendar'));
   const [openEvent, setOpenEvent] = useState<Occurrence | null>(null);
 
   const from = toIsoDate(startOfMonth(month));
@@ -260,6 +257,13 @@ export function CalendarPage(): ReactNode {
    * It deliberately does **not** open the day dialog: pressing a navigation
    * button should move the view, not launch a modal over it.
    */
+  /**
+   * R263 — on a phone the month turns by a sideways swipe on the grid (the
+   * buttons are not shown there): towards the right brings the next month, as
+   * a page turns in an Arabic book (R260's rule for «صفحات المطبوع»).
+   */
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+
   function goToMonth(next: Date): void {
     setMonth(startOfMonth(next));
     // A day dialog left open would describe a day the grid no longer shows.
@@ -294,14 +298,13 @@ export function CalendarPage(): ReactNode {
                 the component so the back office cannot drift from it, which is
                 exactly what had happened. */}
             <CalendarHeader
-              view={view}
-              onView={setView}
               gregorianMonths={bootstrap?.gregorian_months ?? []}
               hijriMonths={bootstrap?.hijri.months ?? []}
               month={month}
               onPrevious={() => goToMonth(addMonths(month, -1))}
               onToday={() => goToMonth(today)}
               onNext={() => goToMonth(addMonths(month, 1))}
+              swipeOnPhone
               filters={
                 <CalendarFilters
                   filters={filters}
@@ -321,48 +324,38 @@ export function CalendarPage(): ReactNode {
 
             {/* Announced politely so a keyboard user hears the month reload
                 rather than watching a grid redraw in silence (§14.4). */}
-            <div aria-live="polite" aria-busy={load.kind === 'loading'}>
-              {view === 'calendar' ? (
-                <CalendarGrid
-                  month={month}
-                  byDate={byDate}
-                  hijriByDate={hijriByDate}
-                  today={today}
-                  selected={openDay}
-                  onSelect={setOpenDay}
-                  onOpenEvent={setOpenEvent}
-                  status={load.kind}
-                  onRetry={() => setMonth(new Date(month))}
-                  // R179 §6 — what the filters fix is left off every chip.
-                  hiddenChipParts={hiddenChipParts(filters.value)}
-                  // R179 §9 — a whole-Category audience reads as the Category.
-                  chipTaxonomy={chipTaxonomy(bootstrap?.levels ?? [], bootstrap?.categories ?? [])}
-                />
-              ) : (
-                /* **The same occurrences, as a table** (R84). No second fetch
-                   and no second projection — the §4.4 tiers have already decided
-                   what is in this array, so the list cannot widen them — and it
-                   is now the platform's `DataTable` rather than this page's own
-                   markup, so it has the empty, error and retry states the
-                   hand-rolled list never had.
-
-                   **No room, no teacher, no actions**: a public visitor reads
-                   what is on and for whom, not who is teaching it or where in
-                   the building. */
-                <OccurrenceTable
-                  onOpen={setOpenEvent}
-                  occurrences={occurrences}
-                  columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'branch']}
-                  // `DataTable` derives *empty* from the rows themselves; the
-                  // status says only how the fetch went.
-                  status={
-                    load.kind === 'loading' ? 'loading' : load.kind === 'error' ? 'error' : 'ready'
-                  }
-                  onRetry={() => setMonth(new Date(month))}
-                  filtered={filters.active}
-                  onClearFilters={() => filters.clear()}
-                />
-              )}
+            <div
+              className="cal-swipe"
+              aria-live="polite"
+              aria-busy={load.kind === 'loading'}
+              onPointerDown={(event) => {
+                swipe.current = event.pointerType === 'mouse' ? null : { x: event.clientX, y: event.clientY };
+              }}
+              onPointerCancel={() => {
+                swipe.current = null;
+              }}
+              onPointerUp={(event) => {
+                const from = swipe.current;
+                swipe.current = null;
+                if (!from) return;
+                const dx = event.clientX - from.x;
+                if (Math.abs(dx) < 60 || Math.abs(dx) < 1.5 * Math.abs(event.clientY - from.y)) return;
+                goToMonth(addMonths(month, dx > 0 ? 1 : -1));
+              }}
+            >
+              <CalendarGrid
+                month={month}
+                byDate={byDate}
+                hijriByDate={hijriByDate}
+                today={today}
+                selected={openDay}
+                onSelect={setOpenDay}
+                onOpenEvent={setOpenEvent}
+                status={load.kind}
+                onRetry={() => setMonth(new Date(month))}
+                // R179 §9 — a whole-Category audience reads as the Category.
+                chipTaxonomy={chipTaxonomy(bootstrap?.levels ?? [], bootstrap?.categories ?? [])}
+              />
             </div>
           </div>
         </section>

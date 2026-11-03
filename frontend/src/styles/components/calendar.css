@@ -168,6 +168,18 @@
     flex: 1;
   }
 }
+/* R263 — the public calendar turns its month by a sideways swipe on a phone:
+   no «السابق / اليوم / التالي» row there, and the grid keeps vertical
+   scrolling while a horizontal drag reaches the page. */
+@media (width < 48rem) {
+  .cal-header--swipe .cal-header__start,
+  .cal-header--swipe .cal-header__end {
+    display: none;
+  }
+  .cal-swipe {
+    touch-action: pan-y;
+  }
+}
 
 /* **The calendar's control system: one segmented group, used everywhere**
    (2026-08-18).
@@ -229,12 +241,12 @@
 /* ── Filters ─────────────────────────────────────────────────────────────── */
 
 .cal-toolbar {
+  /* R263 — the same row as «الجدولة»'s filters (start-aligned, compact). */
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-3);
   align-items: end;
-  justify-content: center;
-  margin-block-end: var(--space-8);
+  margin-block-end: var(--space-5);
 }
 
 /* One filter shape, so adding another needs no new CSS.
@@ -245,7 +257,7 @@
    floor. `.cal-filter` remains for the Hijri and content screens, which still
    build their own controls. */
 .cal-toolbar .field {
-  min-width: 11rem;
+  min-width: 0;
 }
 .cal-filter {
   display: flex;
@@ -307,8 +319,10 @@
 }
 
 .cal-cell {
-  border-block-end: 1px solid var(--color-border-subtle);
-  border-inline-start: 1px solid var(--color-border-subtle);
+  /* R263 — the lines between days read clearly (they were the faintest
+     border, and the month looked like one block). */
+  border-block-end: 1px solid var(--color-border-strong);
+  border-inline-start: 1px solid var(--color-border-strong);
   padding: 0;
   vertical-align: top;
   height: 13.5rem;
@@ -856,23 +870,18 @@ tr:last-child .cal-cell {
     font-size: var(--font-size-xs);
   }
   .cal-day__select {
-    /* Two rows preserve Gregorian/right and Hijri/left without squeezing two
-       two-digit numbers side-by-side into a forty-pixel cell. */
-    flex-direction: column-reverse;
-    align-items: stretch;
+    /* R263 — one row, Hijri left and Gregorian right as on a laptop: the
+       second row cost every cell its height. The boxes shrink to the digits. */
     gap: 0;
     padding-block-end: var(--space-1);
   }
   .cal-day__gregorian,
   .cal-day__hijri {
-    min-width: var(--space-6);
+    min-width: 0;
     height: var(--space-6);
   }
   .cal-day__gregorian {
-    align-self: flex-end;
-  }
-  .cal-day__hijri {
-    align-self: flex-start;
+    min-width: var(--space-6);
   }
   /* On a phone the segmented groups span the width and share it equally: at
      360px three parts still sit side by side once the padding tightens, which

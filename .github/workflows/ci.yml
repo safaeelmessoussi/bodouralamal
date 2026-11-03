@@ -196,11 +196,12 @@ jobs:
       # The hosted Ubuntu image carries Chrome/Chromium but no ffmpeg. The
       # required public-reader regression generates tiny synthetic audio/video
       # fixtures, so install that explicit test dependency rather than letting
-      # the integration script silently skip the browser proof.
+      # the integration script silently skip the browser proof. poppler-utils
+      # (`pdftoppm`) is what R263 cuts a «مطبوع» into its pages with.
       - name: Install browser media fixture dependency
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg
+          sudo apt-get install --yes --no-install-recommends ffmpeg poppler-utils
       - run: npm ci
         working-directory: backend
       # Integration tests execute from the host checkout while the API runs in

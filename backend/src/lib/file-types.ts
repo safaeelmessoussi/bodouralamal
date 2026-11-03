@@ -415,6 +415,27 @@ export function slugify(value: string): string {
   return slug === '' ? 'file' : slug;
 }
 
+/**
+ * **R263 — a download is saved under the title the platform shows** («تسجيل
+ * صوتي تفسير سورة المائدة الحصة 3 الجزء 6 …».ogg), never the storage key's
+ * transliterated slug («mqdmh.ogg»). RFC 6266: `filename*` carries the UTF-8
+ * title; `filename` keeps the ASCII key name for a client that reads only it.
+ * Characters a file system refuses become spaces.
+ */
+export function downloadDisposition(title: string, storageKey: string): string {
+  const fallback = storageKey.split('/').pop() ?? 'file';
+  const extension = extensionOf(fallback);
+  const name = title
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 180);
+  if (name === '') return `attachment; filename="${fallback}"`;
+  const full = extension === '' ? name : `${name}.${extension}`;
+  const encoded = encodeURIComponent(full).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
 /** The extension, lowercased, without the dot. Empty where the name has none —
  *  a key with no extension is valid and preferable to inventing one. */
 export function extensionOf(filename: string): string {

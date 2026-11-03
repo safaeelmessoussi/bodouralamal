@@ -635,7 +635,7 @@ describe('event details', () => {
     expect(html).not.toContain('event-chip__audience');
   });
 
-  it('leaves out what the filters already say — the branch under a branch filter, the Subject under a Subject filter', () => {
+  it('R263 — keeps every detail whatever the filters choose (R179 §6 withdrawn)', () => {
     const row = occurrence({
       start_time: null,
       subject_name: 'أحكام التجويد',
@@ -643,12 +643,10 @@ describe('event details', () => {
       branch_name: 'مقر أمرشيش',
       branch_names: ['مقر أمرشيش'],
     });
-    const byBranch = renderToStaticMarkup(<EventChip occurrence={row} hidden={new Set(['branch'])} />);
-    expect(byBranch).not.toContain('مقر أمرشيش');
-    expect(byBranch).toContain('الحلقة 1');
-    const bySubject = renderToStaticMarkup(<EventChip occurrence={row} hidden={new Set(['subject'])} />);
-    expect(bySubject).toContain('class="event-chip__title">الحلقة 1<span');
-    expect(bySubject).not.toContain('أحكام التجويد');
+    const chip = renderToStaticMarkup(<EventChip occurrence={row} />);
+    expect(chip).toContain('مقر أمرشيش');
+    expect(chip).toContain('أحكام التجويد');
+    expect(chip).toContain('الحلقة 1');
   });
 
   it('a chip with nothing else to say keeps its title; an exam leads with its type word', () => {

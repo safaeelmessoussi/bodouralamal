@@ -567,3 +567,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-10-30 — SRS Revision 262: the time on the bar
 - `AudioTrack`: `.surah-track__timeline` holds `.surah-track__times` (heard at the start, length at the end, `aria-hidden`; the slider's `aria-valuetext` unchanged) over `.surah-track__seek`; the time span left the buttons' row.
 - Verified: integration 91/91 + reader 242/242 (both times above the bar, flush with its ends, none in the row, at 390/1366 px); frontend tsc, lint, content tests.
+
+## 2026-11-03 — SRS Revision 263: titled downloads, staff upload limit, «مطبوع» pages, calendar and frame
+- `downloadDisposition` (title + extension, `filename*`); `uploadQuotaPerHour` (200 staff / 30); `print_page_of` (migration r263) + `print_page` on library rows + `ops:cut-print-pages` (poppler-utils in the API image and CI); reader drops waiting pages (`withoutWaitingPages`).
+- Slides dialog → `DataTable onReorder`; `.uploader__picker` (Arabic) + `Dialog` ignores a bubbled `cancel`; dialogs 44/60rem ≥64rem; thinner footer; `PortalShell` redirects a refused address to `/`.
+- Public calendar: no list/switch, `.cal-swipe` + `cal-header--swipe`; all calendars: one-row day numbers, `--color-border-strong` lines, `hiddenChipParts` removed (R179 §6).
+- Portal ≥60rem: full width, `max-content` sidebar; `.datatable__toolbar`/`.cal-toolbar` = الجدولة's flex row. TASKS E18 done (deploy prunes all but new + previous images).
+- Verified: integration 94/94 + reader 242/242 (title-named download through the edge, a real 2-page PDF cut, staff quota 200); seed drill; backend 393, frontend 1720; guards; browser on Localhost: Arabic file field, cancelled picker keeps the form, 704 px dialog, drag + ↓ reorder of two uploaded pages persisted, phone swipe both ways, one-row day numbers, compact filters, full-width portal; ops:cut-print-pages dry run in the rebuilt image (pdftoppm present).

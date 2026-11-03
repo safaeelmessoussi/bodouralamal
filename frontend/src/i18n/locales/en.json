@@ -700,8 +700,6 @@
  "content.slides.add": "Add",
  "content.slides.noImages": "No other images for this Surah in this level.",
  "content.slides.upload": "Upload images",
- "content.slides.earlier": "Move up",
- "content.slides.later": "Move down",
  "content.slides.remove": "Remove",
  "content.slides.removeHint": "Removing detaches the image from the recording; it stays in the library.",
  "content.slides.failed": "Could not save the handout pages. Please try again.",

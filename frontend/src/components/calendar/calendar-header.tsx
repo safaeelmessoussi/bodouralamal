@@ -47,9 +47,11 @@ export function CalendarHeader({
   onToday,
   onNext,
   filters,
+  swipeOnPhone = false,
 }: {
-  view: CalendarView;
-  onView: (view: CalendarView) => void;
+  /** Absent where a surface has one view only (the public calendar, R263). */
+  view?: CalendarView;
+  onView?: (view: CalendarView) => void;
   gregorianMonths?: GregorianMonthRef[];
   hijriMonths?: HijriMonthRef[];
   /**
@@ -75,14 +77,16 @@ export function CalendarHeader({
    * one, which would state that filters exist and are missing.
    */
   filters?: ReactNode;
+  /** R263 — the month turns by a swipe on a phone, so its buttons are not shown there. */
+  swipeOnPhone?: boolean;
 }): ReactNode {
   const filtersId = useId();
   return (
-    <div className="cal-header">
+    <div className={swipeOnPhone ? 'cal-header cal-header--swipe' : 'cal-header'}>
       <div className="cal-header__bar">
         {/* Source order IS the RTL visual order: first column reads right. */}
         <div className="cal-header__start">
-          <ViewSwitch view={view} onView={onView} />
+          {view && onView ? <ViewSwitch view={view} onView={onView} /> : null}
         </div>
         <div className="cal-header__centre">
           {month ? (

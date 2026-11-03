@@ -53,32 +53,6 @@ export function chipTaxonomy(
   return { levelsOfCategory, categoryNames: new Map(categories.map((c) => [c.id, c.name])) };
 }
 
-/** Filter values as every surface's hook holds them: `''`/`undefined` = «الكل». */
-export interface ChipFilterValues {
-  branchId?: string;
-  categoryId?: string;
-  levelId?: string;
-  subjectId?: string;
-  groupId?: string;
-  circleId?: string;
-  surahId?: string;
-  type?: string;
-}
-
-/** The parts the active filters make redundant on every chip. */
-export function hiddenChipParts(values: ChipFilterValues): ReadonlySet<ChipPart> {
-  const hidden = new Set<ChipPart>();
-  if (values.branchId) hidden.add('branch');
-  // A fixed Level fixes its Category too; a fixed Category leaves the Level open.
-  if (values.levelId) hidden.add('level').add('category');
-  if (values.categoryId) hidden.add('category');
-  if (values.subjectId) hidden.add('subject');
-  if (values.surahId) hidden.add('surah');
-  if (values.groupId || values.circleId) hidden.add('audience');
-  if (values.type) hidden.add('kind');
-  return hidden;
-}
-
 /** R238 — «المسار: صغار» / «المسار: صغار، كبار». */
 export function trackWords(tracks: readonly string[]): string {
   return t('calendar.chipTrack').replace(

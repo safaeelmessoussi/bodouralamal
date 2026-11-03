@@ -1252,6 +1252,8 @@ document.paths['/library'].get.description +=
   ' **R250 — `?kind=pdf|audio|video|image|document`** narrows to what the screens call the file: `application/pdf`, `audio/*`, `video/*`, `image/*`, or any other type.';
 document.paths['/library'].get.description +=
   ' **R247 — slides:** an image carries `slide_of` (the live recording it is a page of) and `slide_position`, `null` otherwise; every item carries `session_ids`, the live class sessions it is attached to (`[]` for none) — a session\'s images are the slides of its recordings.';
+document.paths['/library'].get.description +=
+  ' **R263 — `print_page`:** `true` on an image cut from a «مطبوع» (one page of it); a reader page shows such an image only beside a recording it is a page of (`slide_of`).';
 // R259 — the part of سورة البقرة.
 document.paths['/uploads/initiate'].post.description +=
   ' **R260 — `multipart: true`** starts a multipart upload on the same staging key: `put_url` is then `\'\'` and the answer carries `multipart: { part_size, part_count }`; the parts are presigned by `POST /uploads/{upload_id}/parts`.';

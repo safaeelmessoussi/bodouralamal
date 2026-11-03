@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchContentUrl } from './content.js';
+import { fetchContentUrl, withoutWaitingPages, type LibraryEntry } from './content.js';
 
 afterEach(() => vi.unstubAllGlobals());
 describe('the shared content reader', () => {
@@ -24,5 +24,15 @@ describe('the shared content reader', () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status })));
       expect(await fetchContentUrl('item')).toBeNull();
     }
+  });
+});
+
+/** R263 — a page cut from a «مطبوع» waits until it is attached to a recording. */
+describe('withoutWaitingPages', () => {
+  const entry = (id: string, over: { print_page?: boolean; slide_of?: string | null }) =>
+    ({ item: { id, ...over } }) as unknown as LibraryEntry;
+  it('keeps every other item and an attached page, drops a waiting one', () => {
+    const rows = [entry('a', {}), entry('p1', { print_page: true }), entry('p2', { print_page: true, slide_of: 'r' })];
+    expect(withoutWaitingPages(rows).map((r) => r.item.id)).toEqual(['a', 'p2']);
   });
 });

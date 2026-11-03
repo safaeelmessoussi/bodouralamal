@@ -191,17 +191,13 @@ check(
 /* ── public ─────────────────────────────────────────────────────────────── */
 
 await as(null);
+// R263 — the public calendar is the month only: an old list link opens the grid.
 await open('/calendar?view=list', '.cal-header');
 const publicList = await chrome();
 check(
-  `9 · public قائمة is a DataTable (${publicList.table} table)`,
-  publicList.table === 1,
+  `9 · public «?view=list» shows no table (${publicList.table} table)`,
+  publicList.table === 0,
   JSON.stringify({ tables: publicList.table }),
-);
-check(
-  '10 · with NO actions column',
-  publicList.actionColumns === 0,
-  JSON.stringify({ actionColumns: publicList.actionColumns }),
 );
 check(
   '11 · public keeps the month title and stepping in the LIST too',

@@ -6,7 +6,7 @@ import { ApplicationHeader } from '../header/application-header.js';
 import { Button } from '../ui/button.js';
 import { IconButton } from '../ui/icon-button.js';
 import { Breadcrumb, type Crumb } from './breadcrumb.js';
-import { NoPermissionState } from '../states.js';
+import { LoadingState } from '../states.js';
 
 /** `60rem` — the SAME breakpoint `ApplicationHeader`'s own burger uses (§14's
  *  "one coherent responsive navigation system" rather than a second number
@@ -207,6 +207,13 @@ export function PortalShell({
   // doc comment's correction #3.
   const hasNav = sidebar !== null;
 
+  // R263 — an address this session may not open leads to the home page, not
+  // to its title over an empty page. When sign-in opens to everyone it will
+  // lead to the sign-in page instead; for now that page is not offered.
+  useEffect(() => {
+    if (!permitted) window.location.replace('/');
+  }, [permitted]);
+
   const frame = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // The sidebar arrives as a node, so it is found in the DOM rather than held
@@ -347,8 +354,8 @@ export function PortalShell({
                   module: a trail names a Level, which is not something the
                   no-permission state should disclose. */}
               {permitted && breadcrumb ? <Breadcrumb trail={breadcrumb} /> : null}
-              <h1 className="admin__title">{title}</h1>
-              {lede ? <p className="lede">{lede}</p> : null}
+              {permitted ? <h1 className="admin__title">{title}</h1> : null}
+              {permitted && lede ? <p className="lede">{lede}</p> : null}
             </div>
             {/* **R138 correction #5 — page-specific actions only.** The
                 toggle moved out to `admin-nav-region` above; this row is now
@@ -360,7 +367,7 @@ export function PortalShell({
           {/* An `Active` account holding no role at all is reachable only through
               staff error, and §14.4 says it renders this rather than a dashboard
               — no endpoint would authorise one anyway. */}
-          {permitted ? children : <NoPermissionState />}
+          {permitted ? children : <LoadingState />}
         </main>
       </div>
     </>

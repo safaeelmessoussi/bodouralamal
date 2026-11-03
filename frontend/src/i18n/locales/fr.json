@@ -700,8 +700,6 @@
  "content.slides.add": "Ajouter",
  "content.slides.noImages": "Aucune autre image pour cette sourate dans ce niveau.",
  "content.slides.upload": "Téléverser des images",
- "content.slides.earlier": "Monter",
- "content.slides.later": "Descendre",
  "content.slides.remove": "Retirer",
  "content.slides.removeHint": "Retirer détache l’image de l’enregistrement ; elle reste dans la bibliothèque.",
  "content.slides.failed": "Impossible d’enregistrer les pages du polycopié. Merci de réessayer.",

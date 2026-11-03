@@ -85,6 +85,17 @@
 .dialog--wide {
   width: min(100% - var(--space-8), 46rem);
 }
+/* R263 — on a laptop every dialog has more room: a form reads in fewer
+   scrolls and a list in fewer wrapped lines. */
+@media (width >= 64rem) {
+  .dialog {
+    width: min(100% - var(--space-8), 44rem);
+    max-height: min(92dvh, 56rem);
+  }
+  .dialog--wide {
+    width: min(100% - var(--space-8), 60rem);
+  }
+}
 .dialog::backdrop {
   background: var(--color-backdrop);
   backdrop-filter: blur(2px);

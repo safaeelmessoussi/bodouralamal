@@ -231,6 +231,8 @@ export interface LibraryItem {
   /** R247 — on an image: the live recording it is a page of, and its place. */
   slideOfId: string | null;
   slidePosition: number | null;
+  /** R263 — an image cut from a «مطبوع»: shown to a reader only as a recording's page. */
+  printPage: boolean;
   /** R247 — the live sessions it is attached to (a session's images are the
    *  slides of its recordings). */
   sessionIds: string[];
@@ -564,6 +566,7 @@ export async function listLibrary(
              CASE WHEN c."storage_bucket" = 'public' AND c."visibility" = 'public'
                        AND c."mime_type" LIKE 'audio/%'
                   THEN c."storage_key" END AS "publicAudioKey",
+             (c."print_page_of" IS NOT NULL) AS "printPage",
              rs."recording_id"           AS "slideOfId",
              rs."position"               AS "slidePosition",
              COALESCE((

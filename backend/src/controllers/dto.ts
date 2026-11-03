@@ -1161,6 +1161,8 @@ export interface LibraryItemDto {
    *  it plays), and where in its order; `null` otherwise. */
   slide_of: string | null;
   slide_position: number | null;
+  /** R263 — an image cut from a «مطبوع»: a reader sees it only beside a recording it is a page of. */
+  print_page: boolean;
   /** R247 — the live class sessions this item is attached to: a session's
    *  images are the slides of its recordings. `[]` for none. */
   session_ids: string[];
@@ -1219,6 +1221,7 @@ export function libraryItemDto(row: {
   streamUrl?: string | null;
   slideOfId: string | null;
   slidePosition: number | null;
+  printPage?: boolean;
   sessionIds: string[];
 }): LibraryItemDto {
   return {
@@ -1273,6 +1276,7 @@ export function libraryItemDto(row: {
     stream_url: row.streamUrl ?? null,
     slide_of: row.slideOfId,
     slide_position: row.slidePosition,
+    print_page: row.printPage ?? false,
     session_ids: row.sessionIds,
   };
 }

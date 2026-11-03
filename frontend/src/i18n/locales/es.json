@@ -700,8 +700,6 @@
  "content.slides.add": "Añadir",
  "content.slides.noImages": "No hay otras imágenes de esta sura en este nivel.",
  "content.slides.upload": "Subir imágenes",
- "content.slides.earlier": "Subir",
- "content.slides.later": "Bajar",
  "content.slides.remove": "Quitar",
  "content.slides.removeHint": "Quitar separa la imagen de la grabación; sigue en la biblioteca.",
  "content.slides.failed": "No se pudieron guardar las páginas del apunte. Inténtelo de nuevo.",

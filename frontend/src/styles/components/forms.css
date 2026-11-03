@@ -197,17 +197,22 @@
   display: grid;
   gap: var(--space-4);
 }
+/* R263 — one filter row on every page, «الجدولة»'s: each filter as wide as
+   its name and its choice, side by side, wrapping when the row is full (no
+   filter stretched across a row of its own). A search keeps room to type. */
 .datatable__toolbar {
-  /* R254 — equal columns: a filter left alone on its row («النوع») no longer
-     stretches across it while its neighbours stay narrow. */
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
-  align-items: start;
+  align-items: end;
+}
+.datatable__toolbar > * {
+  flex: 0 1 auto;
+  min-inline-size: 0;
 }
 .datatable__toolbar > .field--search,
 .datatable__toolbar > .field:has(input[type='search']) {
-  grid-column: span 2;
+  flex: 0 1 20rem;
 }
 /* R251 — filters are tools: on a phone two to a row (the search across both),
    their names small, so the list they filter starts on the first screen. */
@@ -926,12 +931,6 @@
 .circle-ranking__moves {
   display: inline-flex;
   gap: var(--space-1);
-}
-
-.datatable__toolbar > .field {
-  /* Filters share the row evenly; the search box may grow but never alone. */
-  flex: 1 1 13rem;
-  min-inline-size: 0;
 }
 
 /* R215 — two fields side by side (a span's two dates), stacked on a phone. */

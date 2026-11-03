@@ -31,6 +31,7 @@ import { loadConfig } from "../lib/config.js";
 import { buildStorageKey, quarantineKeyFor, storageCoordinateId } from "../lib/file-types.js";
 import {
   BUCKETS,
+  putObjectStream,
   statObjectStrict,
   createStorageClients,
   deleteObject,
@@ -63,8 +64,10 @@ import {
   mintDownloadUrl,
   updateContentMetadata,
   UPLOAD_QUOTA,
+  uploadQuotaPerHour,
 } from "./content.service.js";
 import { listLibrary } from "./library.service.js";
+import { cutPrintPages, printPageTitle } from "./print-pages.service.js";
 import { listRecordingSlides, setRecordingSlides } from "./recording-slides.service.js";
 
 /**
@@ -1715,7 +1718,15 @@ describe("abort", () => {
 });
 
 describe("the per-user upload quota (TD-4.12, Revision 14)", () => {
-  it("refuses the 31st initiation within the hour with RATE_LIMITED", async () => {
+  it("R263 — 200 an hour for staff, 30 for everyone else", () => {
+    expect(uploadQuotaPerHour(["admin"])).toBe(200);
+    expect(uploadQuotaPerHour(["teacher", "student"])).toBe(200);
+    expect(uploadQuotaPerHour(["super_admin"])).toBe(200);
+    expect(uploadQuotaPerHour(["student"])).toBe(30);
+    expect(uploadQuotaPerHour(["guardian"])).toBe(30);
+  });
+
+  it("refuses an administrator's 201st initiation within the hour with RATE_LIMITED", async () => {
     // Counted in PostgreSQL inside the initiating transaction — never in process
     // memory (dies with the container) and never through pg-boss (asynchronous).
     await prisma.rateLimitCounter.create({
@@ -1723,7 +1734,7 @@ describe("the per-user upload quota (TD-4.12, Revision 14)", () => {
         userId: adminId,
         bucket: UPLOAD_QUOTA.bucket,
         windowStart: new Date(new Date().setUTCMinutes(0, 0, 0)),
-        count: UPLOAD_QUOTA.perHour,
+        count: UPLOAD_QUOTA.staffPerHour,
       },
     });
     const e = await failure(() =>
@@ -1735,7 +1746,7 @@ describe("the per-user upload quota (TD-4.12, Revision 14)", () => {
       }),
     );
     expect(e.code).toBe("RATE_LIMITED");
-    expect(e.details?.["limit"]).toBe(30);
+    expect(e.details?.["limit"]).toBe(200);
   });
 
   it("admits exactly one of two concurrent initiations at the boundary", async () => {
@@ -1746,7 +1757,7 @@ describe("the per-user upload quota (TD-4.12, Revision 14)", () => {
         userId: adminId,
         bucket: UPLOAD_QUOTA.bucket,
         windowStart: new Date(new Date().setUTCMinutes(0, 0, 0)),
-        count: UPLOAD_QUOTA.perHour - 1,
+        count: UPLOAD_QUOTA.staffPerHour - 1,
       },
     });
     const attempt = () =>
@@ -2023,6 +2034,9 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
     const attachment = await mintDownloadUrl(prisma, clients, admin(), id, undefined, "attachment");
     const attachmentRes = await fetch(attachment.url);
     expect(attachmentRes.headers.get("content-disposition")).toMatch(/^attachment; filename="/);
+    // R263 — saved under its title, not the key's slug.
+    const named = attachmentRes.headers.get("content-disposition") ?? "";
+    expect(decodeURIComponent(named.split("filename*=UTF-8''")[1] ?? "")).toBe(`${TAG.replace(":", " ")} قابل للتنزيل فعلاً.pdf`); // «:» is refused by file systems
   });
 
   it("refuses a suspended Teacher inside their unexpired token window (§19.2)", async () => {
@@ -3283,5 +3297,71 @@ describe("replace and delete (R53)", () => {
     // Global content is readable by a teacher and not writable — and the refusal
     // is a 404 for the same reason every other out-of-scope answer is.
     expect(["NOT_FOUND", "FORBIDDEN"]).toContain(e.code);
+  });
+});
+
+/** R263 — a «مطبوع», one image per page, waiting until attached. */
+describe("cutting a «مطبوع» into its pages (R263)", () => {
+  /** A real two-page PDF (blank A5 pages), with a correct cross-reference table. */
+  function twoPagePdf(): Buffer {
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 420 595] >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 420 595] >>",
+    ];
+    let body = "%PDF-1.4\n";
+    const offsets: number[] = [];
+    objects.forEach((object, index) => {
+      offsets.push(Buffer.byteLength(body));
+      body += `${String(index + 1)} 0 obj\n${object}\nendobj\n`;
+    });
+    const xref = Buffer.byteLength(body);
+    body += `xref\n0 ${String(objects.length + 1)}\n0000000000 65535 f \n`;
+    for (const offset of offsets) body += `${String(offset).padStart(10, "0")} 00000 n \n`;
+    body += `trailer\n<< /Size ${String(objects.length + 1)} /Root 1 0 R >>\nstartxref\n${String(xref)}\n%%EOF\n`;
+    return Buffer.from(body, "latin1");
+  }
+
+  it("files each page as its PDF is, titled «صفحة N …», marked, and refuses a second cut", async () => {
+    const pdf = await uploadPdf(admin(), "مطبوع تفسير سورة الفاتحة");
+    await prisma.educationalContent.update({ where: { id: pdf.id }, data: { surahId: 1 } });
+    const bytes = twoPagePdf();
+    await putObjectStream(clients, { bucket: pdf.storageBucket, key: pdf.storageKey }, Readable.from(bytes), {
+      contentLength: bytes.length,
+      contentType: "application/pdf",
+    });
+
+    expect(await cutPrintPages(prisma, clients, pdf.id, adminId)).toBe(2);
+    const pages = await prisma.educationalContent.findMany({
+      where: { printPageOfId: pdf.id, deletedAt: null },
+      orderBy: { title: "asc" },
+    });
+    for (const page of pages) {
+      createdContentIds.add(page.id);
+      trackObject(page.storageBucket, page.storageKey);
+    }
+    const source = await prisma.educationalContent.findUniqueOrThrow({ where: { id: pdf.id } });
+    expect(pages.map((p) => p.title)).toEqual([
+      `صفحة 1 ${source.title}`,
+      `صفحة 2 ${source.title}`,
+    ]);
+    for (const page of pages) {
+      expect(page.mimeType).toBe("image/jpeg");
+      expect([page.levelId, page.subjectId, page.academicYearId, page.branchId, page.visibility, page.surahId]).toEqual(
+        [source.levelId, source.subjectId, source.academicYearId, source.branchId, source.visibility, 1],
+      );
+      const head = await statObjectStrict(clients, page.storageBucket, page.storageKey);
+      expect(head?.sizeBytes).toBe(Number(page.sizeBytes));
+    }
+
+    const listed = await listLibrary(prisma, { userId: adminId, roleScopes: [{ role: "admin", branches: null }], accountStatus: "active" } as never, { levelId: source.levelId, pageSize: 200 });
+    expect(listed.data.filter((r) => r.printPage).map((r) => r.id).sort()).toEqual(pages.map((p) => p.id).sort());
+
+    await expect(cutPrintPages(prisma, clients, pdf.id, adminId)).rejects.toThrow(/already has 2 page/);
+  });
+
+  it("names a page by its number and its PDF's title", () => {
+    expect(printPageTitle(6, " مطبوع تفسير سورة الفاتحة ")).toBe("صفحة 6 مطبوع تفسير سورة الفاتحة");
   });
 });

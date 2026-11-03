@@ -1378,11 +1378,6 @@
   margin: 0;
   font-weight: 700;
 }
-.recording-slides__actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
 
 /* Drawings and maps of the Surah's ideas, shown as themselves. */
 .surah-library__gallery {
@@ -1725,4 +1720,23 @@
   .surah-track__rest {
     grid-column: 1 / -1;
   }
+}
+
+/* R263 — the file field in Arabic: a button and what was chosen, inside the
+   same box as every other field. */
+.uploader__picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+.uploader__choose {
+  flex: none;
+}
+.uploader__chosen {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
 }

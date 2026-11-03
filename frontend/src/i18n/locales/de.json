@@ -700,8 +700,6 @@
  "content.slides.add": "Hinzufügen",
  "content.slides.noImages": "Keine weiteren Bilder zu dieser Sure in dieser Stufe.",
  "content.slides.upload": "Bilder hochladen",
- "content.slides.earlier": "Nach oben",
- "content.slides.later": "Nach unten",
  "content.slides.remove": "Entfernen",
  "content.slides.removeHint": "Entfernen löst das Bild von der Aufnahme; es bleibt in der Bibliothek.",
  "content.slides.failed": "Die Seiten des Skripts konnten nicht gespeichert werden. Bitte erneut versuchen.",

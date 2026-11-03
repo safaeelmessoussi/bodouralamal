@@ -95,6 +95,8 @@ export interface ContentItem {
   /** R247 — on an image: the recording it is a page of, and its place there. */
   slide_of?: string | null;
   slide_position?: number | null;
+  /** R263 — an image cut from a «مطبوع». */
+  print_page?: boolean;
   /** R247 — the class sessions it is attached to; a session's images are
    *  the slides of its recordings. */
   session_ids?: string[];
@@ -205,6 +207,7 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
       academic_year_label: row.academic_year_label,
       slide_of: row.slide_of ?? null,
       slide_position: row.slide_position ?? null,
+      print_page: row.print_page ?? false,
       session_ids: row.session_ids ?? [],
       display_order: row.display_order ?? null,
     };
@@ -411,6 +414,16 @@ interface LibraryItemWire {
   slide_of?: string | null;
   slide_position?: number | null;
   session_ids?: string[];
+  /** R263 — absent from a server older than it. */
+  print_page?: boolean;
+}
+
+/**
+ * R263 — a page cut from a «مطبوع» reaches a reader only beside a recording
+ * it is a page of; until it is attached it waits in «مكتبة المحتوى».
+ */
+export function withoutWaitingPages(rows: readonly LibraryEntry[]): LibraryEntry[] {
+  return rows.filter((row) => !row.item.print_page || !!row.item.slide_of);
 }
 
 /**

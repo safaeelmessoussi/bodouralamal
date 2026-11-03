@@ -87,12 +87,3 @@ export function NoResultsState({ onClear }: { onClear?: () => void }): ReactNode
     </div>
   );
 }
-
-export function NoPermissionState(): ReactNode {
-  // §14.4: never a blank page and never a crash.
-  return (
-    <div className="state" role="alert">
-      <p>{t('states.noPermission')}</p>
-    </div>
-  );
-}

@@ -167,6 +167,9 @@ export function Dialog({
     const element = ref.current;
     if (!element) return;
     const handle = (event: Event): void => {
+      // R263 — a file picker closed without a choice fires its own `cancel`,
+      // which bubbles here: only the dialog's own Escape asks to close it.
+      if (event.target !== element) return;
       if (!dismissible) {
         event.preventDefault();
         // Routed through `onClose` anyway, so a form's confirmation is offered

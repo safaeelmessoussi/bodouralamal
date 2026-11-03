@@ -6,6 +6,7 @@ import { t } from '../../i18n/index.js';
 import { deliveryLabel } from '../scheduling/delivery.js';
 import { chipText, type ChipPart, type ChipTaxonomy } from './chip-parts.js';
 
+/** R263 — a filter never takes a detail off a chip (R179 §6 withdrawn). */
 const NOTHING_HIDDEN: ReadonlySet<ChipPart> = new Set();
 
 /**
@@ -22,13 +23,10 @@ const NOTHING_HIDDEN: ReadonlySet<ChipPart> = new Set();
 export function EventChip({
   occurrence,
   onOpen,
-  hidden = NOTHING_HIDDEN,
   taxonomy,
 }: {
   occurrence: Occurrence;
   onOpen?: (occurrence: Occurrence) => void;
-  /** R179 §6 — the parts the surface's active filters already say (`hiddenChipParts`). */
-  hidden?: ReadonlySet<ChipPart>;
   /** R179 §9 — so a whole-Category audience reads as the Category (`chipTaxonomy`). */
   taxonomy?: ChipTaxonomy;
 }): ReactNode {
@@ -79,7 +77,7 @@ export function EventChip({
    * What the surface's filters already say is left out (`chipText`): under
    * «الفرع: مقر أمرشيش» no chip repeats the branch.
    */
-  const text = chipText(occurrence, hidden, taxonomy);
+  const text = chipText(occurrence, NOTHING_HIDDEN, taxonomy);
 
   const inner = (
     <>

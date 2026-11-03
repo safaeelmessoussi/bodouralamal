@@ -3976,6 +3976,12 @@ model EducationalContent {
   /// R259 — the part of سورة البقرة it is about (1 | 2, as R232's syllabus names
   /// them); NULL is the whole Surah or another one. CHECK: only with surah_id = 2.
   surahPart Int? @map("surah_part") @db.SmallInt
+  /// R263 — an image that is one page of a «مطبوع» (the PDF it was cut from).
+  /// A reader is shown it only beside a recording it is a page of; until then
+  /// it waits in «مكتبة المحتوى». NULL for every other item.
+  printPageOfId String?              @map("print_page_of") @db.Uuid
+  printPageOf   EducationalContent?  @relation("PrintPages", fields: [printPageOfId], references: [id], onDelete: SetNull)
+  printPages    EducationalContent[] @relation("PrintPages")
 
   /// **R215 — who made it** (the Owner, 2026-10-10): the مؤطِّرة who recorded a
   /// class, or the teacher, administrator or student who prepared a file.

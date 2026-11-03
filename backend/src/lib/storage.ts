@@ -235,17 +235,16 @@ export async function presignGetUrl(
    * answers with the object's own stored disposition (none), so a browser
    * that can render the MIME type (a PDF, an image) opens it instead of
    * saving it — the previewer relies on exactly that to render inline.
+   * The whole header value (`downloadDisposition`, R263).
    */
-  attachmentFilename?: string,
+  attachmentDisposition?: string,
 ): Promise<string> {
   const signed = await getSignedUrl(
     clients.publicOrigin,
     new GetObjectCommand({
       Bucket: bucket,
       Key: key,
-      ...(attachmentFilename !== undefined
-        ? { ResponseContentDisposition: `attachment; filename="${attachmentFilename}"` }
-        : {}),
+      ...(attachmentDisposition !== undefined ? { ResponseContentDisposition: attachmentDisposition } : {}),
     }),
     { expiresIn },
   );
