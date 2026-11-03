@@ -164,6 +164,7 @@
  "calendar.navNext": "Next",
  "calendar.navLabel": "Navigate between months",
  "calendar.filtersLabel": "Filter the schedule",
+ "calendar.swipeHint": "Swipe right or left to change the month",
  "calendar.mineEmpty": "Nothing in your calendar this month.",
  "calendar.kind.session": "Class",
  "calendar.kind.event": "Activity",
@@ -256,6 +257,15 @@
   "Friday",
   "Saturday",
   "Sunday"
+ ],
+ "calendar.weekdaysTiny": [
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+  "Sun"
  ],
  "calendar.weekdayLetters": [
   "M",

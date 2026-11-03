@@ -197,22 +197,26 @@
   display: grid;
   gap: var(--space-4);
 }
-/* R263 — one filter row on every page, «الجدولة»'s: each filter as wide as
-   its name and its choice, side by side, wrapping when the row is full (no
-   filter stretched across a row of its own). A search keeps room to type. */
+/* R263 — one filter row on every page, «الجدولة»'s, side by side, wrapping
+   when the row is full. R264 — every filter the SAME fixed width (a long
+   choice ends in «…», its whole text on hover): sized to its choice, a filter
+   grew when «المرأة — وميض الأمل» was picked and pushed the row aside. Tops
+   aligned, so a hint under the search never lifts it above its neighbours. */
 .datatable__toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  align-items: end;
+  align-items: start;
 }
 .datatable__toolbar > * {
-  flex: 0 1 auto;
+  flex: 0 0 var(--filter-inline-size);
+  inline-size: var(--filter-inline-size);
   min-inline-size: 0;
 }
 .datatable__toolbar > .field--search,
 .datatable__toolbar > .field:has(input[type='search']) {
   flex: 0 1 20rem;
+  inline-size: 20rem;
 }
 /* R251 — filters are tools: on a phone two to a row (the search across both),
    their names small, so the list they filter starts on the first screen. */
@@ -221,6 +225,11 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-2) var(--space-2);
+  }
+  .datatable__toolbar > *,
+  .datatable__toolbar > .field--search,
+  .datatable__toolbar > .field:has(input[type='search']) {
+    inline-size: auto;
   }
   .datatable__toolbar > .field--search,
   .datatable__toolbar > .field:has(input[type='search']) {

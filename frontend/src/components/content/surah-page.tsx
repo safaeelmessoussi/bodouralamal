@@ -640,7 +640,12 @@ export function AudioTrack({
   const [playing, setPlaying] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [current, setCurrent] = useState<number>(() => savedPlace(item.id) ?? 0);
-  const [duration, setDuration] = useState<number>(() => savedDuration(item.id) ?? 0);
+  // R264 — a length kept on the device that is shorter than the place kept
+  // with it was an early estimate of a long file: unknown until the file says.
+  const [duration, setDuration] = useState<number>(() => {
+    const kept = savedDuration(item.id) ?? 0;
+    return kept > 0 && kept >= (savedPlace(item.id) ?? 0) ? kept : 0;
+  });
   /** Set when a renewed URL must resume where the old one stopped. */
   const resumeAt = useRef<number | null>(null);
   const renewals = useRef(0);
@@ -744,7 +749,10 @@ export function AudioTrack({
   }, [cued]);
 
   const total = duration > 0 ? duration : 0;
-  const listened = total > 0 ? Math.min(100, (current / total) * 100) : 0;
+  // R264 — until the length is known the dot stays at the start: clamped to a
+  // bar of «1», any place drew it at the END over an unheard bar.
+  const heard = total > 0 ? Math.min(current, total) : 0;
+  const listened = total > 0 ? Math.min(100, (heard / total) * 100) : 0;
 
   return (
     <li className="surah-track" data-content-id={item.id} ref={rowRef}>
@@ -770,7 +778,7 @@ export function AudioTrack({
         <div className="surah-track__timeline">
           <p className="surah-track__times" aria-hidden="true">
             <span className="surah-player__time" dir="ltr">
-              {clock(current)}
+              {clock(heard)}
             </span>
             <span className="surah-player__time" dir="ltr">
               {clock(total)}
@@ -782,11 +790,11 @@ export function AudioTrack({
             min={0}
             max={total || 1}
             step={1}
-            value={Math.min(current, total || 1)}
+            value={heard}
             disabled={state !== 'ready' || total === 0}
             style={{ ['--listened' as string]: `${String(listened)}%` }}
             aria-label={t('content.bySurah.seek')}
-            aria-valuetext={`${clock(current)} / ${clock(total)}`}
+            aria-valuetext={`${clock(heard)} / ${clock(total)}`}
             onChange={(event) => {
               const at = Number(event.target.value);
               setCurrent(at);
@@ -921,6 +929,14 @@ export function AudioTrack({
                 playWhenReady.current = false;
                 pauseOthers(audio);
                 void audio.play().catch(() => undefined);
+              }
+            }}
+            onDurationChange={(event) => {
+              // R264 — a long file corrects its first estimate as it reads on.
+              const length = event.currentTarget.duration;
+              if (Number.isFinite(length) && length > 0) {
+                setDuration(length);
+                keepDuration(item.id, length);
               }
             }}
             onTimeUpdate={(event) => {

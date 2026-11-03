@@ -164,6 +164,7 @@
  "calendar.navNext": "Suivant",
  "calendar.navLabel": "Naviguer entre les mois",
  "calendar.filtersLabel": "Filtrer le calendrier",
+ "calendar.swipeHint": "Glissez vers la droite ou la gauche pour changer de mois",
  "calendar.mineEmpty": "Rien dans ce calendrier ce mois-ci.",
  "calendar.kind.session": "Séance",
  "calendar.kind.event": "Activité",
@@ -256,6 +257,15 @@
   "vendredi",
   "samedi",
   "dimanche"
+ ],
+ "calendar.weekdaysTiny": [
+  "lun.",
+  "mar.",
+  "mer.",
+  "jeu.",
+  "ven.",
+  "sam.",
+  "dim."
  ],
  "calendar.weekdayLetters": [
   "L",

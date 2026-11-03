@@ -46,6 +46,7 @@ export function CalendarGrid({
   const weeks: (Date | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   const weekdays = tList('calendar.weekdaysShort');
+  const tinyWeekdays = tList('calendar.weekdaysTiny');
 
   return (
     <>
@@ -62,9 +63,14 @@ export function CalendarGrid({
       <table className="cal-grid" role="grid" aria-label={t('calendar.gridLabel')}>
         <thead>
           <tr>
-            {weekdays.map((day) => (
+            {/* R264 — a phone shows the short name (a full one broke mid-word in
+                a narrow column); the full one stays for a screen reader. */}
+            {weekdays.map((day, index) => (
               <th key={day} scope="col" className="cal-grid__weekday">
-                {day}
+                <span className="cal-grid__weekday-long">{day}</span>
+                <span className="cal-grid__weekday-short" aria-hidden="true">
+                  {tinyWeekdays[index] ?? day}
+                </span>
               </th>
             ))}
           </tr>

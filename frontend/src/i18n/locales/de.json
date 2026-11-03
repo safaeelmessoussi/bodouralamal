@@ -164,6 +164,7 @@
  "calendar.navNext": "Weiter",
  "calendar.navLabel": "Zwischen Monaten wechseln",
  "calendar.filtersLabel": "Zeitplan filtern",
+ "calendar.swipeHint": "Nach rechts oder links wischen, um den Monat zu wechseln",
  "calendar.mineEmpty": "Diesen Monat steht nichts im eigenen Kalender.",
  "calendar.kind.session": "Stunde",
  "calendar.kind.event": "Aktivität",
@@ -256,6 +257,15 @@
   "Freitag",
   "Samstag",
   "Sonntag"
+ ],
+ "calendar.weekdaysTiny": [
+  "Mo",
+  "Di",
+  "Mi",
+  "Do",
+  "Fr",
+  "Sa",
+  "So"
  ],
  "calendar.weekdayLetters": [
   "M",

@@ -164,6 +164,7 @@
  "calendar.navNext": "Ukan",
  "calendar.navLabel": "Tunigt ger ayyurn",
  "calendar.filtersLabel": "Asizdg n uwitay",
+ "calendar.swipeHint": "Zuɣr s ufasi niɣ s uẓlmaḍ ad tbddlt ayyur",
  "calendar.mineEmpty": "Ur illi walu ɣ uwitay n umiḍan ad ɣ ayyur ad.",
  "calendar.kind.session": "Taɣimit",
  "calendar.kind.event": "Armud",
@@ -249,6 +250,15 @@
   "Dujanbir"
  ],
  "calendar.weekdaysShort": [
+  "Letnayn",
+  "Ttlata",
+  "Larbɛa",
+  "Lxmis",
+  "Ljjemɛa",
+  "Ssebt",
+  "Lḥedd"
+ ],
+ "calendar.weekdaysTiny": [
   "Letnayn",
   "Ttlata",
   "Larbɛa",

@@ -24,6 +24,9 @@
   /* The smallest thing a finger is asked to hit (design.mmd §6): 44 px is
      the platform floor on every pointer, 48 px on a phone's primary actions. */
   --tap-min: 2.75rem;
+  /* R264 — one width for every filter on a wide screen (a choice longer than
+     it ends in «…»), so picking a value never moves the row. */
+  --filter-inline-size: 11rem;
   --tap-comfortable: 3rem;
   /* The side gutter a page keeps at every width. */
   /* R251 — 12 px at a phone's edge (was 16): the width goes to the data. */

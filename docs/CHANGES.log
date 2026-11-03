@@ -574,3 +574,11 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Public calendar: no list/switch, `.cal-swipe` + `cal-header--swipe`; all calendars: one-row day numbers, `--color-border-strong` lines, `hiddenChipParts` removed (R179 §6).
 - Portal ≥60rem: full width, `max-content` sidebar; `.datatable__toolbar`/`.cal-toolbar` = الجدولة's flex row. TASKS E18 done (deploy prunes all but new + previous images).
 - Verified: integration 94/94 + reader 242/242 (title-named download through the edge, a real 2-page PDF cut, staff quota 200); seed drill; backend 393, frontend 1720; guards; browser on Localhost: Arabic file field, cancelled picker keeps the form, 704 px dialog, drag + ↓ reorder of two uploaded pages persisted, phone swipe both ways, one-row day numbers, compact filters, full-width portal; ops:cut-print-pages dry run in the rebuilt image (pdftoppm present).
+
+## 2026-11-03 — SRS Revision 264: one filter width, the bar before the length, calendar hint/header, «محاور السورة»
+- `--filter-inline-size` (11rem) on `.datatable__toolbar`/`.cal-header__filters`/`.cal-toolbar` children, `align-items: start`; search 20rem; phones keep their two-column grid.
+- `AudioTrack`: `heard` = 0 until the length is known; a kept length < kept place is dropped; `onDurationChange` updates it.
+- Calendar: `.cal-header__swipe-hint` (phone), Hijri at `--font-size-md`, weekday header `--color-primary-soft` + `calendar.weekdaysTiny` on phones.
+- `humanity-data.ts`: «محاور السورة» line for surahs 1–6, 19 (from the «مطبوع»), history locales shifted (`lines.N`) and translated; R239 card test allows it.
+- Production: `ops:cut-print-pages` cut 503 pages from six «مطبوع» (dry run first).
+- Verified: integration 94/94 + reader 242/242; frontend 1721, lint, build, guards; browser on Localhost at 1849 px: picking «المرأة — وميض الأمل» moves no filter (all 176 px), المؤطِّرات search and selects on one line; phone calendar: the swipe line, Hijri = Gregorian 17 px on one row, soft-green weekday header, no overflow; «محاور السورة» under «نوع السورة» on المائدة.

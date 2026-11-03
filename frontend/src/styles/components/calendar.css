@@ -122,7 +122,15 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  align-items: end;
+  align-items: start;
+}
+/* R264 — the same fixed width as every table's filters (`--filter-inline-size`). */
+@media (width >= 48rem) {
+  .cal-header__filters > *,
+  .cal-toolbar > * {
+    flex: 0 0 var(--filter-inline-size);
+    inline-size: var(--filter-inline-size);
+  }
 }
 
 /* The view choice remains explicit on every screen. A narrow viewport changes
@@ -168,6 +176,16 @@
     flex: 1;
   }
 }
+/* R264 — shown on a phone only (below). */
+.cal-header__swipe-hint {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
 /* R263 — the public calendar turns its month by a sideways swipe on a phone:
    no «السابق / اليوم / التالي» row there, and the grid keeps vertical
    scrolling while a horizontal drag reaches the page. */
@@ -178,6 +196,10 @@
   }
   .cal-swipe {
     touch-action: pan-y;
+  }
+  /* R264 — the line that says the month turns by a swipe. */
+  .cal-header__swipe-hint {
+    display: flex;
   }
 }
 
@@ -245,7 +267,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  align-items: end;
+  align-items: start;
   margin-block-end: var(--space-5);
 }
 
@@ -308,14 +330,19 @@
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
+.cal-grid__weekday-short {
+  display: none;
+}
 .cal-grid__weekday {
   padding: var(--space-3) var(--space-3);
-  font-size: var(--font-size-xs);
+  /* R264 — the days' names read as a header: the brand's soft green under
+     its strong green, a step larger. */
+  font-size: var(--font-size-sm);
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: var(--color-text-muted);
-  background: var(--color-surface-sunken);
-  border-block-end: 1px solid var(--color-border);
+  color: var(--color-primary-strong);
+  background: var(--color-primary-soft);
+  border-block-end: 1px solid var(--color-border-strong);
 }
 
 .cal-cell {
@@ -411,10 +438,9 @@ tr:last-child .cal-cell {
 }
 .cal-day__hijri {
   font-weight: 700;
-  /* Slightly smaller — the overlay is decorative (§4.4) and must not compete
-     with the calendar the platform schedules in — but the same weight and the
-     same row, because it is still first-class information. */
-  font-size: var(--font-size-sm);
+  /* R264 — the same size as the Gregorian number (the Owner); its colour
+     still tells the two calendars apart. */
+  font-size: var(--font-size-md);
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--color-hijri);
@@ -824,8 +850,20 @@ tr:last-child .cal-cell {
   .cal-grid__weekday {
     padding: var(--space-2) 0;
     letter-spacing: normal;
-    overflow-wrap: anywhere;
-    white-space: normal;
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+  }
+  /* R264 — the short name on a phone; the full one kept for a screen reader. */
+  .cal-grid__weekday-long {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .cal-grid__weekday-short {
+    display: inline;
   }
   /* R220 (Owner, 2026-10-12) — a phone shows the chip as a laptop does: its
      time, Surahs and teacher too («show same thing in both views»), which
@@ -867,7 +905,7 @@ tr:last-child .cal-cell {
     font-size: var(--font-size-sm);
   }
   .cal-day__hijri {
-    font-size: var(--font-size-xs);
+    font-size: var(--font-size-sm);
   }
   .cal-day__select {
     /* R263 — one row, Hijri left and Gregorian right as on a laptop: the

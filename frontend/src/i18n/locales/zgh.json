@@ -164,6 +164,7 @@
  "calendar.navNext": "ⴰⵎⴹⴼⴰⵕ",
  "calendar.navLabel": "ⴰⵙⵙⵉⴽⵍ ⴳⵔ ⵉⵢⵢⵉⵔⵏ",
  "calendar.filtersLabel": "ⴰⵙⵙⵓⴼⴼⵖ ⵏ ⵓⵡⵜⴰⵙⵙ",
+ "calendar.swipeHint": "ⵣⵓⵖⵔ ⵙ ⵓⴼⴰⵙⵙⵉ ⵏⵖ ⵙ ⵓⵥⵍⵎⴰⴹ ⴰⴷ ⵜⴱⴷⴷⵍⴷ ⴰⵢⵢⵓⵔ",
  "calendar.mineEmpty": "ⵓⵔ ⵉⵍⵍⵉ ⴽⵔⴰ ⴳ ⵓⵡⵜⴰⵙⵙ ⵏ ⵓⵎⵉⴹⴰⵏ ⴰⴷ ⴳ ⵓⵢⵢⵓⵔ ⴰⴷ.",
  "calendar.kind.session": "ⵜⴰⵎⵍⵉⵍⵜ",
  "calendar.kind.event": "ⵜⴰⵎⵓⵙⵙⵓⵜ",
@@ -249,6 +250,15 @@
   "ⴷⵓⵊⴰⵏⴱⵉⵔ"
  ],
  "calendar.weekdaysShort": [
+  "ⴰⵢⵏⴰⵙ",
+  "ⴰⵙⵉⵏⴰⵙ",
+  "ⴰⴽⵕⴰⵙ",
+  "ⴰⴽⵡⴰⵙ",
+  "ⴰⵙⵉⵎⵡⴰⵙ",
+  "ⴰⵙⵉⴹⵢⴰⵙ",
+  "ⴰⵙⴰⵎⴰⵙ"
+ ],
+ "calendar.weekdaysTiny": [
   "ⴰⵢⵏⴰⵙ",
   "ⴰⵙⵉⵏⴰⵙ",
   "ⴰⴽⵕⴰⵙ",

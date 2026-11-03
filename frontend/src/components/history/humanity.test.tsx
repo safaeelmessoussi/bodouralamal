@@ -149,14 +149,22 @@ describe('R203 — «نظرة شاملة», the content from the Owner’s board
     }
   });
 
-  it('R239 — a Surah says the same five things, in one order, and nothing else', () => {
-    const ORDER = ['نوع السورة', 'سبب التسمية', 'علاقة أولها بآخرها', 'التقوى في السورة', 'اسم الله المهيمن في السورة'];
+  it('R239/R264 — a Surah says the same six things, in one order, and nothing else', () => {
+    // R264 — «محاور السورة» under «نوع السورة», from the Surah's «مطبوع».
+    const ORDER = ['نوع السورة', 'محاور السورة', 'سبب التسمية', 'علاقة أولها بآخرها', 'التقوى في السورة', 'اسم الله المهيمن في السورة'];
     for (const surah of all(HUMANITY).filter((n) => n.surah !== undefined)) {
       const labels = (surah.lines ?? []).map((line) => line.split(':')[0]!);
       for (const label of labels) expect(ORDER, surah.id).toContain(label);
       expect([...labels].sort((x, y) => ORDER.indexOf(x) - ORDER.indexOf(y)), surah.id).toEqual(labels);
-      // The axes and pillars are the diagram's, not the card's.
-      expect(labels.some((l) => /المحور|المرتكزات|محور السورة/.test(l)), surah.id).toBe(false);
+      // The pillars are the diagram's; the card names the axes once, as «محاور السورة».
+      expect(labels.some((l) => l !== 'محاور السورة' && /المحور|المرتكزات|محور/.test(l)), surah.id).toBe(false);
+    }
+  });
+
+  it('R264 — every Surah with a «مطبوع» names its axes', () => {
+    for (const number of [1, 2, 3, 4, 5, 6, 19]) {
+      const surah = all(HUMANITY).find((n) => n.surah === number)!;
+      expect(surah.lines!.some((line) => line.startsWith('محاور السورة: ')), surah.id).toBe(true);
     }
   });
 
