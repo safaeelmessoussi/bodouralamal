@@ -16,6 +16,11 @@ describe('R240 — every Surah with where it was revealed', () => {
     expect(data.filter((s) => s.revelation === 'madani').map((s) => s.surah_id)).toEqual([
       2, 3, 4, 5, 8, 9, 13, 22, 24, 33, 47, 48, 49, 55, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 76, 98, 99, 110,
     ]);
-    expect(data[0]).toEqual({ surah_id: 1, surah_name: 'الفاتحة', revelation: 'makki' });
+    expect(data[0]).toEqual({ surah_id: 1, surah_name: 'الفاتحة', revelation: 'makki', parts: [] });
+    // R265 — a Surah taught in parts names them here, the one naming every form uses.
+    expect((data[1] as unknown as { parts: unknown }).parts).toEqual([
+      { part: 1, label: 'الجزء الأول (الحزب الأول و الثاني)' },
+      { part: 2, label: 'الجزء الثاني (من الحزب الثالث الى آخر السورة)' },
+    ]);
   });
 });
