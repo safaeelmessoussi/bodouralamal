@@ -1157,10 +1157,9 @@ export interface LibraryItemDto {
   /** R223 — a public audio's stable address (§3.1), played in one click;
    *  `null` for every other item, which mints through `download-url`. */
   stream_url: string | null;
-  /** R247 — on an image: the recording it is a page of (shown beside it while
-   *  it plays), and where in its order; `null` otherwise. */
-  slide_of: string | null;
-  slide_position: number | null;
+  /** R247/R265 — on an image: the live recordings it is a page of (shown
+   *  beside each while it plays), each with its place there; `[]` otherwise. */
+  pages_of: { recording_id: string; position: number }[];
   /** R263 — an image cut from a «مطبوع»: a reader sees it only beside a recording it is a page of. */
   print_page: boolean;
   /** R247 — the live class sessions this item is attached to: a session's
@@ -1219,8 +1218,7 @@ export function libraryItemDto(row: {
   subjectShared?: boolean;
   displayOrder?: number | null;
   streamUrl?: string | null;
-  slideOfId: string | null;
-  slidePosition: number | null;
+  pagesOf?: { recording_id: string; position: number }[];
   printPage?: boolean;
   sessionIds: string[];
 }): LibraryItemDto {
@@ -1274,8 +1272,7 @@ export function libraryItemDto(row: {
     subject_shared: row.subjectShared ?? false,
     display_order: row.displayOrder ?? null,
     stream_url: row.streamUrl ?? null,
-    slide_of: row.slideOfId,
-    slide_position: row.slidePosition,
+    pages_of: row.pagesOf ?? [],
     print_page: row.printPage ?? false,
     session_ids: row.sessionIds,
   };

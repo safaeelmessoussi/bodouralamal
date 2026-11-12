@@ -7,6 +7,7 @@ import { ACTIVE_CHILD_HEADER } from '../middleware/child-context.js';
 import { requireActor } from '../middleware/authenticate.js';
 import * as content from '../services/content.service.js';
 import * as slides from '../services/recording-slides.service.js';
+import * as choices from '../services/session-choices.service.js';
 import { setContentOrder } from '../services/content-order.service.js';
 import { completeUploadSchema, initiateUploadSchema, uploadPartsSchema } from '../validators/content.validators.js';
 import { z } from 'zod';
@@ -53,6 +54,7 @@ export function initiate(prisma: PrismaClient, clients: StorageClients, config: 
           ...(body.content_meta.surah_part !== undefined && body.content_meta.surah_part !== null
             ? { surahPart: body.content_meta.surah_part }
             : {}),
+          ...(body.content_meta.session_id !== undefined ? { sessionId: body.content_meta.session_id } : {}),
           // R198 §2 — `branch_ids` (the first is home; `[]` is Global), or the
           // single `branch_id` it generalises.
           branchIds:
@@ -138,6 +140,8 @@ const updateContentSchema = z
     surah_id: z.number().int().min(1).max(114).nullable().optional(),
     // R259 — the part of سورة البقرة; `null` clears it, absent leaves it (cleared with a Surah that is not 2).
     surah_part: z.union([z.literal(1), z.literal(2)]).nullable().optional(),
+    /** R265 — attach the item to this session too (it keeps the ones it has). */
+    session_id: z.string().uuid().optional(),
     // R167 §5 — «كل مستويات الفئة»: addressed to every Level of its Category.
     whole_category: z.boolean().optional(),
     // R169 §10 — the item's OTHER Levels; REPLACES the set. `level_id` stays its
@@ -172,6 +176,7 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
       origin?: 'uploaded' | 'session_recording';
       surah_id?: number | null;
       surah_part?: 1 | 2 | null;
+      session_id?: string;
       whole_category?: boolean;
       additional_level_ids?: string[];
       description?: string | null;
@@ -187,30 +192,35 @@ export function update(prisma: PrismaClient, clients: StorageClients) {
         reason: 'EMPTY_PATCH',
       });
     }
-    await content.updateContentMetadata(
-      prisma,
-      clients,
-      requireActor(req),
-      String(req.params['id'] ?? ''),
-      {
-        ...(body.title !== undefined ? { title: body.title } : {}),
-        ...(body.level_id !== undefined ? { levelId: body.level_id } : {}),
-        ...(body.subject_id !== undefined ? { subjectId: body.subject_id } : {}),
-        ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
-        ...(body.origin !== undefined ? { origin: body.origin } : {}),
-        ...(body.whole_category !== undefined ? { wholeCategory: body.whole_category } : {}),
-        ...(body.surah_id !== undefined ? { surahId: body.surah_id } : {}),
-        ...(body.surah_part !== undefined ? { surahPart: body.surah_part } : {}),
-        ...(body.additional_level_ids !== undefined
-          ? { additionalLevelIds: body.additional_level_ids }
-          : {}),
-        ...(body.description !== undefined ? { description: body.description === '' ? null : body.description } : {}),
-        ...(body.academic_year_id !== undefined ? { academicYearId: body.academic_year_id } : {}),
-        ...(body.branch_ids !== undefined ? { branchIds: body.branch_ids } : {}),
-        ...(body.author_id !== undefined ? { authorId: body.author_id } : {}),
-        ...(body.author_role !== undefined ? { authorRole: body.author_role } : {}),
-      },
-    );
+    const patch = {
+      ...(body.title !== undefined ? { title: body.title } : {}),
+      ...(body.level_id !== undefined ? { levelId: body.level_id } : {}),
+      ...(body.subject_id !== undefined ? { subjectId: body.subject_id } : {}),
+      ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
+      ...(body.origin !== undefined ? { origin: body.origin } : {}),
+      ...(body.whole_category !== undefined ? { wholeCategory: body.whole_category } : {}),
+      ...(body.surah_id !== undefined ? { surahId: body.surah_id } : {}),
+      ...(body.surah_part !== undefined ? { surahPart: body.surah_part } : {}),
+      ...(body.additional_level_ids !== undefined
+        ? { additionalLevelIds: body.additional_level_ids }
+        : {}),
+      ...(body.description !== undefined ? { description: body.description === '' ? null : body.description } : {}),
+      ...(body.academic_year_id !== undefined ? { academicYearId: body.academic_year_id } : {}),
+      ...(body.branch_ids !== undefined ? { branchIds: body.branch_ids } : {}),
+      ...(body.author_id !== undefined ? { authorId: body.author_id } : {}),
+      ...(body.author_role !== undefined ? { authorRole: body.author_role } : {}),
+    };
+    // R265 — the session chosen in the form: checked before anything is
+    // written, attached after the edit (a patch may carry only it).
+    if (body.session_id !== undefined) {
+      await content.assertSessionWritable(prisma, requireActor(req), body.session_id);
+    }
+    if (Object.keys(patch).length > 0) {
+      await content.updateContentMetadata(prisma, clients, requireActor(req), String(req.params['id'] ?? ''), patch);
+    }
+    if (body.session_id !== undefined) {
+      await content.attachToSession(prisma, requireActor(req), body.session_id, String(req.params['id'] ?? ''));
+    }
     res.status(204).end();
   };
 }
@@ -271,6 +281,43 @@ export function setSlides(prisma: PrismaClient) {
     const body = parse<{ slide_ids: string[] }>(recordingSlidesSchema, req.body);
     const data = await slides.setRecordingSlides(prisma, requireActor(req), idParam(req, 'id'), body.slide_ids);
     res.json({ data });
+  };
+}
+
+const sessionChoicesSchema = z
+  .object({
+    level_id: z.string().uuid(),
+    academic_year_id: z.string().uuid(),
+    subject_id: z.string().uuid().optional(),
+    surah_id: z.coerce.number().int().min(1).max(114).optional(),
+    branch_id: z.string().uuid().optional(),
+  })
+  .strict();
+
+/**
+ * **R265 — `GET /content/session-choices`**: the sessions the caller may
+ * attach an item to, narrowed by the form's Level, year, Subject, Surah and
+ * branch, newest first (`session-choices.service.ts`).
+ */
+export function sessionChoices(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const q = parse<z.infer<typeof sessionChoicesSchema>>(sessionChoicesSchema, req.query);
+    const rows = await choices.listSessionChoices(prisma, requireActor(req), {
+      levelId: q.level_id,
+      academicYearId: q.academic_year_id,
+      subjectId: q.subject_id,
+      surahId: q.surah_id,
+      branchId: q.branch_id,
+    });
+    res.json({
+      data: rows.map((row) => ({
+        id: row.id,
+        date: row.date,
+        start_time: row.startTime,
+        title: row.title,
+        date_label: row.dateLabel,
+      })),
+    });
   };
 }
 

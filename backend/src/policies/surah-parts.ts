@@ -16,7 +16,7 @@ export type SurahPart = 1 | 2;
 const PARTS: Record<number, Record<SurahPart, { from: number; to: number | null; label: string }>> = {
   2: {
     1: { from: 1, to: 140, label: 'الجزء الأول (الحزب الأول و الثاني)' },
-    2: { from: 141, to: null, label: 'الجزء الثاني (الحزب الثالث و الرابع و الخامس)' },
+    2: { from: 141, to: null, label: 'الجزء الثاني (من الحزب الثالث الى آخر السورة)' },
   },
 };
 
@@ -31,7 +31,37 @@ export function partRange(surahId: number, part: SurahPart | null, totalAyahs: n
   return { start: spec.from, end: spec.to ?? totalAyahs };
 }
 
-/** «البقرة» — or «البقرة الجزء الثاني (الحزب الثالث و الرابع و الخامس)». */
+/**
+ * R265 — **the one place a part is named** (the Owner: «make it in a way that
+ * if i need to change them again, the change can be done in one place»): the
+ * syllabus, the certificates, the programme pages and the calendar compose it
+ * here, and `GET /quran-surahs` carries it to the content forms and the titles
+ * they build. Changing a label here also needs its `{surah} …` pattern in the
+ * translation data (`ops/data/translations-r224.ts`), and `ops:rename-surah-parts`
+ * rewrites titles already stored.
+ */
+export function partLabels(surahId: number): { part: SurahPart; label: string }[] {
+  const parts = PARTS[surahId];
+  return parts ? ([1, 2] as const).map((part) => ({ part, label: parts[part].label })) : [];
+}
+
+/**
+ * R265 — a stored title names a part with today's label: «سورة البقرة الجزء
+ * الثاني» or any older «… الجزء الثاني (…)» becomes «سورة البقرة <label>».
+ * Anything else in the title is left as it is; a title naming no part is
+ * returned unchanged.
+ */
+export function relabelParts(title: string, surahId: number, surahName: string): string {
+  let out = title;
+  for (const { label } of partLabels(surahId)) {
+    const word = label.split(' (')[0]!;
+    const named = new RegExp(`سورة ${surahName} ${word}(?: \\([^)]*\\))?`, 'g');
+    out = out.replace(named, `سورة ${surahName} ${label}`);
+  }
+  return out;
+}
+
+/** «البقرة» — or «البقرة الجزء الثاني (من الحزب الثالث الى آخر السورة)». */
 export function syllabusName(nameArabic: string, surahId: number, part: SurahPart | null): string {
   const spec = part === null ? undefined : PARTS[surahId]?.[part];
   return spec ? `${nameArabic} ${spec.label}` : nameArabic;

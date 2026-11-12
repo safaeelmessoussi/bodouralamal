@@ -57,6 +57,7 @@ import { requireRetirement, reconcileRetirements } from '../repositories/storage
 import { executeRetirement } from './storage-retirement.service.js';
 import {
   abortUpload,
+  attachToSession,
   completeUpload,
   deleteContent,
   initiateUpload,
@@ -68,6 +69,7 @@ import {
 } from "./content.service.js";
 import { listLibrary } from "./library.service.js";
 import { cutPrintPages, printPageTitle } from "./print-pages.service.js";
+import { listSessionChoices } from "./session-choices.service.js";
 import { listRecordingSlides, setRecordingSlides } from "./recording-slides.service.js";
 
 /**
@@ -1649,9 +1651,10 @@ describe("R247 — a recording's slides", () => {
     // A teacher of the branch edits them as she edits the items themselves.
     expect((await listRecordingSlides(prisma, teacher(), recording)).map((s) => s.id)).toEqual([second, first]);
 
-    // An image is a page of ONE recording: listed for another, it leaves the first.
+    // R265 — an image may be a page of several recordings: listed for another, it stays with the first.
     await setRecordingSlides(prisma, admin(), other, [first]);
-    expect((await listRecordingSlides(prisma, admin(), recording)).map((s) => s.id)).toEqual([second]);
+    expect((await listRecordingSlides(prisma, admin(), recording)).map((s) => s.id)).toEqual([second, first]);
+    expect((await listRecordingSlides(prisma, admin(), other)).map((s) => s.id)).toEqual([first]);
 
     // What is not a recording has no slides; what is not an image is no slide.
     expect(await failure(() => setRecordingSlides(prisma, admin(), handout, [first]))).toMatchObject({
@@ -1670,15 +1673,18 @@ describe("R247 — a recording's slides", () => {
     await prisma.sessionContent.create({ data: { sessionId, contentId: recording } });
     const rows = (await listLibrary(prisma, null, { levelId, pageSize: 100 })).data;
     const row = (id: string) => rows.find((r) => r.id === id);
-    expect(row(second)).toMatchObject({ slideOfId: recording, slidePosition: 0 });
-    expect(row(first)).toMatchObject({ slideOfId: other, slidePosition: 0 });
-    expect(row(handout)).toMatchObject({ slideOfId: null, slidePosition: null, sessionIds: [] });
+    expect(row(second)?.pagesOf).toEqual([{ recording_id: recording, position: 0 }]);
+    expect(row(first)?.pagesOf).toEqual([
+      { recording_id: recording, position: 1 },
+      { recording_id: other, position: 0 },
+    ]);
+    expect(row(handout)).toMatchObject({ pagesOf: [], sessionIds: [] });
     expect(row(recording)?.sessionIds).toEqual([sessionId]);
 
     // A deleted recording has no pages any more; `[]` clears a list.
     await prisma.educationalContent.update({ where: { id: other }, data: { deletedAt: new Date() } });
     const after = (await listLibrary(prisma, null, { levelId, pageSize: 100 })).data;
-    expect(after.find((r) => r.id === first)).toMatchObject({ slideOfId: null });
+    expect(after.find((r) => r.id === first)?.pagesOf).toEqual([{ recording_id: recording, position: 1 }]);
     expect(await setRecordingSlides(prisma, admin(), recording, [])).toEqual([]);
     await prisma.sessionContent.deleteMany({ where: { contentId: recording } });
 
@@ -3363,5 +3369,44 @@ describe("cutting a «مطبوع» into its pages (R263)", () => {
 
   it("names a page by its number and its PDF's title", () => {
     expect(printPageTitle(6, " مطبوع تفسير سورة الفاتحة ")).toBe("صفحة 6 مطبوع تفسير سورة الفاتحة");
+  });
+});
+
+/** R265 — the session an item belongs to, chosen in its own form. */
+describe("choosing an item's session (R265)", () => {
+  it("lists the form's sessions, narrowed by what it chose, for whoever may attach to them", async () => {
+    const ids = async (actor: Actor, over: Partial<Parameters<typeof listSessionChoices>[2]> = {}) =>
+      (await listSessionChoices(prisma, actor, { levelId, academicYearId, ...over })).map((c) => c.id);
+    expect(await ids(admin())).toContain(sessionId);
+    expect(await ids(admin(), { subjectId })).toContain(sessionId);
+    expect(await ids(admin(), { branchId })).toContain(sessionId);
+    expect(await ids(admin(), { branchId: otherBranchId })).not.toContain(sessionId);
+    // The teacher who staffs it sees it, as `POST /sessions/{id}/content` lets her attach to it.
+    expect(await ids(teacher())).toContain(sessionId);
+    const [choice] = await listSessionChoices(prisma, admin(), { levelId, academicYearId });
+    expect(choice?.dateLabel).toMatch(/^(?:الأحد|الاثنين|الثلاثاء|الأربعاء|الخميس|الجمعة|السبت) \d{1,2} \S+ \d{4}$/);
+  });
+
+  it("attaches an uploaded item to the chosen session, and attaching again is no error", async () => {
+    const { id } = await uploadPdf(admin(), "مرفق بالحصة", { sessionId });
+    const linked = await prisma.sessionContent.findMany({ where: { contentId: id, deletedAt: null } });
+    expect(linked.map((l) => l.sessionId)).toEqual([sessionId]);
+    await attachToSession(prisma, admin(), sessionId, id);
+    expect(await prisma.sessionContent.count({ where: { contentId: id, deletedAt: null } })).toBe(1);
+    await prisma.sessionContent.deleteMany({ where: { contentId: id } });
+  });
+
+  it("refuses at initiation a session the caller may not attach to", async () => {
+    const stranger = await prisma.session.findFirst({ where: { id: { not: sessionId }, deletedAt: null }, select: { id: true } });
+    const target = stranger?.id ?? randomUUID();
+    const e = await failure(() =>
+      initiateUpload(prisma, clients, KEY, teacher(), {
+        filename: "a.pdf",
+        size: 10,
+        mime: "application/pdf",
+        meta: meta({ sessionId: target }) as never,
+      }),
+    );
+    expect(["NOT_FOUND", "FORBIDDEN"]).toContain(e.code);
   });
 });

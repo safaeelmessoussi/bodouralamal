@@ -580,6 +580,7 @@
  "content.bySurah.indexLabel": "Suras con contenido",
  "content.bySurah.empty": "Aún no hay contenido vinculado a una sura. Se puede consultar el contenido «Contenido de los niveles».",
  "content.bySurah.play": "Escuchar",
+ "content.bySurah.downloadLabel": "Descargar",
  "content.bySurah.unavailable": "No se ha podido reproducir esta clase en este momento. Se ruega intentarlo más tarde.",
  "content.bySurah.closeAll": "Plegar todo",
  "content.quiz.open": "Comprobar la comprensión",

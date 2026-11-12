@@ -48,6 +48,7 @@ import * as audit from '../repositories/audit.repository.js';
 import { snapshot } from '../repositories/trash.repository.js';
 import * as users from '../repositories/user.repository.js';
 import { visibleContentIds } from './library.service.js';
+import * as sessionService from './session.service.js';
 import {
   enqueueConsentPublicRetirement,
   enqueueConsentReevaluationForSessions,
@@ -271,6 +272,8 @@ export interface InitiateInput {
     surahId?: number;
     /** R259 — the part of سورة البقرة; only with `surahId` 2. */
     surahPart?: 1 | 2;
+    /** R265 — the class session to attach the item to once stored; checked here. */
+    sessionId?: string;
     /** TD-9: replacing a file mints a NEW key and quarantines the old object. */
     replacesContentId?: string;
     /** R215 — who made it, and in which capacity. */
@@ -430,6 +433,9 @@ export async function initiateUpload(
   // every other Surah write uses (`resolveSurahs`), asked only when one is
   // named — an item about no Surah is the ordinary state.
   assertSurahPart(input.meta.surahId ?? null, input.meta.surahPart ?? null);
+  // R265 — the session must be one the caller may attach content to, said
+  // now rather than after the bytes are sent.
+  if (input.meta.sessionId !== undefined) await assertSessionWritable(prisma, actor, input.meta.sessionId);
   if (input.meta.surahId !== undefined) {
     await resolveSurahs(prisma, {
       subjectId: input.meta.subjectId,
@@ -504,6 +510,7 @@ export async function initiateUpload(
       ...(wholeCategory ? { whole_category: true } : {}),
       ...(input.meta.surahId !== undefined ? { surah_id: input.meta.surahId } : {}),
       ...(input.meta.surahPart !== undefined ? { surah_part: input.meta.surahPart } : {}),
+      ...(input.meta.sessionId !== undefined ? { session_id: input.meta.sessionId } : {}),
       ...(input.meta.replacesContentId ? { replaces: input.meta.replacesContentId } : {}),
       ...(replacesVersion === undefined ? {} : { replaces_version: replacesVersion }),
       // R215 — decided at initiation, like every other fact here.
@@ -981,6 +988,31 @@ async function createContentFromFinalization(
   });
 }
 
+/**
+ * R265 — the item chosen with a session in its form is attached to it
+ * (`POST /sessions/{id}/content`'s own rule: authority, consent re-check). An
+ * item already attached there stays so: a retried completion, or an edit
+ * naming the session it has, is not an error.
+ */
+/** R265 — a session the caller may attach content to, or the attach rule's own refusal. */
+export async function assertSessionWritable(prisma: PrismaClient, actor: Actor, sessionId: string): Promise<void> {
+  await sessionService.loadForWrite(prisma, actor, sessionId);
+}
+
+export async function attachToSession(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string | undefined,
+  contentId: string,
+): Promise<void> {
+  if (sessionId === undefined) return;
+  try {
+    await sessionService.linkContent(prisma, actor, sessionId, contentId);
+  } catch (error) {
+    if (!(error instanceof AppError && error.code === 'DUPLICATE')) throw error;
+  }
+}
+
 export async function completeUpload(
   prisma: PrismaClient,
   clients: StorageClients,
@@ -997,6 +1029,7 @@ export async function completeUpload(
   // Check it before touching staging: retries still succeed after cleanup.
   if (await publishedFinalization(prisma, claims, finalizationId)) {
     await discardStagingObject(prisma, clients, claims);
+    await attachToSession(prisma, actor, claims.session_id, claims.cid);
     return { id: claims.cid };
   }
 
@@ -1154,6 +1187,7 @@ export async function completeUpload(
       contentSha256,
     );
     await discardStagingObject(prisma, clients, claims);
+    await attachToSession(prisma, actor, claims.session_id, claims.cid);
     return { id: claims.cid };
   } catch (error) {
     // A concurrent same-ticket winner owns the same canonical key. Its audit is

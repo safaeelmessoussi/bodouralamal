@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { fetchRecordingSlides, saveRecordingSlides, type RecordingSlide } from '../../adapters/content.js';
+import { fetchLibraryImages, fetchRecordingSlides, saveRecordingSlides, type RecordingSlide } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
-import { api } from '../../lib/api.js';
+import { compareText } from '../../lib/sort-rows.js';
 import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 import { Button } from '../ui/button.js';
 import { DataTable } from '../ui/data-table.js';
@@ -53,13 +53,10 @@ export function RecordingSlidesDialog({
 
   const load = useCallback(async () => {
     setSlides(await fetchRecordingSlides(recording.id, token));
-    // The candidates: this Level's images about the same Surah.
-    const surah = recording.surah_id ? `&surah_id=${String(recording.surah_id)}` : '';
-    const body = await api<{ data: { id: string; title: string; mime_type: string }[] }>(
-      `/library?level_id=${encodeURIComponent(recording.level_id)}${surah}&page_size=100`,
-      { token },
-    );
-    setImages(body.data.filter((item) => item.mime_type.startsWith('image/')));
+    // The candidates: this Level's images about the same Surah, every page of
+    // them (R265), «صفحة 1، 2، 3 …» with numbers read as numbers.
+    const images = await fetchLibraryImages(recording.level_id, recording.surah_id ?? null, token);
+    setImages(images.sort((a, b) => compareText(a.title, b.title)));
   }, [recording.id, recording.level_id, recording.surah_id, token]);
 
   useEffect(() => {

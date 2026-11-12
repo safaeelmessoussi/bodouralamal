@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import { composeTitle, EMPTY_TITLE_NUMBERS, parseFileName, parseTitle } from './content-title.js';
+import { composeTitle, EMPTY_TITLE_NUMBERS, parseFileName, parseTitle, trailingDate, withSessionDate } from './content-title.js';
 
 /** R259 — the Owner's two examples, both ways. */
 describe('a content title from its parts', () => {
-  it('composes «تسجيل صوتي تفسير سورة البقرة الجزء الثاني الحصة 7 الجزء 2 تعريف الحمد»', () => {
+  it('composes «تسجيل صوتي تفسير سورة البقرة الجزء الثاني (من الحزب الثالث الى آخر السورة) الحصة 7 الجزء 2 تعريف الحمد»', () => {
     expect(
       composeTitle({
         numbers: { format: 'تسجيل صوتي', page: '', session: '7', part: '2' },
         subject: 'تفسير القرآن',
         surahName: 'البقرة',
-        surahPart: 2,
+        surahPartLabel: 'الجزء الثاني (من الحزب الثالث الى آخر السورة)',
         description: 'تعريف الحمد',
       }),
-    ).toBe('تسجيل صوتي تفسير سورة البقرة الجزء الثاني الحصة 7 الجزء 2 تعريف الحمد');
+    ).toBe('تسجيل صوتي تفسير سورة البقرة الجزء الثاني (من الحزب الثالث الى آخر السورة) الحصة 7 الجزء 2 تعريف الحمد');
   });
 
   it('composes «صورة 6 تفسير سورة الفاتحة الحصة 1 الجزء 2 تعريف الحمد»', () => {
@@ -22,7 +22,7 @@ describe('a content title from its parts', () => {
         numbers: { format: 'صورة', page: '6', session: '1', part: '2' },
         subject: 'تفسير القرآن',
         surahName: 'الفاتحة',
-        surahPart: null,
+        surahPartLabel: '',
         description: 'تعريف الحمد',
       }),
     ).toBe('صورة 6 تفسير سورة الفاتحة الحصة 1 الجزء 2 تعريف الحمد');
@@ -30,12 +30,12 @@ describe('a content title from its parts', () => {
 
   it('leaves out what is empty, and names another Subject whole', () => {
     expect(
-      composeTitle({ numbers: { ...EMPTY_TITLE_NUMBERS, format: 'مطبوع' }, subject: 'الفقه', surahName: null, surahPart: null, description: '' }),
+      composeTitle({ numbers: { ...EMPTY_TITLE_NUMBERS, format: 'مطبوع' }, subject: 'الفقه', surahName: null, surahPartLabel: '', description: '' }),
     ).toBe('مطبوع الفقه');
   });
 
   it('reads the numbers back, never the Surah part as the lesson part', () => {
-    expect(parseTitle('تسجيل صوتي تفسير سورة البقرة الجزء الثاني الحصة 7 الجزء 2 تعريف الحمد')).toEqual({
+    expect(parseTitle('تسجيل صوتي تفسير سورة البقرة الجزء الثاني (من الحزب الثالث الى آخر السورة) الحصة 7 الجزء 2 تعريف الحمد')).toEqual({
       format: 'تسجيل صوتي',
       page: '',
       session: '7',
@@ -89,5 +89,31 @@ describe('the numbers a file name says', () => {
 
   it('says nothing the name does not say', () => {
     expect(parseFileName('recording-0042.m4a', 'audio')).toEqual({ format: 'تسجيل صوتي', page: '', session: '', part: '' });
+  });
+});
+
+/** R265 — a title ends with its session's date. */
+describe('the session date at a title\'s end', () => {
+  it('is the last piece of a built title', () => {
+    expect(
+      composeTitle({
+        numbers: { format: 'تسجيل صوتي', page: '', session: '4', part: '1' },
+        subject: 'تفسير القرآن',
+        surahName: 'المائدة',
+        surahPartLabel: '',
+        description: '',
+        sessionDate: 'الاثنين 9 نونبر 2026',
+      }),
+    ).toBe('تسجيل صوتي تفسير سورة المائدة الحصة 4 الجزء 1 الاثنين 9 نونبر 2026');
+  });
+
+  it('replaces a date already there, never doubles it, and reads it back', () => {
+    const typed = 'تسجيل صوتي تفسير سورة المائدة الحصة 4 الجزء 1 الاثنين 2 نونبر 2026';
+    expect(withSessionDate(typed, 'الاثنين 9 نونبر 2026')).toBe(
+      'تسجيل صوتي تفسير سورة المائدة الحصة 4 الجزء 1 الاثنين 9 نونبر 2026',
+    );
+    expect(withSessionDate('صفحة 3 مطبوع', 'الخميس 12 نونبر 2026')).toBe('صفحة 3 مطبوع الخميس 12 نونبر 2026');
+    expect(trailingDate(typed)).toBe('الاثنين 2 نونبر 2026');
+    expect(trailingDate('صفحة 3 مطبوع')).toBe('');
   });
 });

@@ -29,10 +29,10 @@ describe('the shared content reader', () => {
 
 /** R263 — a page cut from a «مطبوع» waits until it is attached to a recording. */
 describe('withoutWaitingPages', () => {
-  const entry = (id: string, over: { print_page?: boolean; slide_of?: string | null }) =>
+  const entry = (id: string, over: { print_page?: boolean; pages_of?: { recording_id: string; position: number }[] }) =>
     ({ item: { id, ...over } }) as unknown as LibraryEntry;
   it('keeps every other item and an attached page, drops a waiting one', () => {
-    const rows = [entry('a', {}), entry('p1', { print_page: true }), entry('p2', { print_page: true, slide_of: 'r' })];
+    const rows = [entry('a', {}), entry('p1', { print_page: true }), entry('p2', { print_page: true, pages_of: [{ recording_id: 'r', position: 0 }] })];
     expect(withoutWaitingPages(rows).map((r) => r.item.id)).toEqual(['a', 'p2']);
   });
 });

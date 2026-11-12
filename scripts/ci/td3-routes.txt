@@ -384,6 +384,7 @@ GET /content/{id}/download-url                # TD-3.5, TD-12
 GET /content/{id}/slides                      # R247; a recording's slides, for whoever may edit it
 PUT /content/{id}/slides                      # R247; the whole ordered list of its images
 PUT /content/order                            # R258; one Subject's items in order («محتوى عام»)
+GET /content/session-choices                  # R265; the sessions an item may be attached to, narrowed by its form
 
 # ── Exams, grading & Quran (TD-3.6)
 GET /exams                                    # TD-3.6 (R58, R136) — scheduled OCCURRENCES, both modes now

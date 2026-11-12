@@ -566,7 +566,7 @@ describe("SRS Revision 232 — سورة البقرة in two parts (Warsh: 1–14
       {
         surah_id: 2,
         part: 2,
-        syllabus_name: "البقرة الجزء الثاني (الحزب الثالث و الرابع و الخامس)",
+        syllabus_name: "البقرة الجزء الثاني (من الحزب الثالث الى آخر السورة)",
         from_ayah: 141,
         to_ayah: 285,
       },
@@ -577,7 +577,7 @@ describe("SRS Revision 232 — سورة البقرة in two parts (Warsh: 1–14
     expect(row!.complete).toBe(true);
     expect(row!.surahs[0]).toMatchObject({
       coverage_percent: 100,
-      name_arabic: "البقرة الجزء الثاني (الحزب الثالث و الرابع و الخامس)",
+      name_arabic: "البقرة الجزء الثاني (من الحزب الثالث الى آخر السورة)",
     });
     const own = await readOwnCoverage(prisma, student);
     expect(own.levels[0]!.surahs[0]).toMatchObject({ part: 2, total_ayahs: 145, merged_ayah_count: 145 });

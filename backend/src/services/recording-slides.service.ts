@@ -49,8 +49,9 @@ export async function listRecordingSlides(
 
 /**
  * `PUT /content/{id}/slides` — the WHOLE ordered list, replacing what was
- * there (R76's reorder rule: a sequence, never a patch of positions). An image
- * that was a page of another recording moves here: it is a page of one.
+ * there (R76's reorder rule: a sequence, never a patch of positions). R265 —
+ * an image may be a page of several recordings: linking it here leaves its
+ * other recordings as they were.
  */
 export async function setRecordingSlides(
   prisma: PrismaClient,
@@ -72,9 +73,7 @@ export async function setRecordingSlides(
     }
   }
   await prisma.$transaction(async (tx) => {
-    await tx.recordingSlide.deleteMany({
-      where: { OR: [{ recordingId }, ...(slideIds.length > 0 ? [{ slideId: { in: [...slideIds] } }] : [])] },
-    });
+    await tx.recordingSlide.deleteMany({ where: { recordingId } });
     if (slideIds.length > 0) {
       await tx.recordingSlide.createMany({
         data: slideIds.map((slideId, position) => ({ slideId, recordingId, position, createdById: actor.userId })),

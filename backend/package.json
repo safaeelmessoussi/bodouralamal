@@ -29,6 +29,7 @@
     "ops:apply-programmes": "node dist/src/ops/apply-programmes.js",
     "ops:fill-session-rooms": "node dist/src/ops/fill-session-rooms.js",
     "ops:cut-print-pages": "node dist/src/ops/cut-print-pages.js",
+    "ops:rename-surah-parts": "node dist/src/ops/rename-surah-parts.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts"
   },
   "dependencies": {

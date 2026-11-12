@@ -9,6 +9,9 @@ import { subjectWorksBySurah } from '../scheduling/surahs.js';
 import { t } from '../../i18n/index.js';
 import { formatDateWithWeekday } from '../../lib/format-date.js';
 import type { UploadMeta } from '../../adapters/uploads.js';
+import { partLabel, useSurahParts } from '../../lib/surah-parts.js';
+import type { SessionChoice, SessionChoiceFilter } from '../../adapters/content.js';
+import { SessionChoiceField } from './session-choice-field.js';
 
 /**
  * **The scope a piece of content is filed under — the fields, and the rules.**
@@ -71,7 +74,10 @@ export interface ContentScope {
 export interface TitleParts {
   subject: string;
   surahName: string | null;
-  surahPart: 1 | 2 | null;
+  /** R265 — the part's name as the server gives it, or `''`. */
+  surahPartLabel: string;
+  /** R265 — the chosen session's date, the title's end; `''` for none. */
+  sessionDate: string;
 }
 
 export function useContentScope({
@@ -134,6 +140,24 @@ export function useContentScope({
   const chosenBranches = scope.ready ? branchIds.filter((id) => offeredBranches.has(id)) : branchIds;
 
 
+  // R265 — the session the item belongs to, listed by what this form chose
+  // (a whole Category's item names no one Level, so it lists none).
+  const [session, setSession] = useState<SessionChoice | null>(null);
+  const sessionFilter = useMemo<SessionChoiceFilter | null>(() => {
+    if (levelId === '' || academicYearId === '' || wholeCategoryOf(levelId) !== null) return null;
+    const surah = surahId === '' ? null : Number(surahId);
+    return {
+      levelId,
+      academicYearId,
+      ...(subjectId !== '' ? { subjectId } : {}),
+      ...(surah !== null && subjectId !== '' && subjectWorksBySurah(scope, subjectId) ? { surahId: surah } : {}),
+      ...(chosenBranches.length === 1 ? { branchId: chosenBranches[0]! } : {}),
+    };
+  }, [levelId, academicYearId, subjectId, surahId, chosenBranches, scope]);
+  const sessionKey = sessionFilter === null ? '' : JSON.stringify(sessionFilter);
+  // A choice made for other fields is not kept once they change.
+  useEffect(() => setSession(null), [sessionKey]);
+
   // R172 §1 — «كل مستويات الفئة» in the Level slot files the item for the
   // whole Category, with no Level chosen: `category_id` travels instead.
   const wholeOf = wholeCategoryOf(levelId);
@@ -152,26 +176,35 @@ export function useContentScope({
         : { visibility: visibility as 'public' | 'private' | 'hidden' }),
       ...(surahApplies && surahNumber !== null ? { surah_id: surahNumber } : {}),
       ...(surahApplies && surahNumber === 2 && surahPart !== '' ? { surah_part: Number(surahPart) as 1 | 2 } : {}),
+      ...(session !== null && !locked ? { session_id: session.id } : {}),
     }),
-    [levelId, wholeOf, subjectId, academicYearId, chosenBranches, visibility, locked, surahApplies, surahNumber, surahPart],
+    [levelId, wholeOf, subjectId, academicYearId, chosenBranches, visibility, locked, surahApplies, surahNumber, surahPart, session],
   );
 
+  // R265 — the part's name as the server gives it.
+  const baqaraParts = useSurahParts(2);
   const titleParts = useMemo<TitleParts>(
     () => ({
       subject: scope.options.subjectId.find((o) => o.value === subjectId)?.label ?? '',
       surahName: surahApplies && surahNumber !== null ? (scope.surahNames[surahNumber] ?? null) : null,
-      surahPart: surahApplies && surahNumber === 2 && surahPart !== '' ? (Number(surahPart) as 1 | 2) : null,
+      surahPartLabel: partLabel(
+        baqaraParts,
+        surahApplies && surahNumber === 2 && surahPart !== '' ? (Number(surahPart) as 1 | 2) : null,
+      ),
+      sessionDate: session?.date_label ?? '',
     }),
-    [scope.options.subjectId, scope.surahNames, subjectId, surahApplies, surahNumber, surahPart],
+    [scope.options.subjectId, scope.surahNames, subjectId, surahApplies, surahNumber, surahPart, baqaraParts, session],
   );
 
   const suggestedTitle = useMemo(() => {
     const subject = scope.options.subjectId.find((o) => o.value === subjectId)?.label ?? '';
     const surah = surahApplies && surahNumber !== null ? `سورة ${scope.surahNames[surahNumber] ?? ''}`.trim() : '';
-    return [subject, surah, formatDateWithWeekday(new Date().toISOString().slice(0, 10))]
+    // R265 — the chosen session's date, else today's.
+    const when = session?.date_label ?? formatDateWithWeekday(new Date().toISOString().slice(0, 10));
+    return [subject, surah, when]
       .filter((part) => part !== '' && part !== 'سورة')
       .join(' — ');
-  }, [scope.options.subjectId, scope.surahNames, subjectId, surahNumber, surahApplies]);
+  }, [scope.options.subjectId, scope.surahNames, subjectId, surahNumber, surahApplies, session]);
 
   const problem = scope.wholeCategoryTeachesNothing
     ? t('scope.assignWholeCategorySubjectsHint')
@@ -212,10 +245,7 @@ export function useContentScope({
           value={surahPart}
           onChange={(v) => setSurahPart(v as '' | '1' | '2')}
           placeholder={t('content.upload.surahPartWhole')}
-          options={[
-            { value: '1', label: t('content.upload.surahPart1') },
-            { value: '2', label: t('content.upload.surahPart2') },
-          ]}
+          options={baqaraParts.map((p) => ({ value: String(p.part), label: p.label }))}
         />
       ) : null}
 
@@ -244,6 +274,11 @@ export function useContentScope({
         mayAssignGlobal={mayAssignGlobal}
         disabled={locked}
       />
+
+      {/* R265 — the session it belongs to, listed by the choices above. */}
+      {locked ? null : (
+        <SessionChoiceField filter={sessionFilter} value={session?.id ?? ''} onChange={setSession} token={token} />
+      )}
 
       <SelectField
         label={t('content.col.visibility')}

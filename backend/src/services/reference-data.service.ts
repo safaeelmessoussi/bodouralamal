@@ -6,7 +6,7 @@ import { assertNoBlockingReferences, updateWithVersion } from '../repositories/o
 import * as trash from '../repositories/trash.repository.js';
 import type { SubjectRef } from './taxonomy.service.js';
 import type { Actor } from '../policies/actor.js';
-import { partRange, surahSplits, syllabusName, type SurahPart } from '../policies/surah-parts.js';
+import { partLabels, partRange, surahSplits, syllabusName, type SurahPart } from '../policies/surah-parts.js';
 
 /**
  * Reference-data selectors — Academic Years, and which Subjects a Level teaches
@@ -628,7 +628,7 @@ export interface LevelSurahRef {
 export interface LevelSyllabusRef extends LevelSurahRef {
   /** `null` = the whole Surah; 1 or 2 only for البقرة. */
   part: SurahPart | null;
-  /** «البقرة الجزء الثاني (الحزب الثالث و الرابع و الخامس)», or the Surah's name. */
+  /** «البقرة الجزء الثاني (من الحزب الثالث الى آخر السورة)», or the Surah's name. */
   syllabus_name: string;
   from_ayah: number;
   to_ayah: number;
@@ -829,10 +829,18 @@ export async function unassignSurahFromLevel(
  */
 export async function listPublicSurahs(
   prisma: PrismaClient,
-): Promise<{ surah_id: number; surah_name: string; revelation: 'makki' | 'madani' }[]> {
+): Promise<
+  { surah_id: number; surah_name: string; revelation: 'makki' | 'madani'; parts: { part: 1 | 2; label: string }[] }[]
+> {
   const rows = await prisma.quranSurah.findMany({
     select: { surahId: true, nameArabic: true, revelation: true },
     orderBy: { surahId: 'asc' },
   });
-  return rows.map((r) => ({ surah_id: r.surahId, surah_name: r.nameArabic, revelation: r.revelation }));
+  // R265 — a split Surah's parts, named in one place (`partLabels`).
+  return rows.map((r) => ({
+    surah_id: r.surahId,
+    surah_name: r.nameArabic,
+    revelation: r.revelation,
+    parts: partLabels(r.surahId),
+  }));
 }

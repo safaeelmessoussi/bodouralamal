@@ -92,9 +92,8 @@ export interface ContentItem {
   stream_url?: string | null;
   /** R247 — the academic year it was filed in («حسب السورة» groups by it). */
   academic_year_label?: string;
-  /** R247 — on an image: the recording it is a page of, and its place there. */
-  slide_of?: string | null;
-  slide_position?: number | null;
+  /** R247/R265 — on an image: every recording it is a page of, with its place there. */
+  pages_of?: PageOf[];
   /** R263 — an image cut from a «مطبوع». */
   print_page?: boolean;
   /** R247 — the class sessions it is attached to; a session's images are
@@ -153,6 +152,22 @@ export interface LevelContent {
 /* ── The whole library at once (the Owner, 2026-09-25) ──────────────────── */
 
 /** One item's place on every axis a reader may filter by. */
+/** R265 — one recording an image is a page of, and its place among that recording's pages. */
+export interface PageOf {
+  recording_id: string;
+  position: number;
+}
+
+/** R247/R265 — is this image a page of some recording? */
+export function isPage(item: { pages_of?: readonly PageOf[] }): boolean {
+  return (item.pages_of?.length ?? 0) > 0;
+}
+
+/** R265 — its place among `recording`'s pages, or `null` when it is not one of them. */
+export function pagePosition(item: { pages_of?: readonly PageOf[] }, recording: string): number | null {
+  return item.pages_of?.find((page) => page.recording_id === recording)?.position ?? null;
+}
+
 export interface LibraryEntry {
   item: ContentItem;
   category_id: string;
@@ -205,8 +220,7 @@ export async function fetchLibraryEntries(token: string | null = null): Promise<
       whole_category: row.whole_category,
       stream_url: row.stream_url ?? null,
       academic_year_label: row.academic_year_label,
-      slide_of: row.slide_of ?? null,
-      slide_position: row.slide_position ?? null,
+      pages_of: row.pages_of ?? [],
       print_page: row.print_page ?? false,
       session_ids: row.session_ids ?? [],
       display_order: row.display_order ?? null,
@@ -337,13 +351,13 @@ export async function fetchContentLevels(token: string | null = null): Promise<L
  */
 const MAX_INDEX_PAGES = 10;
 
-async function fetchAllLibraryRows(token: string | null): Promise<LibraryItemWire[]> {
+async function fetchAllLibraryRows(token: string | null, filter = ''): Promise<LibraryItemWire[]> {
   const rows: LibraryItemWire[] = [];
   let page = 1;
   let total = Infinity;
   while (rows.length < total && page <= MAX_INDEX_PAGES) {
     const body = await api<{ data: LibraryItemWire[]; meta: { total: number } }>(
-      `/library?page=${String(page)}&page_size=${String(MAX_PAGE_SIZE)}`,
+      `/library?page=${String(page)}&page_size=${String(MAX_PAGE_SIZE)}${filter}`,
       { token },
     );
     total = body.meta.total;
@@ -352,6 +366,20 @@ async function fetchAllLibraryRows(token: string | null): Promise<LibraryItemWir
     page += 1;
   }
   return rows;
+}
+
+/**
+ * R265 — every image of a Level (and Surah), page after page: a «مطبوع» cut
+ * into pages holds more than one page of the list (البقرة: 186).
+ */
+export async function fetchLibraryImages(
+  levelId: string,
+  surahId: number | null,
+  token: string | null,
+): Promise<{ id: string; title: string }[]> {
+  const surah = surahId === null ? '' : `&surah_id=${String(surahId)}`;
+  const rows = await fetchAllLibraryRows(token, `&level_id=${encodeURIComponent(levelId)}${surah}&kind=image`);
+  return rows.map((row) => ({ id: row.id, title: row.title }));
 }
 
 /** TD-10 caps a page at 100. The library is filtered to one Level here, so this
@@ -410,9 +438,8 @@ interface LibraryItemWire {
   subject_shared?: boolean;
   /** R223 — a public audio's stable address. */
   stream_url?: string | null;
-  /** R247 — absent from a server older than it. */
-  slide_of?: string | null;
-  slide_position?: number | null;
+  /** R247/R265 — absent from a server older than it. */
+  pages_of?: PageOf[];
   session_ids?: string[];
   /** R263 — absent from a server older than it. */
   print_page?: boolean;
@@ -423,7 +450,7 @@ interface LibraryItemWire {
  * it is a page of; until it is attached it waits in «مكتبة المحتوى».
  */
 export function withoutWaitingPages(rows: readonly LibraryEntry[]): LibraryEntry[] {
-  return rows.filter((row) => !row.item.print_page || !!row.item.slide_of);
+  return rows.filter((row) => !row.item.print_page || isPage(row.item));
 }
 
 /**
@@ -610,4 +637,31 @@ export async function saveRecordingSlides(
       body: { slide_ids: slideIds },
     })
   ).data;
+}
+
+/** R265 — a class session an item may be attached to (`GET /content/session-choices`). */
+export interface SessionChoice {
+  id: string;
+  date: string;
+  start_time: string | null;
+  title: string;
+  /** «الاثنين 9 نونبر 2026» — what a title built for it ends with. */
+  date_label: string;
+}
+
+export interface SessionChoiceFilter {
+  levelId: string;
+  academicYearId: string;
+  subjectId?: string;
+  surahId?: number | null;
+  branchId?: string;
+}
+
+/** R265 — the sessions the caller may attach an item to, narrowed by its form, newest first. */
+export async function fetchSessionChoices(filter: SessionChoiceFilter, token: string | null): Promise<SessionChoice[]> {
+  const query = new URLSearchParams({ level_id: filter.levelId, academic_year_id: filter.academicYearId });
+  if (filter.subjectId) query.set('subject_id', filter.subjectId);
+  if (filter.surahId !== undefined && filter.surahId !== null) query.set('surah_id', String(filter.surahId));
+  if (filter.branchId) query.set('branch_id', filter.branchId);
+  return (await api<{ data: SessionChoice[] }>(`/content/session-choices?${query.toString()}`, { token })).data;
 }

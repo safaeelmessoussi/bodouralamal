@@ -27,6 +27,7 @@ import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
+import { useSurahParts } from '../../lib/surah-parts.js';
 
 /**
  * `/admin/level-surahs` — **مقرر الحفظ** (§4.5, §7, BR-11; M4c).
@@ -301,6 +302,8 @@ function SyllabusDialog({
   const [selected, setSelected] = useState<string[]>(current.map((s) => String(s.surah_id)));
   const [part, setPart] = useState<string>(currentPart === null ? '' : String(currentPart));
   const teachesBaqara = selected.includes(String(BAQARA));
+  // R265 — the parts' names as the server gives them.
+  const baqaraParts = useSurahParts(BAQARA);
   const [all, setAll] = useState<LevelSurahRef[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -383,8 +386,7 @@ function SyllabusDialog({
           onChange={setPart}
           options={[
             { value: '', label: t('admin.levelSurahs.baqaraWhole') },
-            { value: '1', label: t('admin.levelSurahs.baqaraPart1') },
-            { value: '2', label: t('admin.levelSurahs.baqaraPart2') },
+            ...baqaraParts.map((p) => ({ value: String(p.part), label: p.label })),
           ]}
           hint={t('admin.levelSurahs.baqaraHint')}
         />

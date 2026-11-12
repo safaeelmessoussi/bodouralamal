@@ -38,6 +38,8 @@ export interface UploadMeta {
   surah_id?: number;
   /** R259 — the part of سورة البقرة (1 | 2); only with `surah_id: 2`. */
   surah_part?: 1 | 2;
+  /** R265 — the class session the item is attached to once stored. */
+  session_id?: string;
   /** R215 — who made it, and in which capacity; absent names nobody. */
   author_id?: string;
   author_role?: 'teacher' | 'assistant' | 'admin' | 'student';

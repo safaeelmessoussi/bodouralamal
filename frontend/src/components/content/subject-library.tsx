@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { saveContentOrder, type ContentItem, type LibraryEntry } from '../../adapters/content.js';
+import { isPage, saveContentOrder, type ContentItem, type LibraryEntry } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
 import { Button } from '../ui/button.js';
 import { DataTable } from '../ui/data-table.js';
@@ -55,7 +55,7 @@ export function groupBySubject(
   const groups = new Map<string, SubjectGroup>();
   const seen = new Set<string>();
   for (const entry of entries) {
-    if (!isGeneralEntry(entry) || entry.item.slide_of) continue;
+    if (!isGeneralEntry(entry) || isPage(entry.item)) continue;
     const id = entry.subject_id ?? '';
     if (seen.has(`${id}:${entry.item.id}`)) continue;
     seen.add(`${id}:${entry.item.id}`);
@@ -67,11 +67,12 @@ export function groupBySubject(
     group.items.push({ ...entry.item, subjectName: entry.subject_name });
   }
   // A recording's own pages come with it, as on a Surah's page (R247).
-  const pages = entries.filter((e) => e.item.slide_of);
+  const pages = entries.filter((e) => isPage(e.item));
   for (const group of groups.values()) {
     const recordings = new Set(group.items.filter((i) => i.kind === 'audio').map((i) => i.id));
     for (const page of pages) {
-      if (recordings.has(page.item.slide_of!) && !group.items.some((i) => i.id === page.item.id)) {
+      const ofThese = page.item.pages_of!.some((p) => recordings.has(p.recording_id));
+      if (ofThese && !group.items.some((i) => i.id === page.item.id)) {
         group.items.push({ ...page.item, subjectName: page.subject_name });
       }
     }
@@ -152,7 +153,7 @@ export function SubjectLibrary({
                 onClick={() => choose(subject.id)}
               >
                 <span className="surah-library__name">{subject.name}</span>
-                <span className="surah-library__count">{subject.items.filter((i) => !i.slide_of).length}</span>
+                <span className="surah-library__count">{subject.items.filter((i) => !isPage(i)).length}</span>
               </button>
             </li>
           ))}

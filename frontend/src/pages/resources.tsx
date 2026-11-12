@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { fetchLibraryEntries, withoutWaitingPages, type ContentItem } from '../adapters/content.js';
+import { fetchLibraryEntries, isPage, withoutWaitingPages, type ContentItem } from '../adapters/content.js';
 import { fetchCalendarBootstrap } from '../adapters/calendar.js';
 import type { LibraryEntry } from '../adapters/content.js';
 import { normalizeArabic } from '../components/content/content-filters.js';
@@ -328,7 +328,9 @@ function SurahView({
   const focus = useMemo(() => {
     if (focusId === null || load.kind !== 'ready') return null;
     const entry = load.data.find((e) => e.item.id === focusId) ?? null;
-    const parent = entry?.item.slide_of ? load.data.find((e) => e.item.id === entry.item.slide_of) : undefined;
+    const parent = entry && isPage(entry.item)
+      ? load.data.find((e) => entry.item.pages_of!.some((page) => page.recording_id === e.item.id))
+      : undefined;
     return parent ?? entry;
   }, [focusId, load]);
   const urlSurah = useMemo(() => {
@@ -500,7 +502,7 @@ function LibraryView({
         ? load.data.filter(
             // R256 — «محتوى المستويات» holds what is split by Level: nothing
             // about a Surah («تفسير» holds it) and nothing general («محتوى عام»).
-            (e) => e.shelf_kind === scope && !e.item.slide_of && e.surah_id === null && !isGeneralEntry(e),
+            (e) => e.shelf_kind === scope && !isPage(e.item) && e.surah_id === null && !isGeneralEntry(e),
           )
         : [],
     [load, scope],

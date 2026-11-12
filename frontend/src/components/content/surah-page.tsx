@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
-import { fetchContentUrl, type ContentItem } from '../../adapters/content.js';
+import { fetchContentUrl, isPage, pagePosition, type ContentItem } from '../../adapters/content.js';
 import { t } from '../../i18n/index.js';
 import { Details } from '../history/humanity-details.js';
 import { HumanityDiagram } from '../history/humanity-diagram.js';
@@ -83,7 +83,9 @@ export function SurahPage({
   const focusItem = (() => {
     if (focusId === null) return null;
     const item = items.find((i) => i.id === focusId) ?? null;
-    if (item && pages.ids.has(item.id) && item.slide_of) return items.find((i) => i.id === item.slide_of) ?? item;
+    if (item && pages.ids.has(item.id) && isPage(item)) {
+      return items.find((i) => item.pages_of!.some((page) => page.recording_id === i.id)) ?? item;
+    }
     return item;
   })();
   const focusSection = focusItem ? (shelves.find((s) => s.items.includes(focusItem))?.key ?? null) : null;
@@ -381,7 +383,8 @@ export function byYear<T extends Pick<ContentItem, 'academic_year_label'>>(
 
 /**
  * **R247 — which images are pages of what is heard** (the Owner, 2026-10-28).
- * A recording's own (`slide_of`, in `slide_position` order), and a class
+ * A recording's own (`pages_of`, in its order there — R265: an image may be
+ * a page of several, and stands beside each), and a class
  * session's: the images attached to a session one of this page's recordings
  * belongs to, in the page's order. `ids` — every image shown that way, which
  * no shelf repeats.
@@ -399,8 +402,9 @@ export function slidesOf(items: readonly SurahItem[]): {
   const ids = new Set<string>();
   for (const item of items) {
     if (item.kind !== 'image') continue;
-    if (item.slide_of && recordings.has(item.slide_of)) {
-      byRecording.set(item.slide_of, [...(byRecording.get(item.slide_of) ?? []), item]);
+    const own = (item.pages_of ?? []).filter((page) => recordings.has(page.recording_id));
+    if (own.length > 0) {
+      for (const page of own) byRecording.set(page.recording_id, [...(byRecording.get(page.recording_id) ?? []), item]);
       ids.add(item.id);
       continue;
     }
@@ -410,7 +414,9 @@ export function slidesOf(items: readonly SurahItem[]): {
       ids.add(item.id);
     }
   }
-  for (const list of byRecording.values()) list.sort((a, b) => (a.slide_position ?? 0) - (b.slide_position ?? 0));
+  for (const [recording, list] of byRecording) {
+    list.sort((a, b) => (pagePosition(a, recording) ?? 0) - (pagePosition(b, recording) ?? 0));
+  }
   return { byRecording, bySession, ids };
 }
 
@@ -885,6 +891,7 @@ export function AudioTrack({
               title={t('content.download')}
             >
               <Icon name="download" size={18} />
+              <span>{t('content.bySurah.downloadLabel')}</span>
             </button>
           </div>
         )}

@@ -582,3 +582,11 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `humanity-data.ts`: «محاور السورة» line for surahs 1–6, 19 (from the «مطبوع»), history locales shifted (`lines.N`) and translated; R239 card test allows it.
 - Production: `ops:cut-print-pages` cut 503 pages from six «مطبوع» (dry run first).
 - Verified: integration 94/94 + reader 242/242; frontend 1721, lint, build, guards; browser on Localhost at 1849 px: picking «المرأة — وميض الأمل» moves no filter (all 176 px), المؤطِّرات search and selects on one line; phone calendar: the swipe line, Hijri = Gregorian 17 px on one row, soft-green weekday header, no overflow; «محاور السورة» under «نوع السورة» on المائدة.
+
+## 2026-11-12 — SRS Revision 265: an image on several recordings, «الحصة» in the content forms, number-aware titles, one naming of the Baqara parts
+- `recording_slide` PK (recording_id, slide_id) (migration r265); `pages_of` replaces `slide_of`/`slide_position` on library rows; client `isPage`/`pagePosition`.
+- `educational_content.title` COLLATE "ar-num-icu" (ICU `ar-u-kn`); `fetchLibraryImages` pages through every image, `compareText` orders the picker.
+- `GET /content/session-choices` (`session-choices.service.ts`); `content_meta.session_id` (checked at initiate, attached on completion) and PATCH `session_id` (`attachToSession`); `SessionChoiceField` in `useContentScope` and the edit dialog; `withSessionDate`/`trailingDate`; built titles capped at 120.
+- `partLabels` in `policies/surah-parts.ts` → `GET /quran-surahs` `parts` → `useSurahParts`; part 2 «الجزء الثاني (من الحزب الثالث الى آخر السورة)»; translations' pattern updated; `ops:rename-surah-parts` (dry run by default).
+- Arrows `--color-primary-soft`/`--color-primary-strong`; `content.bySurah.downloadLabel` «تحميل» in every language.
+- Verified: integration content 97/97 + reader 244/244 («تحميل», green arrows), library + quran suites (165 with content on the first run); seed drill; backend 395, frontend 1723, lints, build, guards; Localhost migrated: «الحصة» in upload (106 sessions for ضياء الأمل, past first) and edit dialogs, built title ends «… السبت 28 غشت 2027»; title sort in Arabic, numbers as numbers.

@@ -898,6 +898,8 @@ export function createApp(
   guarded.put('/content/:id/slides', contentCtl.setSlides(prisma));
   // R258 — the order of a Subject's items in «محتوى عام».
   guarded.put('/content/order', contentCtl.setOrder(prisma));
+  // R265 — the sessions an item may be attached to, from its own form.
+  guarded.get('/content/session-choices', contentCtl.sessionChoices(prisma));
   // TD-12: minting is one of the high-risk operations where an unexpired token
   // is not sufficient — the service re-asserts the caller against live rows.
 

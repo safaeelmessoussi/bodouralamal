@@ -256,13 +256,15 @@ describe('R247 — by academic year, and the pages of what is heard', async () =
     const items = [
       at('r1', 'audio/mpeg', { title: 'الحصة 1 الجزء 1', session_ids: ['s1'] }),
       at('r2', 'audio/mpeg', { title: 'الحصة 1 الجزء 2', session_ids: ['s1'] }),
-      at('p2', 'image/png', { slide_of: 'r1', slide_position: 1 }),
-      at('p1', 'image/png', { slide_of: 'r1', slide_position: 0 }),
+      at('p2', 'image/png', { pages_of: [{ recording_id: 'r1', position: 1 }, { recording_id: 'r2', position: 0 }] }),
+      at('p1', 'image/png', { pages_of: [{ recording_id: 'r1', position: 0 }] }),
       at('g', 'image/png', { session_ids: ['s1'] }),
       at('drawing', 'image/png'),
     ];
     const pages = slidesOf(items);
     expect(pages.byRecording.get('r1')?.map((i) => i.id)).toEqual(['p1', 'p2']);
+    // R265 — a page of two recordings stands beside each, in each one's order.
+    expect(pages.byRecording.get('r2')?.map((i) => i.id)).toEqual(['p2']);
     expect(pages.bySession.get('s1')?.map((i) => i.id)).toEqual(['g']);
     expect([...pages.ids].sort()).toEqual(['g', 'p1', 'p2']);
     const html = render(items);
@@ -276,7 +278,7 @@ describe('R247 — by academic year, and the pages of what is heard', async () =
   it("brings a recording's page to its Surah when the image is filed under none", () => {
     const recording = entry('rec', 1, 'audio/mpeg');
     const page = entry('page', null, 'image/png');
-    page.item = { ...page.item, slide_of: 'rec', slide_position: 0 };
+    page.item = { ...page.item, pages_of: [{ recording_id: 'rec', position: 0 }] };
     const stray = entry('stray', null, 'image/png');
     const [fatiha] = groupBySurah([recording, page, stray]);
     expect(fatiha?.items.map((i) => i.id).sort()).toEqual(['page', 'rec']);
@@ -287,7 +289,7 @@ describe('R248 — a recording\'s page is shown beside it and nowhere else', () 
   it('never puts a page on a Surah shelf of its own, only with its recording', () => {
     const recording = entry('rec', 1, 'audio/mpeg');
     const page = entry('page', 2, 'image/png');
-    page.item = { ...page.item, slide_of: 'rec', slide_position: 0 };
+    page.item = { ...page.item, pages_of: [{ recording_id: 'rec', position: 0 }] };
     const drawing = entry('drawing', 2, 'image/png');
     const groups = groupBySurah([recording, page, drawing]);
     expect(groups.find((g) => g.id === 1)?.items.map((i) => i.id).sort()).toEqual(['page', 'rec']);

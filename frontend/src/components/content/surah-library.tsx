@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import type { ContentItem, LibraryEntry } from '../../adapters/content.js';
+import { isPage, type ContentItem, type LibraryEntry } from '../../adapters/content.js';
 import { listPublicSurahs, type PublicSurah } from '../../adapters/quran-surahs.js';
 import { t } from '../../i18n/index.js';
 import { SURAH_DIAGRAMS, type SurahDiagrams } from '../history/surah-diagrams.js';
@@ -63,7 +63,7 @@ export function groupBySurah(entries: readonly LibraryEntry[]): SurahGroup[] {
   const seen = new Set<string>();
   for (const entry of entries) {
     // R248 — a recording's page is never on a Surah's shelf of its own: it comes with its recording below.
-    if (entry.surah_id === null || entry.item.slide_of) continue;
+    if (entry.surah_id === null || isPage(entry.item)) continue;
     const key = `${entry.surah_id}:${entry.item.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -86,7 +86,9 @@ export function groupBySurah(entries: readonly LibraryEntry[]): SurahGroup[] {
     for (const entry of images.values()) {
       const image = entry.item;
       if (present.has(image.id)) continue;
-      const page = image.slide_of ? recordings.has(image.slide_of) : (image.session_ids ?? []).some((s) => sessions.has(s));
+      const page = isPage(image)
+        ? image.pages_of!.some((p) => recordings.has(p.recording_id))
+        : (image.session_ids ?? []).some((s) => sessions.has(s));
       if (page) group.items.push({ ...image, subjectName: entry.subject_name });
     }
   }

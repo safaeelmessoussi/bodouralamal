@@ -85,6 +85,8 @@ export const initiateUploadSchema = z
         surah_id: z.number().int().min(1).max(114).nullable().optional(),
         /** R259 — the part of سورة البقرة (1 | 2); only with `surah_id: 2`. */
         surah_part: z.union([z.literal(1), z.literal(2)]).nullable().optional(),
+        /** R265 — the class session the item is attached to once it is stored. */
+        session_id: uuid.optional(),
         /** TD-9 replacement: a new key for an existing record, never an overwrite. */
         replaces_content_id: uuid.optional(),
         /** R215 — who made it, and in which capacity; optional, either may be absent. */

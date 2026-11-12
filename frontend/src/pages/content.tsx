@@ -38,8 +38,10 @@ import { Feedback } from '../components/ui/feedback.js';
 import { Badge } from '../components/ui/badge.js';
 import { GLOBAL } from '../components/content/content-scope-fields.js';
 import { TitleNumbersFields } from '../components/content/title-numbers-fields.js';
-import { composeTitle, parseTitle, type TitleNumbers } from '../lib/content-title.js';
+import { composeTitle, parseTitle, trailingDate, withSessionDate, type TitleNumbers } from '../lib/content-title.js';
 import { subjectWorksBySurah, surahChoices } from '../components/scheduling/surahs.js';
+import { partLabel, useSurahParts } from '../lib/surah-parts.js';
+import { SessionChoiceField } from '../components/content/session-choice-field.js';
 
 /**
  * The content library management screen — `/admin/content` (§5.6) and
@@ -137,6 +139,8 @@ function ContentEditDialog({
     additionalLevelIds: string[];
     surahId: number | null;
     surahPart: 1 | 2 | null;
+    /** R265 — the session chosen in the form (`''` for none). */
+    sessionId: string;
     description: string;
     academicYearId: string;
     branchIds: string[];
@@ -158,6 +162,9 @@ function ContentEditDialog({
     surahId: row.surah_id ?? null,
     // R259 — its part of سورة البقرة, from the row.
     surahPart: ((row.surah_part ?? null) as 1 | 2 | null),
+    // R265 — the session it is attached to (its first); choosing another
+    // attaches it there too.
+    sessionId: row.session_ids?.[0] ?? '',
     // R169 §10 — the item's OTHER Levels, hydrated from the row.
     additionalLevelIds: (row.additional_levels ?? []).map((level) => level.id),
     // R201 — the description, the year and the branches (home first), from the row.
@@ -175,18 +182,22 @@ function ContentEditDialog({
    * (the Subject, the Surah and its part, and the description, as they stand).
    */
   const [numbers, setNumbers] = useState<TitleNumbers>(() => parseTitle(row.title));
+  // R265 — the part's name as the server gives it.
+  const baqaraParts = useSurahParts(2);
   const surahNameOf = (id: number | null): string | null =>
     id === null
       ? null
       : (surahChoices(facts, [form.levelId, ...form.additionalLevelIds]).find((s) => s.id === id)?.name ??
         (id === row.surah_id ? (row.surah_name ?? null) : null));
+  // R265 — a rebuilt title keeps the session date it ends with.
   const rebuild = (next: TitleNumbers, f: typeof form): string =>
     composeTitle({
       numbers: next,
       subject: subjects.find((o) => o.value === f.subjectId)?.label ?? '',
       surahName: surahNameOf(f.surahId),
-      surahPart: f.surahId === 2 ? f.surahPart : null,
+      surahPartLabel: partLabel(baqaraParts, f.surahId === 2 ? f.surahPart : null),
       description: f.description,
+      sessionDate: trailingDate(f.title),
     });
   const error = form.title.trim() === '' ? t('common.required') : null;
   const branchError = !mayAssignGlobal && form.branchIds.length === 0 ? t('common.required') : null;
@@ -248,6 +259,30 @@ function ContentEditDialog({
         error={touched ? branchError : null}
       />
 
+      {/* R265 — the session it belongs to; choosing one dates the title. */}
+      <SessionChoiceField
+        filter={
+          form.wholeCategory || form.levelId === '' || form.academicYearId === ''
+            ? null
+            : {
+                levelId: form.levelId,
+                academicYearId: form.academicYearId,
+                ...(form.subjectId !== '' ? { subjectId: form.subjectId } : {}),
+                ...(form.surahId !== null ? { surahId: form.surahId } : {}),
+                ...(form.branchIds.length === 1 ? { branchId: form.branchIds[0]! } : {}),
+              }
+        }
+        value={form.sessionId}
+        onChange={(choice) =>
+          setForm((f) => ({
+            ...f,
+            sessionId: choice?.id ?? '',
+            title: choice ? withSessionDate(f.title, choice.date_label) : f.title,
+          }))
+        }
+        token={token}
+      />
+
       <SelectField
         label={t('content.col.level')}
         value={form.levelId}
@@ -296,10 +331,7 @@ function ContentEditDialog({
             });
           }}
           placeholder={t('content.upload.surahPartWhole')}
-          options={[
-            { value: '1', label: t('content.upload.surahPart1') },
-            { value: '2', label: t('content.upload.surahPart2') },
-          ]}
+          options={baqaraParts.map((p) => ({ value: String(p.part), label: p.label }))}
         />
       ) : null}
 
@@ -407,6 +439,8 @@ interface LibraryRow {
   surah_name?: string | null;
   /** R259 — the part of سورة البقرة, or null. */
   surah_part?: number | null;
+  /** R247 — the class sessions it is attached to. */
+  session_ids?: string[];
 }
 
 /** R250 — a row as the shared previewer reads an item. */
@@ -674,6 +708,8 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     additionalLevelIds: string[];
     surahId: number | null;
     surahPart: 1 | 2 | null;
+    /** R265 — the session chosen in the form (`''` for none). */
+    sessionId: string;
     description: string;
     academicYearId: string;
     branchIds: string[];
@@ -707,6 +743,10 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           ...(patch.surahId !== (editing.surah_id ?? null) ? { surah_id: patch.surahId } : {}),
           // R259 — sent only when it changed; `null` clears it.
           ...(patch.surahPart !== (editing.surah_part ?? null) ? { surah_part: patch.surahPart } : {}),
+          // R265 — a session newly chosen: the item is attached there too.
+          ...(patch.sessionId !== '' && !(editing.session_ids ?? []).includes(patch.sessionId)
+            ? { session_id: patch.sessionId }
+            : {}),
           // R169 §10 — sent only when the SET changed, like every field here.
           // «كل مستويات الفئة» makes naming Levels redundant, so it clears them.
           ...additionalLevelsPatch(editing, patch),

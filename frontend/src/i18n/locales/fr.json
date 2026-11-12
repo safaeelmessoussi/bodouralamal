@@ -580,6 +580,7 @@
  "content.bySurah.indexLabel": "Sourates disposant de contenu",
  "content.bySurah.empty": "Aucun contenu n'est encore lié à une sourate. Le contenu peut être consulté « Contenu des niveaux ».",
  "content.bySurah.play": "Écouter",
+ "content.bySurah.downloadLabel": "Télécharger",
  "content.bySurah.unavailable": "Impossible de lire ce cours pour le moment. Merci de réessayer plus tard.",
  "content.bySurah.closeAll": "Tout replier",
  "content.quiz.open": "Tester sa compréhension",

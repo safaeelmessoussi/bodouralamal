@@ -47,6 +47,11 @@ export type SortAccessors<T> = Record<string, (row: T) => SortValue>;
 
 const collator = new Intl.Collator('ar', { numeric: true, sensitivity: 'base' });
 
+/** Arabic order with numbers read as numbers («صفحة 2» before «صفحة 10») — for lists outside a table. */
+export function compareText(a: string, b: string): number {
+  return collator.compare(a, b);
+}
+
 function compare(a: SortValue, b: SortValue): number {
   const aEmpty = a === null || a === undefined || a === '';
   const bEmpty = b === null || b === undefined || b === '';

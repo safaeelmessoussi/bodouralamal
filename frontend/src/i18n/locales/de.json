@@ -580,6 +580,7 @@
  "content.bySurah.indexLabel": "Suren mit Inhalten",
  "content.bySurah.empty": "Es gibt noch keine Inhalte, die einer Sure zugeordnet sind. Die Inhalte können „Inhalte der Stufen“ eingesehen werden.",
  "content.bySurah.play": "Anhören",
+ "content.bySurah.downloadLabel": "Herunterladen",
  "content.bySurah.unavailable": "Diese Lektion kann gerade nicht abgespielt werden. Bitte später erneut versuchen.",
  "content.bySurah.closeAll": "Alle schließen",
  "content.quiz.open": "Verständnis prüfen",

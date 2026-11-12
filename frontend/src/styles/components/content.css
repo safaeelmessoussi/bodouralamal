@@ -1326,10 +1326,12 @@
   inline-size: 2.25rem;
   block-size: 2.25rem;
   padding: 0;
-  border: 1px solid var(--color-border);
+  /* R265 — seen on the page (the soft brand green and its strong green), still
+     quieter than the play button. */
+  border: 1px solid color-mix(in srgb, var(--color-primary) 45%, transparent);
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--color-surface-raised) 88%, transparent);
-  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary-soft) 92%, transparent);
+  color: var(--color-primary-strong);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
 }
@@ -1738,5 +1740,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+
+/* R265 — «تحميل» beside the icon, in the row's quiet text: what the button
+   does is read, not guessed. */
+.surah-player__button--download {
+  gap: var(--space-1);
+  padding-inline: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
   color: var(--color-text-secondary);
 }

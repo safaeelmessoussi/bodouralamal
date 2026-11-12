@@ -188,7 +188,7 @@ export function FileUploader({
       // The same array when nothing moved, so this does not run again.
       return changed ? next : current;
     });
-  }, [titleParts?.subject, titleParts?.surahName, titleParts?.surahPart, items]);
+  }, [titleParts?.subject, titleParts?.surahName, titleParts?.surahPartLabel, items]);
   useEffect(() => {
     onDirtyChange?.(entered);
   }, [entered, onDirtyChange]);

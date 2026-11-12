@@ -229,8 +229,8 @@ export interface LibraryItem {
    *  address (§3.1) and the page plays it in one click; `null` otherwise. */
   publicAudioKey: string | null;
   /** R247 — on an image: the live recording it is a page of, and its place. */
-  slideOfId: string | null;
-  slidePosition: number | null;
+  /** R265 — the live recordings it is a page of, each with its place there. */
+  pagesOf: { recording_id: string; position: number }[];
   /** R263 — an image cut from a «مطبوع»: shown to a reader only as a recording's page. */
   printPage: boolean;
   /** R247 — the live sessions it is attached to (a session's images are the
@@ -567,8 +567,13 @@ export async function listLibrary(
                        AND c."mime_type" LIKE 'audio/%'
                   THEN c."storage_key" END AS "publicAudioKey",
              (c."print_page_of" IS NOT NULL) AS "printPage",
-             rs."recording_id"           AS "slideOfId",
-             rs."position"               AS "slidePosition",
+             COALESCE((
+               SELECT json_agg(json_build_object('recording_id', rs."recording_id", 'position', rs."position")
+                               ORDER BY rs."created_at", rs."recording_id")
+               FROM "recording_slide" rs
+               JOIN "educational_content" rec ON rec."id" = rs."recording_id" AND rec."deleted_at" IS NULL
+               WHERE rs."slide_id" = c."id"
+             ), '[]'::json)              AS "pagesOf",
              COALESCE((
                SELECT json_agg(DISTINCT sc."session_id")
                FROM "session_content" sc
@@ -576,11 +581,6 @@ export async function listLibrary(
                WHERE sc."educational_content_id" = c."id" AND sc."deleted_at" IS NULL
              ), '[]'::json)              AS "sessionIds"
       FROM "educational_content" c
-      -- R247 — the recording an image is a page of, while that recording lives.
-      LEFT JOIN "recording_slide" rs ON rs."slide_id" = c."id" AND EXISTS (
-        SELECT 1 FROM "educational_content" rec
-        WHERE rec."id" = rs."recording_id" AND rec."deleted_at" IS NULL
-      )
       LEFT JOIN "quran_surah" q ON q."surah_id" = c."surah_id"
       JOIN "level" l          ON l."id"  = c."level_id"
       JOIN "category" cat     ON cat."id" = l."category_id"

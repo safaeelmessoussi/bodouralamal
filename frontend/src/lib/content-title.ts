@@ -1,7 +1,7 @@
 /**
  * **R259 — a content title, built from its parts** (the Owner, 2026-10-30):
  *
- * «تسجيل صوتي تفسير سورة البقرة الجزء الثاني الحصة 7 الجزء 2 تعريف الحمد»
+ * «تسجيل صوتي تفسير سورة البقرة الجزء الثاني (من الحزب الثالث الى آخر السورة) الحصة 7 الجزء 2 تعريف الحمد»
  * «صورة 6 تفسير سورة الفاتحة الحصة 1 الجزء 2 تعريف الحمد»
  *
  * The format (with its page number), the Subject («تفسير» for تفسير القرآن),
@@ -37,11 +37,6 @@ export function subjectWord(name: string): string {
   return name.trim() === 'تفسير القرآن' ? 'تفسير' : name.trim();
 }
 
-/** R232's two parts of سورة البقرة, in a title. */
-export function surahPartWord(part: 1 | 2 | null): string {
-  return part === 1 ? 'الجزء الأول' : part === 2 ? 'الجزء الثاني' : '';
-}
-
 const digits = (value: string): string => value.replace(/[^\d]/g, '');
 
 /** The title, from its parts; empty parts leave no trace. */
@@ -49,8 +44,11 @@ export function composeTitle(input: {
   numbers: TitleNumbers;
   subject: string;
   surahName: string | null;
-  surahPart: 1 | 2 | null;
+  /** R265 — the part's name as the server gives it (`lib/surah-parts.ts`), or `''`. */
+  surahPartLabel: string;
   description: string;
+  /** R265 — the chosen session's date («الاثنين 9 نونبر 2026»), last; `''` for none. */
+  sessionDate?: string;
 }): string {
   const { numbers } = input;
   const page = digits(numbers.page);
@@ -62,21 +60,23 @@ export function composeTitle(input: {
     numbers.format === '' ? '' : [numbers.format, page].filter(Boolean).join(' '),
     subjectWord(input.subject),
     input.surahName ? `سورة ${input.surahName}` : '',
-    input.surahName ? surahPartWord(input.surahPart) : '',
+    input.surahName ? input.surahPartLabel.trim() : '',
     session === '' ? '' : `الحصة ${session}`,
     part === '' ? '' : `الجزء ${part}`,
     description,
+    (input.sessionDate ?? '').trim(),
   ]
     .filter((piece) => piece !== '')
     .join(' ')
-    .slice(0, 200);
+    // The server takes 120 (`content.validators.ts`).
+    .slice(0, 120);
 }
 
 /**
  * The numbers a title holds, for an edit form. Only what is there is read: a
- * title written another way yields empty fields, never a guess. «الجزء الأول»
- * and «الجزء الثاني» (words) are the Surah's part; «الجزء 2» (a number) is the
- * lesson's.
+ * title written another way yields empty fields, never a guess. «الجزء الأول
+ * (…)» and «الجزء الثاني (…)» (words) are the Surah's part; «الجزء 2» (a
+ * number) is the lesson's.
  */
 export function parseTitle(title: string): TitleNumbers {
   const text = title.replace(/\s+/g, ' ').trim();
@@ -138,4 +138,21 @@ export function parseFileName(name: string, kind: string): TitleNumbers {
     session,
     part: number(/ (?:الجزء|جزء|ج) (\d+) /),
   };
+}
+
+/** An Arabic date at a title's end, as the platform writes one: «الاثنين 9 نونبر 2026». */
+const TRAILING_DATE = /\s*(?:الأحد|الاثنين|الإثنين|الثلاثاء|الأربعاء|الخميس|الجمعة|السبت) \d{1,2} \S+ \d{4}$/;
+
+/**
+ * R265 — a title that ends with its session's date: a date already at the end
+ * (typed, or a previous session's) is replaced, never doubled.
+ */
+export function withSessionDate(title: string, dateLabel: string): string {
+  const bare = title.replace(TRAILING_DATE, '').trim();
+  return [bare, dateLabel.trim()].filter((piece) => piece !== '').join(' ').slice(0, 120);
+}
+
+/** The date a title ends with («الاثنين 9 نونبر 2026»), or `''`. */
+export function trailingDate(title: string): string {
+  return TRAILING_DATE.exec(title)?.[0].trim() ?? '';
 }
