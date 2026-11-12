@@ -99,6 +99,13 @@ export interface Occurrence {
    */
   delivery_mode: string | null;
   online_media_mode: string | null;
+  /**
+   * **R266 — when «دخول الحصة» is offered** (server instants): from five
+   * minutes before the start until the window closes, never once the
+   * مؤطِّرة ended the class for everyone. `null` for anything not online.
+   * Optional so an older fixture without it still type-checks.
+   */
+  online_join?: { opens_at: string; closes_at: string; ended: boolean } | null;
   category_id: string | null;
   category_name: string | null;
   level_id: string | null;

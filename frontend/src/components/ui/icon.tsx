@@ -41,7 +41,16 @@ export type IconName =
   // portal's own control for a second copy of the site-wide one.
   | 'sidebar'
   // Arrows to the four corners — «عرض بملء الشاشة» (R185 §5).
-  | 'expand';
+  | 'expand'
+  // R266 — the classroom's control bar.
+  | 'mic'
+  | 'mic-off'
+  | 'camera'
+  | 'camera-off'
+  | 'screen'
+  | 'leave'
+  | 'stop'
+  | 'users';
 
 const PATHS: Record<IconName, string> = {
   menu: 'M4 7h16M4 12h16M4 17h16',
@@ -68,6 +77,14 @@ const PATHS: Record<IconName, string> = {
   // universal "sidebar" glyph, and structurally unlike every other icon here.
   sidebar: 'M4 4h16v16H4V4zM15 4v16',
   expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+  mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3',
+  'mic-off': 'M4 4l16 16M9 9v3a3 3 0 0 0 5 2.2M15 10V6a3 3 0 0 0-5.7-1.3M5 11a7 7 0 0 0 11.5 5.4M19 11a7 7 0 0 1-.6 2.8M12 18v3',
+  camera: 'M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7zm13 4l5-3v8l-5-3z',
+  'camera-off': 'M3 3l18 18M16 11l5-3v8l-2-1.2M14 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 1.2-1.8M9 5h5a2 2 0 0 1 2 2v4',
+  screen: 'M3 5h18v11H3V5zM8 20h8M12 16v4M12 13V8m0 0l-2.5 2.5M12 8l2.5 2.5',
+  leave: 'M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10',
+  stop: 'M6 6h12v12H6V6z',
+  users: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 20a7 7 0 0 1 14 0M16 3.5a4 4 0 0 1 0 7M18 14a6 6 0 0 1 4 6',
 };
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }): ReactNode {

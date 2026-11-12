@@ -22,6 +22,10 @@ import {
   staffsSession,
 } from "../policies/roster-resolution.js";
 import { resolveActingStudent } from "../middleware/child-context.js";
+import * as audit from "../repositories/audit.repository.js";
+import { sessionHeading } from "./class-title.js";
+import { arabicCalendarDate, calendarDateIso, wallClockHHMM } from "../lib/item-title.js";
+import { stopRecording } from "./session-recording.service.js";
 
 /**
  * **Joining an online class (SRS Revision 98, §4.4c, §4.3).**
@@ -62,6 +66,22 @@ export interface JoinAuthorization {
   mediaMode: OnlineMediaMode;
   opensAt: Date;
   closesAt: Date;
+  /** R266 — what the classroom's own header says: the Subject, its Surahs,
+   *  the date and the times. */
+  title: string;
+  surahNames: string[];
+  dateLabel: string;
+  startTime: string | null;
+  endTime: string | null;
+}
+
+/**
+ * `ending` (R266): the مؤطِّرة pressing «إنهاء الحصة للجميع» is not entering —
+ * she may end a class that overran its window, and ending one already ended
+ * must answer again rather than refuse.
+ */
+export interface AuthorizeOptions {
+  ending?: boolean;
 }
 
 export interface JoinResult extends JoinCredentials {
@@ -81,6 +101,7 @@ export async function authorizeJoin(
   sessionId: string,
   activeChildHeader: string | undefined,
   now: Date = new Date(),
+  options: AuthorizeOptions = {},
 ): Promise<JoinAuthorization> {
   /**
    * **TD-12 freshness, and this endpoint earns it.**
@@ -107,6 +128,7 @@ export async function authorizeJoin(
       status: true,
       deliveryMode: true,
       onlineMediaMode: true,
+      onlineEndedAt: true,
       schedule: { select: { branchId: true, deletedAt: true } },
     },
   });
@@ -153,8 +175,17 @@ export async function authorizeJoin(
    * the timetable.
    */
   const window = joinWindowFor(session);
+  /**
+   * **R266 — a class its مؤطِّرة ended for everyone stays ended.** Checked
+   * after authorization for the same disclosure reason as the window.
+   */
+  if (session.onlineEndedAt !== null && !options.ending) {
+    throw new AppError("STATE_CONFLICT", "this class was ended for everyone", {
+      reason: "ENDED",
+    });
+  }
   const state = windowState(window, now);
-  if (state !== "open") {
+  if (state !== "open" && !options.ending) {
     throw new AppError(
       "STATE_CONFLICT",
       state === "too_early"
@@ -177,7 +208,81 @@ export async function authorizeJoin(
     mediaMode: session.onlineMediaMode,
     opensAt: window.opensAt,
     closesAt: window.closesAt,
+    ...(await sessionHeading(prisma, session.id)),
+    dateLabel: arabicCalendarDate(calendarDateIso(session.date) ?? ""),
+    startTime: wallClockHHMM(session.startTime),
+    endTime: wallClockHHMM(session.endTime),
   };
+}
+
+/**
+ * **R266 — «إنهاء الحصة للجميع»** (the Owner, 2026-11-12: «once the teacher
+ * ends the call for everyone, the button should disappear»).
+ *
+ * Teaching staff only — the same people who hold moderation in the room
+ * (R98 §9); an administrator's participation grants no more than that. A live
+ * recording is stopped first, the class is marked ended (once — a second
+ * press answers with the first instant), and then the provider's room is
+ * closed, which puts everybody out of it. Nobody may enter afterwards.
+ *
+ * Idempotent: pressing again after a provider failure retries the closing.
+ */
+export async function endOnlineClass(
+  prisma: PrismaClient,
+  provider: OnlineClassProvider | null,
+  actor: Actor,
+  sessionId: string,
+  now: Date = new Date(),
+): Promise<{ endedAt: Date }> {
+  const authorization = await authorizeJoin(prisma, actor, sessionId, undefined, now, {
+    ending: true,
+  });
+  if (authorization.role !== "teacher" && authorization.role !== "assistant") {
+    throw new AppError("FORBIDDEN", "only the teaching staff may end a class for everyone", {
+      reason: "END_NOT_PERMITTED",
+    });
+  }
+
+  // A recording must end with the class, not run on in an empty room.
+  try {
+    await stopRecording(prisma, provider, actor, sessionId, now);
+  } catch {
+    // «Not recording» is the ordinary case; any other failure is the
+    // reconciler's (R167 §5) — the class still ends.
+  }
+
+  const current = await prisma.session.findFirst({
+    where: { id: sessionId, deletedAt: null },
+    select: { onlineEndedAt: true },
+  });
+  let endedAt = current?.onlineEndedAt ?? null;
+  if (endedAt === null) {
+    endedAt = now;
+    // Only the first press writes; a racing second one finds it set.
+    await prisma.session.updateMany({
+      where: { id: sessionId, deletedAt: null, onlineEndedAt: null },
+      data: { onlineEndedAt: endedAt },
+    });
+    await audit.write(prisma, {
+      actorUserId: actor.userId,
+      ...(actor.activeRole !== undefined ? { activeRole: actor.activeRole } : {}),
+      actionType: "session.online_end",
+      targetEntity: "session",
+      targetId: sessionId,
+      detail: {},
+    });
+  }
+
+  if (provider !== null) {
+    try {
+      await provider.endRoom(authorization.room);
+    } catch {
+      throw new AppError("SERVICE_UNAVAILABLE", "the class was ended but its room could not be closed", {
+        reason: "ROOM_NOT_CLOSED",
+      });
+    }
+  }
+  return { endedAt };
 }
 
 /**
@@ -224,6 +329,7 @@ export async function joinOnlineClass(
     room: authorization.room,
     identity: authorization.identity,
     displayName: authorization.displayName,
+    role: authorization.role,
     grants: grantsFor(authorization.role, authorization.mediaMode),
     ttlSeconds: tokenSecondsFor(window, now),
   });

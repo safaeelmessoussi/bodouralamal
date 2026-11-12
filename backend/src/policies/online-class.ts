@@ -125,12 +125,11 @@ export const RECORDING_SEGMENT_SECONDS = 10;
 /* ─────────────────────────────── join window ─────────────────────────────── */
 
 /**
- * **How early the door opens.** Fifteen minutes: long enough for a مؤطِّرة to
- * be in the room and settled before her students arrive, short enough that a
- * token minted for the wrong occurrence of a weekly class is refused rather
- * than quietly accepted.
+ * **How early the door opens.** Five minutes (the Owner, 2026-11-12 — R266:
+ * «the button should appear 5 minutes before the start time of the class»),
+ * for everybody alike; the calendar shows «دخول الحصة» from the same instant.
  */
-export const JOIN_OPENS_MINUTES_BEFORE = 15;
+export const JOIN_OPENS_MINUTES_BEFORE = 5;
 
 /**
  * **How long the door stays open after the scheduled end.** Thirty minutes,
@@ -195,6 +194,27 @@ export function joinWindowFor(occurrence: {
 }
 
 export type WindowState = "open" | "too_early" | "too_late";
+
+/**
+ * **R266 — the window as the calendar shows it**: `null` for anything that is
+ * not an online class; otherwise when «دخول الحصة» appears and disappears, and
+ * whether a مؤطِّرة has ended the class for everyone (then it never reappears).
+ */
+export function joinWindowDto(occurrence: {
+  date: Date;
+  startTime: Date;
+  endTime: Date;
+  deliveryMode: string | null;
+  onlineEndedAt: Date | null;
+}): { opens_at: string; closes_at: string; ended: boolean } | null {
+  if (occurrence.deliveryMode !== "online") return null;
+  const window = joinWindowFor(occurrence);
+  return {
+    opens_at: window.opensAt.toISOString(),
+    closes_at: window.closesAt.toISOString(),
+    ended: occurrence.onlineEndedAt !== null,
+  };
+}
 
 export function windowState(window: JoinWindow, now: Date): WindowState {
   if (now.getTime() < window.opensAt.getTime()) return "too_early";

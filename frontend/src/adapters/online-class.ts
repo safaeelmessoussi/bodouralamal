@@ -31,6 +31,24 @@ export interface JoinCredentials {
   role: 'teacher' | 'assistant' | 'student' | 'admin';
   display_name: string;
   closes_at: string;
+  /** R266 — the classroom's own header: the Subject, its Surahs, and when. */
+  title?: string;
+  surah_names?: string[];
+  date_label?: string;
+  start_time?: string | null;
+  end_time?: string | null;
+}
+
+/**
+ * **R266 — «إنهاء الحصة للجميع».** Teaching staff only (the server refuses
+ * anybody else); everybody is put out of the room and nobody enters after.
+ */
+export async function endClass(sessionId: string, token: string): Promise<void> {
+  await api<{ data: { ended_at: string } }>(`/sessions/${sessionId}/online-end`, {
+    method: 'POST',
+    token,
+    body: {},
+  });
 }
 
 export async function requestJoin(

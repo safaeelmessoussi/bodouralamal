@@ -195,6 +195,8 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
      */
     delivery_mode: o.deliveryMode,
     online_media_mode: o.onlineMediaMode,
+    // R266 — when «دخول الحصة» is offered; `null` for anything not online.
+    online_join: o.onlineJoin,
     category_id: o.categoryId,
     category_name: o.categoryName,
     level_id: o.levelId,

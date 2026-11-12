@@ -1,6 +1,6 @@
 # Entering a class عن بُعد — بذور الأمل authorizes, the provider executes
 
-SRS Revisions 98 and 99: the join and the recording. Delivery is [class-delivery.md](class-delivery.md) (R97); the provider is [online-class-provider.md](online-class-provider.md).
+SRS Revisions 98, 99 and 266: the join, the recording, and ending a class for everyone. Delivery is [class-delivery.md](class-delivery.md) (R97); the provider is [online-class-provider.md](online-class-provider.md).
 
 > ## بذور الأمل AUTHORIZES; the media provider EXECUTES the media session.
 >
@@ -45,12 +45,28 @@ provider: a bounded participant token; no key, no room API.
 
 | | |
 |---|---|
-| opens | 15 minutes before scheduled start |
+| opens | 5 minutes before scheduled start (R266) |
 | closes | 30 minutes after scheduled end (reconnection allowance) |
 | clock | the server's, association timezone (TD-13 `TZ`) |
 | credential lifetime | bounded by the window; never timeless, never past 6 hours, never under a minute |
 
 - Evaluated AFTER authorization: an unauthorised caller gets `404`, never «الحصة لم تبدأ بعد» (§20 rule 17).
+- A class ended for everyone stays closed: `409 ENDED`, whatever the window says (R266).
+
+## Ending a class for everyone (R266)
+
+```
+POST /sessions/{id}/online-end       ← Session id, EMPTY body; teacher or assistant only
+ ├─ authorization ...... the join's own, window not required (a class that overran)
+ ├─ a live recording ... stopped first
+ ├─ session.online_ended_at  set once (a second press answers with the first instant)
+ └─ provider.endRoom ... the room is closed; everybody is put out
+```
+
+- Administrator and beneficiary: `403 END_NOT_PERMITTED`; nobody else's class: `404`.
+- A failure to close the room is `503 ROOM_NOT_CLOSED` with the class already ended; pressing again retries.
+- `online_ended_at` is a fact about the class, not a room record: the room stays derived and unstored.
+- In the room: «إنهاء للجميع» (teaching staff only) behind a confirmation; everybody's page turns to «انتهت الحصة» (`DisconnectReason.ROOM_DELETED`), with no «إعادة الدخول».
 
 ## What the credential carries
 
@@ -68,12 +84,14 @@ provider: a bounded participant token; no key, no room API.
 
 - `/classroom/{sessionId}` for every role; adapts to `media_mode` and `role` from the credential; no per-portal classroom (rule C).
 - Inside بذور الأمل, Arabic, RTL, no vendor named on any surface a beneficiary, parent or مؤطِّرة reads (rule M); she enters «حصة».
-- صوت فقط is a listening surface: camera never requested (`video={false}`), no empty video grid, speaker marked by a word and a highlight (rule AV), camera control absent not disabled.
+- The room fits the screen (R266): a header with the Subject, its Surahs, the date and times, «مباشر» with the time since entering, and «الحاضرون: N»; the media in the middle; one bar of round controls with a word under each — الميكروفون, الكاميرا, الشاشة (teaching staff, صوت وصورة), مغادرة, إنهاء للجميع (teaching staff). Each control's accessible name is the full action. Every state outside the room is one centred card.
+- The provider's dark theme variables are pointed at the platform's tokens; the role travels on the token as a participant attribute for presentation only (the «المؤطِّرة» badge).
+- صوت فقط is a listening surface: camera never requested (`video={false}`), no empty video grid; a card per person, the مؤطِّرة first, a ring and a word on whoever is speaking (rule AV), «الميكروفون مكتوم» when muted; camera control absent not disabled.
 - Failures are sentences with the next step — no exception, SDK string or bare code; a camera failure does not end an `audio_video` class.
 
 ## The public calendar is unchanged
 
-- May say «عن بُعد»; never exposes a way in, a room identity or a credential; «دخول الحصة» only for an authenticated reader on a `session` delivered `online`.
+- May say «عن بُعد»; never exposes a way in, a room identity or a credential; «دخول الحصة» only for an authenticated reader on a `session` delivered `online`, and only while its window is open and it was not ended for everyone — the occurrence carries `online_join { opens_at, closes_at, ended }` (R266); the dialog re-checks every twenty seconds.
 - Entry is not decided in the client (rule O): the button is a link, the classroom asks the server. Probing at dialog-open rejected (a request per occurrence looked at; stale by the click).
 
 ## Recording a class (R99)

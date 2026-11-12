@@ -8,7 +8,7 @@ import {
   S3Upload,
   TrackSource,
 } from "@livekit/protocol";
-import { AccessToken, EgressClient, WebhookReceiver } from "livekit-server-sdk";
+import { AccessToken, EgressClient, RoomServiceClient, WebhookReceiver } from "livekit-server-sdk";
 
 import type {
   ParticipantGrants,
@@ -58,6 +58,9 @@ export interface JoinCredentialRequest {
   identity: string;
   /** Presentation only. The provider shows it; nothing is decided from it. */
   displayName: string;
+  /** R266 — presentation only: the classroom marks the مؤطِّرة by it. The
+   *  token's grants, not this, decide what a participant may do. */
+  role: string;
   grants: ParticipantGrants;
   /** Seconds, bounded by `tokenSecondsFor`. There are no timeless tokens. */
   ttlSeconds: number;
@@ -152,6 +155,13 @@ export interface OnlineClassProvider {
    * job (it forgets old ones) — which is an answer, not an error.
    */
   reportRecording(providerEgressId: string): Promise<RecordingReport | null>;
+
+  /**
+   * **R266 — closes a class's room, putting everybody out of it.** Only ever
+   * called after the platform marked the class ended. A room nobody is in
+   * (the provider no longer knows it) is already closed: not an error.
+   */
+  endRoom(room: string): Promise<void>;
 }
 
 const SOURCES: Record<ParticipantGrants["canPublishSources"][number], TrackSource> =
@@ -172,6 +182,7 @@ const SOURCES: Record<ParticipantGrants["canPublishSources"][number], TrackSourc
  */
 export class LiveKitOnlineClassProvider implements OnlineClassProvider {
   private readonly egress: EgressClient;
+  private readonly rooms: RoomServiceClient;
   private readonly webhooks: WebhookReceiver;
 
   constructor(
@@ -193,6 +204,7 @@ export class LiveKitOnlineClassProvider implements OnlineClassProvider {
     // The server API speaks HTTP even when participants speak WebSocket.
     const httpUrl = apiUrl.replace(/^ws/, "http");
     this.egress = new EgressClient(httpUrl, apiKey, apiSecret);
+    this.rooms = new RoomServiceClient(httpUrl, apiKey, apiSecret);
     this.webhooks = new WebhookReceiver(apiKey, apiSecret);
   }
 
@@ -203,6 +215,7 @@ export class LiveKitOnlineClassProvider implements OnlineClassProvider {
       identity: request.identity,
       name: request.displayName,
       ttl: request.ttlSeconds,
+      attributes: { role: request.role },
     });
 
     token.addGrant({
@@ -301,6 +314,17 @@ export class LiveKitOnlineClassProvider implements OnlineClassProvider {
 
   async stopRecording(providerEgressId: string): Promise<void> {
     await this.egress.stopEgress(providerEgressId);
+  }
+
+  async endRoom(room: string): Promise<void> {
+    try {
+      await this.rooms.deleteRoom(room);
+    } catch (error) {
+      // «not found»: nobody is in it, so it is already closed.
+      const status = (error as { status?: number }).status;
+      if (status === 404) return;
+      throw error;
+    }
   }
 
   /**

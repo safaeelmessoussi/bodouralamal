@@ -19,7 +19,8 @@ import {
   type JoinCredentialRequest,
   type OnlineClassProvider,
 } from "../lib/online-class-provider.js";
-import { authorizeJoin, joinOnlineClass } from "./online-class.service.js";
+import { authorizeJoin, endOnlineClass, joinOnlineClass } from "./online-class.service.js";
+import { joinWindowDto } from "../policies/online-class.js";
 import { createLevel } from "./level.service.js";
 import { createCourseSchedule } from "./course-schedule.service.js";
 import { onlineJoinSchema } from "../validators/session.validators.js";
@@ -130,6 +131,12 @@ class RecordingProvider implements OnlineClassProvider {
   }
   reportRecording(): never {
     throw new Error("this suite does not record");
+  }
+  // R266 — rooms this suite closed, in order.
+  ended: string[] = [];
+  endRoom(room: string): Promise<void> {
+    this.ended.push(room);
+    return Promise.resolve();
   }
 }
 
@@ -384,10 +391,11 @@ describe("the join window (R98.10)", () => {
     expect([
       windowState(window, new Date(`${CLASS_DATE}T13:00:00+01:00`)),
       windowState(window, new Date(`${CLASS_DATE}T14:50:00+01:00`)),
+      windowState(window, new Date(`${CLASS_DATE}T14:56:00+01:00`)),
       windowState(window, DURING),
       windowState(window, new Date(`${CLASS_DATE}T17:20:00+01:00`)),
       windowState(window, new Date(`${CLASS_DATE}T18:00:00+01:00`)),
-    ]).toEqual(["too_early", "open", "open", "open", "too_late"]);
+    ]).toEqual(["too_early", "too_early", "open", "open", "open", "too_late"]);
   });
 
   it("never mints a timeless credential, and never one that is already dead", () => {
@@ -1017,6 +1025,7 @@ describe("the issued token, decoded (R98.9)", () => {
       room,
       identity: "22222222-2222-4222-8222-222222222222",
       displayName: "أمينة",
+      role: "student",
       grants: grantsFor("student", "audio_only"),
       ttlSeconds: 900,
     });
@@ -1025,6 +1034,8 @@ describe("the issued token, decoded (R98.9)", () => {
     const video = claims["video"] as Record<string, unknown>;
 
     expect(claims["sub"]).toBe("22222222-2222-4222-8222-222222222222");
+    // R266 — the role travels for presentation only (the مؤطِّرة's badge).
+    expect(claims["attributes"]).toEqual({ role: "student" });
     expect(video["room"]).toBe(room);
     expect(video["roomJoin"]).toBe(true);
     // A beneficiary is a participant, never a moderator, and can never open a
@@ -1058,6 +1069,7 @@ describe("the issued token, decoded (R98.9)", () => {
       room: "bodour-test",
       identity: "33333333-3333-4333-8333-333333333333",
       displayName: "صفاء",
+      role: "teacher",
       grants: grantsFor("teacher", "audio_video"),
       ttlSeconds: 600,
     });
@@ -1080,5 +1092,113 @@ describe("the issued token, decoded (R98.9)", () => {
         LIVEKIT_API_SECRET: SECRET,
       }),
     ).toBeInstanceOf(LiveKitOnlineClassProvider);
+  });
+});
+
+/* ── R266 — five minutes before, and «إنهاء الحصة للجميع» ─────────────────── */
+
+describe("R266 — the door opens five minutes before, and the مؤطِّرة ends the class for everyone", () => {
+  it("opens five minutes before the start (the Owner, 2026-11-12)", () => {
+    expect(JOIN_OPENS_MINUTES_BEFORE).toBe(5);
+  });
+
+  it("ends the class: the room is closed, the end recorded once, and nobody enters after", async () => {
+    const { scheduleId, sessionId } = await onlineClass();
+    const teacher = await person("مؤطِّرة", [{ role: "teacher", branchId: branchA }]);
+    await staff(scheduleId, teacher, "teacher");
+    const student = await person("مستفيدة", [{ role: "student", branchId: branchA }]);
+    await enrol(student, branchA);
+    const teacherActor = actorOf(teacher, [{ role: "teacher", branches: [branchA] }]);
+    const provider = new RecordingProvider();
+
+    const first = await endOnlineClass(prisma, provider, teacherActor, sessionId, DURING);
+    expect(first.endedAt.toISOString()).toBe(DURING.toISOString());
+    expect(provider.ended).toEqual([roomNameForSession(sessionId)]);
+
+    // A second press answers with the first instant, and retries the closing.
+    const later = new Date(DURING.getTime() + 60_000);
+    const second = await endOnlineClass(prisma, provider, teacherActor, sessionId, later);
+    expect(second.endedAt.toISOString()).toBe(DURING.toISOString());
+    expect(provider.ended).toHaveLength(2);
+    expect(
+      await prisma.auditLog.count({ where: { targetId: sessionId, actionType: "session.online_end" } }),
+    ).toBe(1);
+
+    for (const actor of [
+      actorOf(student, [{ role: "student", branches: [branchA] }]),
+      teacherActor,
+    ]) {
+      await expect(
+        authorizeJoin(prisma, actor, sessionId, undefined, later),
+      ).rejects.toMatchObject({ code: "STATE_CONFLICT", details: { reason: "ENDED" } });
+    }
+
+    const row = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: { date: true, startTime: true, endTime: true, deliveryMode: true, onlineEndedAt: true },
+    });
+    expect(joinWindowDto(row)?.ended).toBe(true);
+  });
+
+  it("may be ended after the window closed (a class that overran)", async () => {
+    const { scheduleId, sessionId } = await onlineClass();
+    const teacher = await person("مؤطِّرة", [{ role: "teacher", branchId: branchA }]);
+    await staff(scheduleId, teacher, "assistant");
+    const late = new Date(`${CLASS_DATE}T18:00:00+01:00`);
+    const ended = await endOnlineClass(
+      prisma,
+      new RecordingProvider(),
+      actorOf(teacher, [{ role: "teacher", branches: [branchA] }]),
+      sessionId,
+      late,
+    );
+    expect(ended.endedAt.toISOString()).toBe(late.toISOString());
+  });
+
+  it("refuses a beneficiary and an administrator — 403, and ends nothing", async () => {
+    const { sessionId } = await onlineClass();
+    const student = await person("مستفيدة", [{ role: "student", branchId: branchA }]);
+    await enrol(student, branchA);
+    const admin = await person("إدارية", [{ role: "admin", branchId: branchA }]);
+    const provider = new RecordingProvider();
+    for (const actor of [
+      actorOf(student, [{ role: "student", branches: [branchA] }]),
+      actorOf(admin, [{ role: "admin", branches: [branchA] }]),
+    ]) {
+      await expect(endOnlineClass(prisma, provider, actor, sessionId, DURING)).rejects.toMatchObject({
+        code: "FORBIDDEN",
+        details: { reason: "END_NOT_PERMITTED" },
+      });
+    }
+    expect(provider.ended).toEqual([]);
+    const row = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { onlineEndedAt: true } });
+    expect(row.onlineEndedAt).toBeNull();
+  });
+
+  it("refuses somebody who does not staff the class — 404", async () => {
+    const { sessionId } = await onlineClass();
+    const stranger = await person("مؤطِّرة أخرى", [{ role: "teacher", branchId: branchA }]);
+    await expect(
+      endOnlineClass(
+        prisma,
+        new RecordingProvider(),
+        actorOf(stranger, [{ role: "teacher", branches: [branchA] }]),
+        sessionId,
+        DURING,
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("puts the window on the calendar only for an online class", async () => {
+    const { sessionId } = await onlineClass();
+    const { sessionId: inPerson } = await inPersonClass();
+    const select = { date: true, startTime: true, endTime: true, deliveryMode: true, onlineEndedAt: true } as const;
+    const online = joinWindowDto(await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select }));
+    expect(online).toEqual({
+      opens_at: new Date(`${CLASS_DATE}T14:55:00+01:00`).toISOString(),
+      closes_at: new Date(`${CLASS_DATE}T17:30:00+01:00`).toISOString(),
+      ended: false,
+    });
+    expect(joinWindowDto(await prisma.session.findUniqueOrThrow({ where: { id: inPerson }, select }))).toBeNull();
   });
 });

@@ -118,6 +118,9 @@ class FakeProvider implements OnlineClassProvider {
   reportRecording(): Promise<null> {
     return Promise.resolve(null);
   }
+  endRoom(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 /* ── Fixture ─────────────────────────────────────────────────────────────── */

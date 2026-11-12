@@ -44,3 +44,15 @@ export function join(prisma: PrismaClient, provider: OnlineClassProvider | null)
     res.json({ data: onlineJoinDto(result) });
   };
 }
+
+/**
+ * `POST /sessions/{id}/online-end` (R266) — «إنهاء الحصة للجميع». Empty,
+ * `.strict()` body like the join; the service decides who may and does it.
+ */
+export function end(prisma: PrismaClient, provider: OnlineClassProvider | null) {
+  return async (req: Request, res: Response): Promise<void> => {
+    parse(onlineJoinSchema, req.body ?? {});
+    const result = await onlineClass.endOnlineClass(prisma, provider, requireActor(req), idParam(req, "id"));
+    res.json({ data: { ended_at: result.endedAt.toISOString() } });
+  };
+}

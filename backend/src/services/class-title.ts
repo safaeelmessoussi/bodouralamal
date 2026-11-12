@@ -166,6 +166,38 @@ const EXAM_TITLE_LIMIT = 120;
  * while it is still the composed one (`isComposedExamTitle`), so a title
  * somebody typed is never overwritten.
  */
+/**
+ * **R266 — the classroom's own heading**: the Subject (or, for a class of all
+ * the Level's Subjects, its full title) and its Surahs, on the same rule as the
+ * title above — short enough for a header, where the full title is a sentence.
+ */
+export async function sessionHeading(
+  db: Db,
+  id: string,
+): Promise<{ title: string; surahNames: string[] }> {
+  const row = await db.session.findFirst({
+    where: { id, deletedAt: null },
+    select: {
+      subject: { select: { name: true, requiresSurahs: true } },
+      surahs: SURAH_NAMES,
+      schedule: {
+        select: {
+          subject: { select: { name: true, requiresSurahs: true } },
+          surahs: SURAH_NAMES,
+        },
+      },
+    },
+  });
+  if (!row) return { title: '', surahNames: [] };
+  const subject = row.subject ?? row.schedule.subject;
+  const surahs =
+    row.surahs.length > 0 ? row.surahs : subject?.requiresSurahs ? row.schedule.surahs : [];
+  return {
+    title: subject?.name ?? (await sessionTitles(db, [id])).get(id) ?? '',
+    surahNames: surahs.map((s) => s.surah.nameArabic),
+  };
+}
+
 export async function examTitle(db: Db, examId: string): Promise<string> {
   const exam = await db.exam.findUniqueOrThrow({
     where: { id: examId },

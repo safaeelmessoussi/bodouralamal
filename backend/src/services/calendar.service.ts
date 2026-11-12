@@ -1,3 +1,4 @@
+import { joinWindowDto } from "../policies/online-class.js";
 import type {
   ContentOrigin,
   Prisma,
@@ -208,6 +209,12 @@ export interface Occurrence {
    */
   deliveryMode: string | null;
   onlineMediaMode: string | null;
+  /**
+   * **R266 — when «دخول الحصة» is offered**, for an online class only:
+   * from five minutes before the start until the window closes, and never
+   * again once its مؤطِّرة ended it for everyone. `null` otherwise.
+   */
+  onlineJoin: { opens_at: string; closes_at: string; ended: boolean } | null;
   categoryId: string | null;
   categoryName: string | null;
   levelId: string | null;
@@ -775,6 +782,7 @@ function sessionOccurrence(
     roomName: session.room?.name ?? null,
     deliveryMode: session.deliveryMode,
     onlineMediaMode: session.onlineMediaMode,
+    onlineJoin: joinWindowDto(session),
     categoryId: category?.id ?? null,
     categoryName: category?.name ?? null,
     levelId: level?.id ?? null,
@@ -1846,6 +1854,7 @@ export async function readCalendar(
         // exactly as `subjectId` and `status` are null for it.
         deliveryMode: null,
         onlineMediaMode: null,
+        onlineJoin: null,
         categoryId: event.categoryScopes[0]?.category.id ?? null,
         categoryName: event.categoryScopes[0]?.category.name ?? null,
         levelId: event.levelScopes[0]?.level.id ?? null,
@@ -2009,6 +2018,7 @@ export async function readCalendar(
       // remote*, never *through what*.
       deliveryMode: exam.mode === "online" ? "online" : null,
       onlineMediaMode: null,
+      onlineJoin: null,
       categoryId: exam.level.category.id,
       categoryName: exam.level.category.name,
       levelId: exam.levelId,

@@ -389,9 +389,14 @@ export function EventDetailsDialog({
  */
 function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
   const accessToken = useContext(SessionContext)?.accessToken ?? null;
+  const now = useMinuteClock();
   if (occurrence.kind !== 'session') return null;
   if (occurrence.delivery_mode !== 'online') return null;
   if (!accessToken) return null;
+  // R266 — only while the door is open: from five minutes before the start
+  // until the window closes, and never again once the class was ended for
+  // everyone. The server still decides; this only stops offering a dead door.
+  if (!joinOpen(occurrence.online_join, now)) return null;
 
   return (
     <p className="details__action">
@@ -400,6 +405,27 @@ function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
       </ButtonLink>
     </p>
   );
+}
+
+/** R266 — whether «دخول الحصة» is offered at `now` (ms since the epoch). */
+export function joinOpen(
+  window: Occurrence['online_join'],
+  now: number,
+): boolean {
+  if (!window) return true; // an older server: offer it, as before R266
+  if (window.ended) return false;
+  return now >= Date.parse(window.opens_at) && now <= Date.parse(window.closes_at);
+}
+
+/** Re-renders every twenty seconds, so the button appears and disappears
+ *  while the dialog is open. */
+function useMinuteClock(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 20_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return now;
 }
 
 /**

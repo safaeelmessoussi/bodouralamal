@@ -2740,6 +2740,11 @@ export function onlineJoinDto(result: {
     role: string;
     mediaMode: string;
     closesAt: Date;
+    title: string;
+    surahNames: string[];
+    dateLabel: string;
+    startTime: string | null;
+    endTime: string | null;
   };
 }): {
   session_id: string;
@@ -2750,6 +2755,11 @@ export function onlineJoinDto(result: {
   role: string;
   display_name: string;
   closes_at: string;
+  title: string;
+  surah_names: string[];
+  date_label: string;
+  start_time: string | null;
+  end_time: string | null;
 } {
   return {
     session_id: result.authorization.sessionId,
@@ -2760,6 +2770,12 @@ export function onlineJoinDto(result: {
     role: result.authorization.role,
     display_name: result.authorization.displayName,
     closes_at: result.authorization.closesAt.toISOString(),
+    // R266 — the classroom's own header: which class this is, and when.
+    title: result.authorization.title,
+    surah_names: result.authorization.surahNames,
+    date_label: result.authorization.dateLabel,
+    start_time: result.authorization.startTime,
+    end_time: result.authorization.endTime,
   };
 }
 

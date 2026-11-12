@@ -2218,6 +2218,10 @@ model Session {
   /// `room_id` at all (CHECK `session_online_no_room_check`), which is what
   /// makes room-collision detection ignore it without a special case.
   onlineMediaMode OnlineMediaMode? @map("online_media_mode")
+  /// **R266 — the مؤطِّرة ended this class for everyone** («إنهاء الحصة للجميع»).
+  /// Set once by `POST /sessions/{id}/online-end`; from then on nobody may
+  /// enter, and the calendar offers no «دخول الحصة». `NULL` = not ended.
+  onlineEndedAt   DateTime?        @map("online_ended_at") @db.Timestamptz(6)
 
   /// **R109 — this occurrence's OWN visibility tier.**
   ///

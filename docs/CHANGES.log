@@ -590,3 +590,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `partLabels` in `policies/surah-parts.ts` → `GET /quran-surahs` `parts` → `useSurahParts`; part 2 «الجزء الثاني (من الحزب الثالث الى آخر السورة)»; translations' pattern updated; `ops:rename-surah-parts` (dry run by default).
 - Arrows `--color-primary-soft`/`--color-primary-strong`; `content.bySurah.downloadLabel` «تحميل» in every language.
 - Verified: integration content 97/97 + reader 244/244 («تحميل», green arrows), library + quran suites (165 with content on the first run); seed drill; backend 395, frontend 1723, lints, build, guards; Localhost migrated: «الحصة» in upload (106 sessions for ضياء الأمل, past first) and edit dialogs, built title ends «… السبت 28 غشت 2027»; title sort in Arabic, numbers as numbers.
+
+## 2026-11-12 — SRS Revision 266: «دخول الحصة» five minutes before, «إنهاء الحصة للجميع», the classroom redesigned
+- `JOIN_OPENS_MINUTES_BEFORE` 5; calendar occurrences carry `online_join { opens_at, closes_at, ended }` (`joinWindowDto`); the dialog offers «دخول الحصة» only inside it (`joinOpen`, re-checked every 20 s).
+- `POST /sessions/{id}/online-end` (`endOnlineClass`): teacher/assistant only; stops a live recording, sets `session.online_ended_at` once (migration r266), `provider.endRoom` (`RoomServiceClient.deleteRoom`); joins refused `ENDED`.
+- Join response adds `title`/`surah_names`/`date_label`/`start_time`/`end_time` (`sessionHeading`); the token carries the role as a participant attribute (presentation only).
+- Classroom: full-screen room, header, round `ControlButton`s, audio cards (مؤطِّرة first), `ConfirmDialog`, «انتهت الحصة» on `ROOM_DELETED`; centred card for every other state; icons mic/camera/screen/leave/stop/users.
+- Verified: integration 126 files + the 3 R266 files (84/84) after the key pins; `verify-classroom-end` 15/15 (1366/390 shots); backend 395, frontend 1728, lints, build, guards, OpenAPI.

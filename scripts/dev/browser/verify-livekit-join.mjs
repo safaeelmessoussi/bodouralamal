@@ -441,7 +441,8 @@ let safaTab = null;
   const surface = await t.evaluate(`(() => JSON.stringify({
     audio: document.querySelectorAll('.classroom__audio').length,
     tiles: document.querySelectorAll('.lk-participant-tile').length,
-    camera: document.body.innerText.includes('تشغيل الكاميرا'),
+    // R266 — the control's action is its accessible name, under a short word.
+    camera: document.querySelector('[aria-label="تشغيل الكاميرا"], [aria-label="إيقاف الكاميرا"]') !== null,
     notice: document.body.innerText.includes('بالصوت فقط'),
   }))()`);
   const s2 = JSON.parse(surface);

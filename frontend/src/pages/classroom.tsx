@@ -4,6 +4,7 @@ import { requestJoin, type JoinCredentials } from '../adapters/online-class.js';
 import { OnlineClassroom } from '../components/classroom/online-classroom.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { Button, ButtonLink } from '../components/ui/button.js';
+import { Icon } from '../components/ui/icon.js';
 import { useActiveChild } from '../contexts/active-child.js';
 import { useSession } from '../contexts/session.js';
 import { t } from '../i18n/index.js';
@@ -35,6 +36,7 @@ type Phase =
   | { name: 'joining' }
   | { name: 'inside'; credentials: JoinCredentials }
   | { name: 'left' }
+  | { name: 'ended' }
   | { name: 'refused'; message: string };
 
 export function ClassroomPage(): ReactNode {
@@ -71,60 +73,93 @@ export function ClassroomPage(): ReactNode {
   return (
     <>
       <ApplicationHeader />
-      <main id="main" className="container">
-        <h1 className="page-title">{t('classroom.title')}</h1>
-
-        {/**
-         * An anonymous reader can reach this URL by typing it. She is told she
-         * must sign in — never handed a credential, and never shown a room
-         * (R98.30). The public calendar may say «عن بُعد»; it can never open a
-         * teaching room.
-         */}
-        {phase.name === 'anonymous' ? (
-          <div className="state" role="status">
-            <p>{t('classroom.notAllowed')}</p>
-            <ButtonLink variant="secondary" href="/login">
-              {t('nav.login')}
-            </ButtonLink>
-          </div>
-        ) : null}
-
-        {phase.name === 'joining' ? (
-          <p className="state">{t('classroom.connecting')}</p>
-        ) : null}
-
-        {phase.name === 'refused' ? (
-          <div className="state" role="status">
-            <p>{phase.message}</p>
-            <div className="classroom__exit">
-              <ButtonLink variant="secondary" href="/calendar">
-                {t('classroom.back')}
-              </ButtonLink>
-            </div>
-          </div>
-        ) : null}
-
+      {/**
+       * R266 — the room takes the whole width under the header; every state
+       * outside it is one centred card, so the page always looks like the
+       * platform rather than a bare line of text.
+       */}
+      <main id="main" className={`classroom-page${phase.name === 'inside' ? ' is-inside' : ''}`}>
         {phase.name === 'inside' ? (
           <OnlineClassroom
             credentials={phase.credentials}
             accessToken={accessToken ?? ''}
             onLeave={() => setPhase({ name: 'left' })}
+            onEnded={() => setPhase({ name: 'ended' })}
           />
-        ) : null}
+        ) : (
+          <section className="classroom-card" aria-labelledby="classroom-card-title">
+            <span className={`classroom-card__icon${phase.name === 'refused' ? ' is-muted' : ''}`} aria-hidden="true">
+              <Icon name={phase.name === 'ended' ? 'check' : 'audio'} size={30} />
+            </span>
+            <h1 id="classroom-card-title" className="page-title classroom-card__title">
+              {phase.name === 'ended'
+                ? t('classroom.endedTitle')
+                : phase.name === 'left'
+                  ? t('classroom.leftTitle')
+                  : t('classroom.title')}
+            </h1>
 
-        {phase.name === 'left' ? (
-          <div className="state" role="status">
-            <p>{t('classroom.disconnected')}</p>
-            <div className="classroom__exit">
-              <Button onClick={() => setAttempt((n) => n + 1)}>
-                {t('classroom.rejoin')}
-              </Button>
-              <ButtonLink variant="secondary" href="/calendar">
-                {t('classroom.back')}
-              </ButtonLink>
-            </div>
-          </div>
-        ) : null}
+            {/**
+             * An anonymous reader can reach this URL by typing it. She is told
+             * she must sign in — never handed a credential, and never shown a
+             * room (R98.30).
+             */}
+            {phase.name === 'anonymous' ? (
+              <div className="state" role="status">
+                <p>{t('classroom.notAllowed')}</p>
+                <div className="classroom__exit">
+                  <ButtonLink variant="primary" href="/login">
+                    {t('nav.login')}
+                  </ButtonLink>
+                </div>
+              </div>
+            ) : null}
+
+            {phase.name === 'joining' ? (
+              <p className="state classroom-card__joining" role="status">
+                <span className="classroom-card__spinner" aria-hidden="true" />
+                {t('classroom.connecting')}
+              </p>
+            ) : null}
+
+            {phase.name === 'refused' ? (
+              <div className="state" role="status">
+                <p>{phase.message}</p>
+                <div className="classroom__exit">
+                  <ButtonLink variant="primary" href="/calendar">
+                    {t('classroom.back')}
+                  </ButtonLink>
+                </div>
+              </div>
+            ) : null}
+
+            {phase.name === 'left' ? (
+              <div className="state" role="status">
+                <p>{t('classroom.disconnected')}</p>
+                <div className="classroom__exit">
+                  <Button variant="primary" onClick={() => setAttempt((n) => n + 1)}>
+                    {t('classroom.rejoin')}
+                  </Button>
+                  <ButtonLink variant="secondary" href="/calendar">
+                    {t('classroom.back')}
+                  </ButtonLink>
+                </div>
+              </div>
+            ) : null}
+
+            {/* R266 — ended for everyone: no «إعادة الدخول», it would only refuse. */}
+            {phase.name === 'ended' ? (
+              <div className="state" role="status">
+                <p>{t('classroom.endedBody')}</p>
+                <div className="classroom__exit">
+                  <ButtonLink variant="primary" href="/calendar">
+                    {t('classroom.back')}
+                  </ButtonLink>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        )}
       </main>
     </>
   );
@@ -151,6 +186,7 @@ export function refusalMessage(error: unknown): string {
   if (reason === 'CANCELLED') return t('classroom.cancelled');
   if (reason === 'BEFORE_WINDOW') return t('classroom.beforeWindow');
   if (reason === 'AFTER_WINDOW') return t('classroom.afterWindow');
+  if (reason === 'ENDED') return t('classroom.ended');
 
   return t('classroom.failed');
 }

@@ -12,16 +12,20 @@ import {
 import '@livekit/components-styles';
 import {
   ConnectionState,
+  DisconnectReason,
   MediaDeviceFailure,
   Track,
   type Participant,
 } from 'livekit-client';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-import type { JoinCredentials } from '../../adapters/online-class.js';
+import { endClass, type JoinCredentials } from '../../adapters/online-class.js';
 import { t } from '../../i18n/index.js';
+import { mediaLabel } from '../scheduling/delivery.js';
 import { Button } from '../ui/button.js';
+import { ConfirmDialog } from '../ui/confirm-dialog.js';
 import { Feedback } from '../ui/feedback.js';
+import { Icon, type IconName } from '../ui/icon.js';
 import { RecordingPanel } from './recording.js';
 
 /**
@@ -33,40 +37,40 @@ import { RecordingPanel } from './recording.js';
  *
  * * `media_mode` — whether this class has video at all;
  * * `role` — whether the person holds teaching authority, which is the only
- *   thing that differs between them.
+ *   thing that differs between them («إنهاء الحصة للجميع», recording and
+ *   sharing the screen).
  *
- * A second component per audience is how two of them drift, and the one that
- * drifts is the one nobody is testing. **Nothing here decides authorization**
- * (rule O): the token already carries exactly what its holder may publish, so a
- * modified client can hide a control but cannot acquire a capability.
+ * **Nothing here decides authorization** (rule O): the token already carries
+ * exactly what its holder may publish, so a modified client can hide a control
+ * but cannot acquire a capability.
  *
- * ## Inside بذور الأمل, not away from it
+ * ## Inside بذور الأمل, not away from it (R266)
  *
- * The class runs on this platform's own page, in Arabic and RTL, with the
- * platform's own vocabulary. **No vendor is named anywhere a مستفيدة, a parent
- * or a مؤطِّرة can read** (rule M, R97.9) — she enters «حصة», not a product.
- *
- * ## No recording control, deliberately
- *
- * The provider's own component library offers recording affordances; none is
- * mounted, and the token carries no `roomRecord` grant, so none could work.
- * Recording is a later revision with a consent gate (BR-2) attached, and a
- * button that starts an unconsented recording is precisely the thing that must
- * not exist first.
+ * The Owner, 2026-11-12: the class page «should look part of the platform,
+ * beautiful, elegant, modern and easy to use, for all users». So the room is a
+ * full-height stage in the platform's own colours: a header naming the class,
+ * its time, «مباشر» and who is present; the media in the middle; one bar of
+ * round controls at the bottom, each with a word under it. **No vendor is named
+ * anywhere** (rule M, R97.9).
  */
 /** Stable across renders: a new object each time would reconnect the room. */
 const NO_THIRD_PARTY_ICE = { rtcConfig: { iceServers: [] } };
+
+const TEACHING: JoinCredentials['role'][] = ['teacher', 'assistant'];
 
 export function OnlineClassroom({
   credentials,
   accessToken,
   onLeave,
+  onEnded,
 }: {
   credentials: JoinCredentials;
   /** R99 — recording is a Bodour operation, authorised by Bodour's own token
    *  and never by the provider's participant token. */
   accessToken: string;
   onLeave: () => void;
+  /** R266 — the class was ended for everyone (by this reader or another). */
+  onEnded: () => void;
 }): ReactNode {
   const [deviceIssue, setDeviceIssue] = useState<string | null>(null);
   const audioOnly = credentials.media_mode === 'audio_only';
@@ -74,10 +78,8 @@ export function OnlineClassroom({
    * **«انتهت الحصة» must mean the class ended, not that it never began.**
    *
    * `LiveKitRoom` reports a disconnect during its own negotiation as well as
-   * after a real one, so treating every `onDisconnected` as *she left* showed
-   * the goodbye screen a fraction of a second after she pressed the button —
-   * with the room connecting perfectly behind it. Leaving is only leaving once
-   * she has actually been inside.
+   * after a real one, so leaving is only leaving once she has actually been
+   * inside.
    */
   const wasConnected = useRef(false);
 
@@ -88,37 +90,26 @@ export function OnlineClassroom({
       token={credentials.token}
       connect
       /**
-       * **No STUN server — ours or anybody's** (SRS Revision 164).
-       *
-       * A media server hands its clients a list of ICE servers, and LiveKit's
-       * default list is Twilio's and Google's public STUN servers: every
-       * beneficiary's browser would have told two third parties its address
-       * before the class began. An explicit list — even an empty one — replaces
-       * the server's (`livekit-client` only adopts the server's when none was
-       * given). Nothing is lost: this deployment's media server sits on a public
-       * address, so a browser behind NAT reaches it directly. The media server
-       * is ALSO configured to name only itself (`docker-compose.yml`), so the
-       * recorder and any other client are covered too.
+       * **No STUN server — ours or anybody's** (SRS Revision 164). An explicit
+       * list — even an empty one — replaces the server's default third-party
+       * list, so no beneficiary's browser tells a third party its address.
        */
       connectOptions={NO_THIRD_PARTY_ICE}
       /**
        * **`video` is false for an audio-only class, and that is the whole
-       * mechanism** (R98.22).
-       *
-       * Hiding a video grid with CSS while the component still calls
-       * `getUserMedia({ video: true })` would put a camera-permission prompt in
-       * front of a مستفيدة for a class that has no video — and on many phones
-       * would light the camera indicator. The capture is never requested, and
-       * the token independently forbids publishing anything but a microphone,
-       * so «صوت فقط» is true at the device, at the client and at the server.
+       * mechanism** (R98.22): the camera is never requested, so no permission
+       * prompt and no camera light for a class that has no video.
        */
       video={!audioOnly}
       audio
       onConnected={() => {
         wasConnected.current = true;
       }}
-      onDisconnected={() => {
-        if (wasConnected.current) onLeave();
+      onDisconnected={(reason) => {
+        if (!wasConnected.current) return;
+        // R266 — the room was closed because the class was ended for everyone.
+        if (reason === DisconnectReason.ROOM_DELETED) onEnded();
+        else onLeave();
       }}
       // Never the SDK's own exception text (R98.15) — a sentence she can act on.
       onError={() => setDeviceIssue(t('classroom.failed'))}
@@ -126,14 +117,15 @@ export function OnlineClassroom({
         setDeviceIssue(deviceMessage(failure, kind))
       }
     >
-      {/* Without this nobody is heard: it is what attaches remote audio tracks
-          to the page. Needed in BOTH modes — an audio-only class is entirely
-          this element. */}
+      {/* Without this nobody is heard: it attaches remote audio to the page. */}
       <RoomAudioRenderer />
       <ClassroomStage
+        credentials={credentials}
+        accessToken={accessToken}
         audioOnly={audioOnly}
         deviceIssue={deviceIssue}
         onLeave={onLeave}
+        onEnded={onEnded}
         recording={
           /**
            * **R99 — inside the room, so «جاري التسجيل» comes from the room.**
@@ -153,41 +145,91 @@ export function OnlineClassroom({
 
 /**
  * The room's inside. A separate component because every hook below needs the
- * room context `LiveKitRoom` establishes — they cannot run in the component
- * that creates it.
+ * room context `LiveKitRoom` establishes.
  */
 function ClassroomStage({
+  credentials,
+  accessToken,
   audioOnly,
   deviceIssue,
   onLeave,
+  onEnded,
   recording,
 }: {
+  credentials: JoinCredentials;
+  accessToken: string;
   audioOnly: boolean;
   deviceIssue: string | null;
   onLeave: () => void;
+  onEnded: () => void;
   recording: ReactNode;
 }): ReactNode {
   const state = useConnectionState();
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } =
+  const participants = useParticipants();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
     useLocalParticipant();
+  const teaching = TEACHING.includes(credentials.role);
+  const [confirmingEnd, setConfirmingEnd] = useState(false);
+  const [ending, setEnding] = useState(false);
+  const [endIssue, setEndIssue] = useState<string | null>(null);
+
+  const times =
+    credentials.start_time && credentials.end_time
+      ? `${credentials.start_time} — ${credentials.end_time}`
+      : null;
+  const media = mediaLabel({ delivery_mode: 'online', online_media_mode: credentials.media_mode });
+
+  async function endForEveryone(): Promise<void> {
+    setEnding(true);
+    setEndIssue(null);
+    try {
+      await endClass(credentials.session_id, accessToken);
+      setConfirmingEnd(false);
+      onEnded();
+    } catch {
+      setEndIssue(t('classroom.endFailed'));
+      setEnding(false);
+    }
+  }
 
   return (
     /**
-     * **The connection state is in the DOM, not only in a sentence.**
-     *
-     * A harness reading the rendered text cannot tell *«the room is open and
-     * empty»* from *«the connection never completed»* — and that ambiguity is
-     * exactly what let three tabs report success while only one was actually
-     * connected. `data-connection` is the state itself, so a check can assert
-     * the real thing instead of a proxy for it.
+     * **The connection state is in the DOM, not only in a sentence** —
+     * `data-connection` is the state itself, so a harness asserts the real
+     * thing instead of a proxy for it.
      */
     <div className="classroom__stage" data-connection={state}>
+      <header className="classroom__bar">
+        <div className="classroom__heading">
+          <p className="classroom__status">
+            {state === ConnectionState.Connected ? (
+              <span className="classroom__live">
+                <span aria-hidden="true" className="classroom__live-dot" />
+                {t('classroom.live')}
+              </span>
+            ) : null}
+            {state === ConnectionState.Connected ? <Elapsed /> : null}
+          </p>
+          <h1 className="classroom__title">{credentials.title || t('classroom.title')}</h1>
+          <p className="classroom__meta">
+            {[
+              (credentials.surah_names ?? []).map((name) => t('classroom.surah').replace('{name}', name)).join('، '),
+              credentials.date_label,
+              times,
+              media,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        </div>
+        <p className="classroom__count">
+          <Icon name="users" size={18} />
+          {t('classroom.participantsCount').replace('{n}', String(participants.length))}
+        </p>
+      </header>
+
       {/**
        * **Connection state is said, not implied by an empty room** (R98.21).
-       *
-       * «جارٍ الدخول» and «انقطع الاتصال مؤقتًا» are different facts and a
-       * reader must be able to tell them apart — a silent grid of nobody looks
-       * identical to a class she is the first to arrive at.
        */}
       {state === ConnectionState.Connecting ? (
         <p className="classroom__state">{t('classroom.connecting')}</p>
@@ -203,47 +245,157 @@ function ClassroomStage({
         </p>
       ) : null}
 
-      {/* The shared action-message component (rule AH), never a hand-written
-          `<p role="status">` — a device failure is an outcome of something the
-          reader just did, so it belongs beside the controls that did it. */}
       {deviceIssue ? <Feedback tone="warn">{deviceIssue}</Feedback> : null}
+      {endIssue ? <Feedback tone="warn">{endIssue}</Feedback> : null}
 
-      {/* Above the media, where a persistent state belongs — a banner under a
-          video grid is a banner nobody scrolls to. */}
+      {/* Above the media, where a persistent state belongs. */}
       {recording}
 
-      {audioOnly ? <AudioStage /> : <VideoStage />}
+      <div className="classroom__media">
+        {audioOnly ? <AudioStage participants={participants} /> : <VideoStage />}
+      </div>
 
-      <div className="classroom__controls">
-        {/* The shared Button, never hand-written markup (rule C) — a
-            classroom is not exempt from the platform's one button. */}
-        <Button
-          aria-pressed={isMicrophoneEnabled}
+      <div className="classroom__controls" role="toolbar" aria-label={t('classroom.title')}>
+        <ControlButton
+          icon={isMicrophoneEnabled ? 'mic' : 'mic-off'}
+          label={t('classroom.micShort')}
+          action={isMicrophoneEnabled ? t('classroom.micOff') : t('classroom.micOn')}
+          pressed={isMicrophoneEnabled}
+          off={!isMicrophoneEnabled}
           onClick={() => {
             void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
           }}
-        >
-          {isMicrophoneEnabled ? t('classroom.micOff') : t('classroom.micOn')}
-        </Button>
+        />
 
         {/* Absent — not disabled — in an audio-only class: a control that can
             never do anything is worse than none (R97's own §13 rule). */}
         {audioOnly ? null : (
-          <Button
-            aria-pressed={isCameraEnabled}
+          <ControlButton
+            icon={isCameraEnabled ? 'camera' : 'camera-off'}
+            label={t('classroom.cameraShort')}
+            action={isCameraEnabled ? t('classroom.cameraOff') : t('classroom.cameraOn')}
+            pressed={isCameraEnabled}
+            off={!isCameraEnabled}
             onClick={() => {
               void localParticipant.setCameraEnabled(!isCameraEnabled);
             }}
-          >
-            {isCameraEnabled ? t('classroom.cameraOff') : t('classroom.cameraOn')}
-          </Button>
+          />
         )}
 
-        <Button variant="danger" onClick={onLeave}>
-          {t('classroom.leave')}
-        </Button>
+        {/* Sharing the screen — the مؤطِّرة showing the مطبوع. */}
+        {audioOnly || !teaching ? null : (
+          <ControlButton
+            icon="screen"
+            label={t('classroom.screenShort')}
+            action={isScreenShareEnabled ? t('classroom.screenOff') : t('classroom.screenOn')}
+            pressed={isScreenShareEnabled}
+            onClick={() => {
+              void localParticipant.setScreenShareEnabled(!isScreenShareEnabled).catch(() => undefined);
+            }}
+          />
+        )}
+
+        <ControlButton
+          icon="leave"
+          label={t('classroom.leaveShort')}
+          action={t('classroom.leave')}
+          tone="danger"
+          onClick={onLeave}
+        />
+
+        {teaching ? (
+          <ControlButton
+            icon="stop"
+            label={t('classroom.endShort')}
+            action={t('classroom.endForAll')}
+            tone="danger-strong"
+            onClick={() => setConfirmingEnd(true)}
+          />
+        ) : null}
       </div>
+
+      <ConfirmDialog
+        open={confirmingEnd}
+        title={t('classroom.endForAll')}
+        body={t('classroom.endConfirmBody')}
+        confirmLabel={t('classroom.endConfirm')}
+        danger
+        busy={ending}
+        onConfirm={() => {
+          void endForEveryone();
+        }}
+        onCancel={() => setConfirmingEnd(false)}
+      />
     </div>
+  );
+}
+
+/**
+ * One round control with its word underneath. **The shared Button** (rule C):
+ * the classroom is not exempt from the platform's one button; only its shape
+ * differs. The visible word is short; the accessible name says the action.
+ */
+function ControlButton({
+  icon,
+  label,
+  action,
+  onClick,
+  pressed,
+  off = false,
+  tone,
+}: {
+  icon: IconName;
+  label: string;
+  action: string;
+  onClick: () => void;
+  pressed?: boolean;
+  off?: boolean;
+  tone?: 'danger' | 'danger-strong';
+}): ReactNode {
+  const classes = [
+    'classroom__control',
+    off ? 'is-off' : '',
+    tone ? `classroom__control--${tone}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <Button
+      variant="ghost"
+      className={classes}
+      aria-label={action}
+      title={action}
+      {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
+      onClick={onClick}
+    >
+      <span className="classroom__control-icon">
+        <Icon name={icon} size={22} />
+      </span>
+      <span className="classroom__control-label" aria-hidden="true">
+        {label}
+      </span>
+    </Button>
+  );
+}
+
+/** «مدة الحضور» — minutes and seconds since this reader came in. */
+function Elapsed(): ReactNode {
+  const [since] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const total = Math.max(0, Math.floor((now - since) / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const two = (n: number): string => String(n).padStart(2, '0');
+  const text = hours > 0 ? `${hours}:${two(minutes)}:${two(seconds)}` : `${two(minutes)}:${two(seconds)}`;
+  return (
+    <span className="classroom__elapsed" role="timer" title={t('classroom.elapsed')} dir="ltr">
+      {text}
+    </span>
   );
 }
 
@@ -267,21 +419,16 @@ function VideoStage(): ReactNode {
 
 /**
  * صوت فقط — **a surface designed for listening**, not a video layout with the
- * pictures removed (R98.22).
- *
- * An empty video grid says *«nobody has their camera on»*, which is a false
- * statement about a class that has no cameras at all. What a reader needs
- * instead is who is present and who is speaking right now, which is exactly
- * what a class on the telephone would give her.
+ * pictures removed (R98.22): who is present, and who is speaking right now.
+ * The مؤطِّرة first, then the reader, then everybody else by name.
  */
-function AudioStage(): ReactNode {
-  const participants = useParticipants();
-
+function AudioStage({ participants }: { participants: Participant[] }): ReactNode {
+  const ordered = [...participants].sort((a, b) => rank(a) - rank(b));
   return (
     <section className="classroom__audio" aria-label={t('classroom.participants')}>
       <p className="classroom__notice">{t('classroom.audioOnlyNotice')}</p>
       <ul className="classroom__participants">
-        {participants.map((participant) => (
+        {ordered.map((participant) => (
           <AudioParticipantRow key={participant.sid} participant={participant} />
         ))}
       </ul>
@@ -289,10 +436,31 @@ function AudioStage(): ReactNode {
   );
 }
 
+function isTeaching(participant: Participant): boolean {
+  const role = participant.attributes['role'];
+  return role === 'teacher' || role === 'assistant';
+}
+
+function rank(participant: Participant): number {
+  if (isTeaching(participant)) return 0;
+  if (participant.isLocal) return 1;
+  return 2;
+}
+
+/** The first letter of each of the first two words — «صفاء العلوي» → «ص ع». */
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word.charAt(0))
+    .join(' ');
+}
+
 /**
- * One row. **A component per participant because `useIsSpeaking` is a hook** —
- * calling it inside a loop in the parent is not allowed, and reading
- * `participant.isSpeaking` directly would render once and then never update.
+ * One participant card. **A component per participant because `useIsSpeaking`
+ * is a hook** — reading `participant.isSpeaking` directly would render once and
+ * then never update.
  */
 function AudioParticipantRow({
   participant,
@@ -300,31 +468,46 @@ function AudioParticipantRow({
   participant: Participant;
 }): ReactNode {
   const speaking = useIsSpeaking(participant);
+  const name = participant.name || participant.identity;
+  const muted = !participant.isMicrophoneEnabled;
   return (
-    <li className={`classroom__participant${speaking ? ' is-speaking' : ''}`}>
-      <span className="classroom__participant-name">
-        {participant.name || participant.identity}
+    <li
+      className={[
+        'classroom__participant',
+        speaking ? 'is-speaking' : '',
+        isTeaching(participant) ? 'is-teacher' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <span className="classroom__avatar" aria-hidden="true">
+        {initials(name)}
       </span>
-      {/* A WORD, never a colour alone (rule AV) — «تتحدّث الآن» is readable by
-          a screen reader and by someone who cannot see the highlight. */}
+      <span className="classroom__participant-name">
+        {name}
+        {participant.isLocal ? <span className="classroom__you"> ({t('classroom.you')})</span> : null}
+      </span>
+      {isTeaching(participant) ? (
+        <span className="classroom__badge">{t('classroom.teacherBadge')}</span>
+      ) : null}
+      {/* A WORD, never a colour alone (rule AV). */}
       <span className="classroom__participant-state">
-        {speaking ? t('classroom.speaking') : t('classroom.listening')}
+        {muted ? <Icon name="mic-off" size={16} /> : null}
+        {speaking
+          ? t('classroom.speaking')
+          : muted
+            ? t('classroom.micMuted')
+            : t('classroom.listening')}
       </span>
     </li>
   );
 }
 
 /**
- * **A device failure in the platform's words** (R98.23).
- *
- * A raw `NotAllowedError` or `OverconstrainedError` tells a مستفيدة nothing and
- * tells her nothing about what to do next. Each case names what happened *and*
- * the action that fixes it.
- *
- * **A camera failure is not fatal to an `audio_video` class.** The room stays
- * connected and the microphone keeps working, so the message says she may
- * continue by voice rather than ending the class over a device she may not
- * have.
+ * **A device failure in the platform's words** (R98.23). Each case names what
+ * happened *and* the action that fixes it. **A camera failure is not fatal to
+ * an `audio_video` class**: the room stays connected and the microphone keeps
+ * working.
  */
 export function deviceMessage(
   failure: MediaDeviceFailure | undefined,
@@ -340,8 +523,5 @@ export function deviceMessage(
   ) {
     return t(camera ? 'classroom.cameraUnavailable' : 'classroom.micUnavailable');
   }
-  // An unrecognised failure still gets a sentence in Arabic rather than an
-  // exception string — a message nobody can act on is better than one nobody
-  // can read.
   return t(camera ? 'classroom.cameraUnavailable' : 'classroom.micUnavailable');
 }

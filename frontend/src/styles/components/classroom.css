@@ -11,35 +11,253 @@
  * them would be maintaining a fork of somebody else's component.
  */
 
-.classroom {
+/* ── R266: the page around the room ────────────────────────────────────────
+ *
+ * The Owner, 2026-11-12: the class page «should look part of the platform,
+ * beautiful, elegant, modern and easy to use». Every state outside the room is
+ * one centred card; inside, the room is a full-height stage in the platform's
+ * own colours.
+ */
+.classroom-page {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: var(--space-8) var(--gutter);
+  min-block-size: calc(100dvh - var(--header-height));
+  background:
+    radial-gradient(ellipse at top, var(--color-primary-faint), transparent 70%),
+    var(--color-background);
+}
+
+.classroom-page.is-inside {
+  padding: var(--space-4) var(--gutter);
+  align-items: stretch;
+}
+
+.classroom-card {
+  inline-size: min(100%, 32rem);
+  margin-block-start: var(--space-8);
+  padding: var(--space-8) var(--space-6);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.classroom-card__icon {
+  display: grid;
+  place-items: center;
+  inline-size: 4.5rem;
+  block-size: 4.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+}
+
+.classroom-card__icon.is-muted {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+}
+
+.classroom-card__title {
+  margin: 0;
+}
+
+.classroom-card .state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: var(--space-4);
-  /* The media area is the point of the page, so it gets the height. `min-height`
-   * rather than `height`: a class with twelve participants must be able to grow
-   * instead of scrolling inside a box that is shorter than its content. */
-  min-height: 60vh;
+  margin: 0;
+}
+
+.classroom-card .state p {
+  margin: 0;
+  max-width: none;
+  color: var(--color-text-secondary);
+}
+
+.classroom-card__joining {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+.classroom-card__spinner {
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-primary-line);
+  border-block-start-color: var(--color-primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .classroom-card__spinner {
+    animation: classroom-spin 0.9s linear infinite;
+  }
+}
+
+@keyframes classroom-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── The room ─────────────────────────────────────────────────────────────
+ *
+ * The provider's container carries its own dark theme (`data-lk-theme`); its
+ * variables are pointed at the platform's tokens here, so its tiles and ours
+ * read as one surface.
+ */
+.classroom.lk-room-container {
+  --lk-bg: var(--color-primary-deep);
+  --lk-bg2: var(--color-primary-emphasis);
+  --lk-fg: var(--color-text-inverse);
+  --lk-accent-bg: var(--color-accent);
+  --lk-border-radius: var(--radius-lg);
+  --lk-font-family: var(--font-family-base);
+  --lk-grid-gap: var(--space-3);
+  color-scheme: light;
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  background: var(--color-surface-raised);
+  inline-size: min(100%, 90rem);
+  margin-inline: auto;
+  /* The whole room fits the screen, so the control bar is always in view;
+   * the media area takes what is left. */
+  block-size: calc(100dvh - var(--header-height) - 2 * var(--space-4));
+  min-block-size: 32rem;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-md);
+  overflow: clip;
 }
 
 .classroom__stage {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-block-size: 0;
+}
+
+.classroom__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-6);
+  padding: var(--space-4) var(--space-6);
+  border-block-end: 1px solid var(--color-border-subtle);
+  background: linear-gradient(to bottom, var(--color-primary-faint), var(--color-surface-raised));
+}
+
+.classroom__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.classroom__status {
+  display: flex;
+  align-items: center;
   gap: var(--space-3);
+  margin: 0;
+  min-block-size: 1.5rem;
+}
+
+.classroom__live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.15rem var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.classroom__live-dot {
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .classroom__live-dot {
+    animation: classroom-recording-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+.classroom__elapsed {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.classroom__title {
+  margin: 0;
+  font-family: var(--font-family-display);
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-tight);
+  color: var(--color-primary-strong);
+  overflow-wrap: anywhere;
+}
+
+.classroom__meta {
+  margin: 0;
+  max-width: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.classroom__count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.classroom__stage > .admin-notice,
+.classroom__stage > .classroom__state,
+.classroom__stage > .classroom__recording {
+  margin: var(--space-3) var(--space-6) 0;
+}
+
+.classroom__media {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  padding: var(--space-4) var(--space-6);
+  overflow: auto;
 }
 
 .classroom__grid {
   /* The vendor's grid sizes itself from its container; without a floor it
-   * collapses to nothing while the first track is still negotiating, and the
-   * page jumps when it arrives. */
-  min-height: 40vh;
+   * collapses to nothing while the first track is still negotiating. */
+  min-block-size: 14rem;
+  flex: 1;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-deep);
 }
 
 /*
- * Connection state — a LINE OF TEXT, never a spinner alone.
- *
- * §14.4's rule that colour never carries meaning applies here twice over: a
- * reconnecting class and a connecting one look identical as a spinner, and the
- * difference is exactly what the reader needs.
+ * Connection state — a LINE OF TEXT, never a spinner alone (§14.4).
  */
 .classroom__state {
   margin: 0;
@@ -52,21 +270,20 @@
 }
 
 /* ── صوت فقط ───────────────────────────────────────────────────────────────
- * A listening surface, not a video layout with the pictures removed. There is
- * no empty grid here at all — an empty grid would say "nobody has a camera on"
- * about a class that has no cameras.
+ * A listening surface: a card per person, the مؤطِّرة first, a ring around
+ * whoever is speaking. There is no empty video grid here at all.
  */
 .classroom__audio {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .classroom__notice {
   margin: 0;
   color: var(--color-text-muted);
-  /* Rule AK — helper text is UI, not prose, so the global `p { max-width:
-   * var(--measure) }` must not wrap it early under a wide panel. */
+  font-size: var(--font-size-sm);
+  /* Rule AK — helper text is UI, not prose. */
   max-width: none;
 }
 
@@ -74,48 +291,224 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+  gap: var(--space-4);
 }
 
 .classroom__participant {
+  position: relative;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-/* Speaking is marked by a WORD in the markup (rule AV); this only reinforces
- * it, so removing the highlight loses emphasis and never information. */
+.classroom__participant.is-teacher {
+  border-color: var(--color-primary-line);
+  background: linear-gradient(to bottom, var(--color-primary-faint), var(--color-surface));
+}
+
+.classroom__avatar {
+  display: grid;
+  place-items: center;
+  inline-size: 4.25rem;
+  block-size: 4.25rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  transition: box-shadow var(--transition-fast);
+}
+
+.classroom__participant.is-teacher .classroom__avatar {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+/* Speaking is marked by a WORD in the markup (rule AV); the ring only
+ * reinforces it, so removing it loses emphasis and never information. */
 .classroom__participant.is-speaking {
   border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.classroom__participant.is-speaking .classroom__avatar {
+  box-shadow: 0 0 0 4px var(--color-surface), 0 0 0 7px var(--color-accent);
+}
+
+.classroom__participant-name {
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.classroom__you {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.classroom__badge {
+  padding: 0.1rem var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
 }
 
 .classroom__participant-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--color-text-muted);
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
-/* ── Controls ─────────────────────────────────────────────────────────────── */
+/* ── Controls ─────────────────────────────────────────────────────────────
+ * One bar of round controls, each with its word underneath, reachable with
+ * one thumb at 360 px.
+ */
+.classroom__controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-4) var(--space-4) var(--space-5);
+  border-block-start: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-raised);
+}
 
-.classroom__controls,
 .classroom__exit {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: var(--space-2);
   align-items: center;
 }
 
-.classroom__controls {
-  /* Below the media area, where a control bar belongs, and reachable with one
-   * thumb at 360 px — which is why it wraps rather than scrolls. */
-  padding-block-start: var(--space-2);
+.classroom__controls .classroom__control {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-inline-size: 4.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--color-text-secondary);
+}
+
+.classroom__controls .classroom__control:hover {
+  background: none;
+}
+
+.classroom__control-icon {
+  display: grid;
+  place-items: center;
+  inline-size: 3.25rem;
+  block-size: 3.25rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-subtle);
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.classroom__control:hover .classroom__control-icon {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+}
+
+.classroom__control:active .classroom__control-icon {
+  transform: scale(0.95);
+}
+
+.classroom__control[aria-pressed='true']:not(.is-off) .classroom__control-icon {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-strong);
+  border-color: var(--color-primary-line);
+}
+
+.classroom__control.is-off .classroom__control-icon {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  border-color: transparent;
+}
+
+.classroom__control--danger .classroom__control-icon,
+.classroom__control--danger:hover .classroom__control-icon {
+  background: var(--color-danger);
+  color: var(--color-text-inverse);
+  border-color: transparent;
+}
+
+.classroom__control--danger-strong .classroom__control-icon,
+.classroom__control--danger-strong:hover .classroom__control-icon {
+  background: var(--color-danger-hover);
+  color: var(--color-text-inverse);
+  border-color: transparent;
+}
+
+.classroom__control-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 40rem) {
+  .classroom-page.is-inside {
+    padding: 0;
+  }
+
+  .classroom.lk-room-container {
+    border-radius: unset;
+    border-inline: 0;
+    block-size: auto;
+    min-block-size: calc(100dvh - var(--header-height));
+  }
+
+  .classroom__media {
+    overflow: visible;
+  }
+
+  .classroom__grid {
+    min-block-size: 60vh;
+  }
+
+  .classroom__bar,
+  .classroom__media {
+    padding-inline: var(--space-4);
+  }
+
+  .classroom__stage > .admin-notice,
+  .classroom__stage > .classroom__state,
+  .classroom__stage > .classroom__recording {
+    margin-inline: var(--space-4);
+  }
+
+  .classroom__participants {
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: var(--space-3);
+  }
+
+  .classroom__controls {
+    gap: var(--space-2) var(--space-3);
+    position: sticky;
+    inset-block-end: 0;
+  }
+
+  .classroom__controls .classroom__control {
+    min-inline-size: 3.75rem;
+  }
 }
 
 /* ── R99: recording ────────────────────────────────────────────────────────

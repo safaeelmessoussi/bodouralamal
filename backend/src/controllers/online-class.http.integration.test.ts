@@ -42,11 +42,16 @@ const TAG = "[http-join-test]";
  */
 const JOIN_KEYS = [
   "closes_at",
+  "date_label",
   "display_name",
+  "end_time",
   "expires_at",
   "media_mode",
   "role",
   "session_id",
+  "start_time",
+  "surah_names",
+  "title",
   "token",
   "url",
 ];

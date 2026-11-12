@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MediaDeviceFailure } from 'livekit-client';
 
-import { EventDetailsDialog } from '../calendar/event-details-dialog.js';
+import { EventDetailsDialog, joinOpen } from '../calendar/event-details-dialog.js';
 import { SessionContext } from '../../contexts/session.js';
 import { deviceMessage } from './online-classroom.js';
 import { refusalMessage } from '../../pages/classroom.js';
@@ -196,9 +196,9 @@ describe('the classroom adapts to the credential, and names no vendor (R98.13)',
 
   it('renders a listening surface for audio-only, not an empty video grid', () => {
     const source = code(CLASSROOM);
-    expect(source).toContain('audioOnly ? <AudioStage /> : <VideoStage />');
+    expect(source).toContain('audioOnly ? <AudioStage participants={participants} /> : <VideoStage />');
     // The camera control is ABSENT rather than disabled in an audio class.
-    expect(source).toMatch(/audioOnly \? null : \(\s*<Button/);
+    expect(source).toMatch(/audioOnly \? null : \(\s*<ControlButton\s+icon=\{isCameraEnabled/);
   });
 
   /**
@@ -278,6 +278,9 @@ describe('every failure is a sentence in Arabic (R98.15, rule X)', () => {
     ).toBe(ar.classroom.beforeWindow);
     expect(refusalMessage(envelope(409, 'STATE_CONFLICT', { reason: 'AFTER_WINDOW' }))).toBe(
       ar.classroom.afterWindow,
+    );
+    expect(refusalMessage(envelope(409, 'STATE_CONFLICT', { reason: 'ENDED' }))).toBe(
+      ar.classroom.ended,
     );
     expect(refusalMessage(envelope(404, 'NOT_FOUND'))).toBe(ar.classroom.notAllowed);
     expect(refusalMessage(envelope(503, 'SERVICE_UNAVAILABLE'))).toBe(
@@ -516,5 +519,43 @@ describe('SRS Revision 165 §1 — the recording line follows the recording', ()
 
   it('never says «جاري التسجيل» twice — the banner everybody sees already says it', () => {
     expect(code).toContain("!(live && statusLabel(state) === t('classroom.recordingLive'))");
+  });
+});
+
+describe('R266 — «دخول الحصة» from five minutes before, and never after the end for everyone', () => {
+  const window = {
+    opens_at: '2026-11-12T18:25:00.000Z',
+    closes_at: '2026-11-12T20:30:00.000Z',
+    ended: false,
+  };
+  const at = (iso: string): number => Date.parse(iso);
+
+  it('is offered only while the door is open', () => {
+    expect(joinOpen(window, at('2026-11-12T18:24:59.000Z'))).toBe(false);
+    expect(joinOpen(window, at('2026-11-12T18:25:00.000Z'))).toBe(true);
+    expect(joinOpen(window, at('2026-11-12T20:30:00.000Z'))).toBe(true);
+    expect(joinOpen(window, at('2026-11-12T20:30:01.000Z'))).toBe(false);
+  });
+
+  it('is never offered once the class was ended for everyone', () => {
+    expect(joinOpen({ ...window, ended: true }, at('2026-11-12T19:00:00.000Z'))).toBe(false);
+  });
+
+  it('says five minutes, not a quarter of an hour', () => {
+    expect(ar.classroom.beforeWindow).toContain('بخمس دقائق');
+  });
+
+  it('offers «إنهاء الحصة للجميع» to the teaching staff only, behind a confirmation', () => {
+    const source = code(CLASSROOM);
+    expect(source).toContain("const TEACHING: JoinCredentials['role'][] = ['teacher', 'assistant'];");
+    expect(source).toMatch(/\{teaching \? \(\s*<ControlButton\s+icon="stop"/);
+    expect(source).toContain('<ConfirmDialog');
+    expect(source).toContain('await endClass(credentials.session_id, accessToken);');
+  });
+
+  it('shows «انتهت الحصة» to everybody when the room is closed, with no «إعادة الدخول»', () => {
+    expect(code(CLASSROOM)).toContain('if (reason === DisconnectReason.ROOM_DELETED) onEnded();');
+    const page = code(CLASSROOM_PAGE);
+    expect(page).toMatch(/phase\.name === 'ended' \? \(\s*<div className="state" role="status">\s*<p>\{t\('classroom\.endedBody'\)\}<\/p>/);
   });
 });

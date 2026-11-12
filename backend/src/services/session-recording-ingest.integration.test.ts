@@ -1014,6 +1014,7 @@ describe("SRS Revision 168 §2 — a recorder that dies mid-class loses nothing 
     verifyCallback: () => Promise.resolve(null),
     reportRecording: (egressId: string) =>
       throws ? Promise.reject(new Error("provider down")) : Promise.resolve(answers[egressId] ?? null),
+    endRoom: () => Promise.resolve(),
   });
   const row = (id: string) =>
     prisma.sessionRecording.findUniqueOrThrow({
@@ -1443,6 +1444,7 @@ describe("SRS Revision 167 §5 — the reconciler: a recording is never left beh
       verifyCallback: () => Promise.resolve(null),
       reportRecording: (egressId: string) =>
         throws ? Promise.reject(new Error("provider down")) : Promise.resolve(answers[egressId] ?? null),
+      endRoom: () => Promise.resolve(),
     };
   }
 

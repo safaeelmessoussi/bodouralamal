@@ -865,6 +865,8 @@ export function createApp(
    * inside the service, for exactly the callers it governs.
    */
   guarded.post('/sessions/:id/online-join', onlineClassCtl.join(prisma, onlineClass));
+  // R266 — the مؤطِّرة ends the class for everyone; nobody enters after.
+  guarded.post('/sessions/:id/online-end', onlineClassCtl.end(prisma, onlineClass));
   /**
    * **R99 — recording is OPTIONAL and EXPLICIT.**
    *
