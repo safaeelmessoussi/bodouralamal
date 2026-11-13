@@ -252,7 +252,7 @@ export interface ParticipantGrants {
   canSubscribe: boolean;
   canPublishData: boolean;
   /** Moderation — muting a participant, removing one from the room. Teaching
-   *  staff only; this is the one place the classroom differs by role. */
+   *  staff and administrators (R267); a beneficiary never. */
   roomAdmin: boolean;
   /**
    * **Which tracks may be published at all**, enforced by the provider rather
@@ -265,6 +265,16 @@ export interface ParticipantGrants {
   canPublishSources: ("microphone" | "camera" | "screen_share")[];
 }
 
+/**
+ * **R267 — who moderates a class** (the Owner, 2026-11-13: «admins should be
+ * able to do all what a teacher can do»): the مؤطِّرة, her assistant, and an
+ * administrator the server admitted to this class. One predicate for every
+ * classroom power — moderation, «إنهاء الحصة للجميع», «إعادة فتح الحصة».
+ */
+export function moderatesClass(role: ParticipantRole): boolean {
+  return role === "teacher" || role === "assistant" || role === "admin";
+}
+
 export function grantsFor(
   role: ParticipantRole,
   media: OnlineMediaMode,
@@ -275,14 +285,12 @@ export function grantsFor(
       : ["microphone", "camera", "screen_share"];
 
   // R87 §G — an assistant IS the main teacher for operational authorization on
-  // the class she staffs. One branch, both positions.
-  const teaching = role === "teacher" || role === "assistant";
-
+  // the class she staffs; R267 — an administrator holds the same powers.
   return {
     canPublish: true,
     canSubscribe: true,
     canPublishData: true,
-    roomAdmin: teaching,
+    roomAdmin: moderatesClass(role),
     canPublishSources: sources,
   };
 }

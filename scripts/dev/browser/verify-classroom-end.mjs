@@ -7,6 +7,9 @@
  * 3. An audio-only class shows a card per person, the مؤطِّرة first.
  * 4. The مؤطِّرة ends the class: both tabs show «انتهت الحصة».
  * 5. Entering again is refused in words; the calendar offers no «دخول الحصة».
+ * 6. R267 — the calendar offers the مؤطِّرة «إعادة فتح الحصة»; an administrator
+ *    reopens it from the classroom, the beneficiary enters again, and the
+ *    administrator ends it for everyone as the مؤطِّرة may.
  *
  * `SHOTS=<dir>` writes screenshots at 1366 and 390 px.
  */
@@ -81,9 +84,9 @@ const main = await tab(true);
 const classroom = `/classroom/${S.tafseerToday}`;
 
 /**
- * Opens each of today's online chips; returns how many there were and whether
- * one's dialog leads to `href`. The count is the positive control: «not
- * offered» means nothing unless the chips were actually there.
+ * Opens each of today's online chips; returns how many there were, whether
+ * one's dialog leads to `href`, and the link's words. The count is the
+ * positive control: «not offered» means nothing unless the chips were there.
  */
 const dialogOffers = (page, href) =>
   page.evaluate(`(async () => {
@@ -100,9 +103,9 @@ const dialogOffers = (page, href) =>
       );
       document.querySelector('dialog[open] button[aria-label="إغلاق"]')?.click();
       await wait(250);
-      if (link) return { count, offered: true };
+      if (link) return { count, offered: true, text: link.textContent.trim() };
     }
-    return { count, offered: false };
+    return { count, offered: false, text: '' };
   })()`);
 
 // 1 — the beneficiary, from her calendar.
@@ -123,7 +126,8 @@ const teacher = await tab();
 await teacher.beIdentity(process.env.SAFA_COOKIE);
 await teacher.open('/calendar?subject_id=', '.is-today .event-chip--interactive');
 const before = await dialogOffers(teacher, classroom);
-check('the calendar offers «دخول الحصة» on a class that is running', before.offered, JSON.stringify(before));
+check('the calendar offers «دخول الحصة» on a class that is running',
+  before.offered && before.text === 'دخول الحصة', JSON.stringify(before));
 await teacher.open(classroom);
 check('the مؤطِّرة enters the class', await teacher.connected());
 check('the مؤطِّرة is offered «إنهاء الحصة للجميع»',
@@ -146,7 +150,7 @@ await cover.shot('r266-audio-only');
 // 4 — «إنهاء الحصة للجميع».
 await teacher.evaluate(`(() => document.querySelector('[aria-label="إنهاء الحصة للجميع"]').click())()`);
 check('a confirmation is asked first',
-  await teacher.waitFor(`document.querySelector('dialog[open]')?.innerText.includes('لن يمكن لأحد الدخول')`, 10));
+  await teacher.waitFor(`document.querySelector('dialog[open]')?.innerText.includes('إلا إذا أُعيد فتحها')`, 10));
 await teacher.shot('r266-confirm');
 await teacher.evaluate(`(() => [...document.querySelectorAll('dialog[open] button')]
   .find((b) => b.textContent.trim() === 'إنهاء الحصة').click())()`);
@@ -173,7 +177,38 @@ const teacherAfter = await tab();
 await teacherAfter.beIdentity(process.env.SAFA_COOKIE_2);
 await teacherAfter.open('/calendar?subject_id=', '.is-today .event-chip--interactive');
 const after = await dialogOffers(teacherAfter, classroom);
-check('the calendar no longer offers «دخول الحصة» for it (today\'s online chips were there)',
-  after.count > 0 && !after.offered, JSON.stringify(after));
+check('the calendar no longer offers «دخول الحصة» for it, but offers the مؤطِّرة «إعادة فتح الحصة»',
+  after.count > 0 && after.offered && after.text === 'إعادة فتح الحصة', JSON.stringify(after));
+check('the مؤطِّرة\'s ended card also offers «إعادة فتح الحصة»',
+  await teacher.waitFor(`[...document.querySelectorAll('.classroom-card button')].some((b) => b.textContent.trim() === 'إعادة فتح الحصة')`, 5));
+check('the beneficiary\'s ended card does not',
+  !(await student.evaluate(`(() => [...document.querySelectorAll('.classroom-card button')].some((b) => b.textContent.trim() === 'إعادة فتح الحصة'))()`)));
 
-finish();
+// 6 — R267: an administrator reopens it, and ends it as the مؤطِّرة may.
+await main.beIdentity(process.env.ADMIN_COOKIE);
+const admin = await tab();
+await admin.beIdentity(process.env.ADMIN_COOKIE);
+await admin.open(classroom, '.classroom-card button, .classroom__stage');
+check('the administrator is offered «إعادة فتح الحصة»',
+  await admin.waitFor(`[...document.querySelectorAll('.classroom-card button')].some((b) => b.textContent.trim() === 'إعادة فتح الحصة')`, 20),
+  (await admin.text()).slice(0, 200));
+await admin.shot('r267-reopen');
+await admin.evaluate(`(() => [...document.querySelectorAll('.classroom-card button')]
+  .find((b) => b.textContent.trim() === 'إعادة فتح الحصة').click())()`);
+check('reopening puts the administrator back in the class', await admin.connected());
+check('the administrator holds the مؤطِّرة\'s controls (end, screen)',
+  await admin.waitFor(`document.querySelector('[aria-label="إنهاء الحصة للجميع"]') && document.querySelector('[aria-label="مشاركة الشاشة"]')`, 10));
+await main.beIdentity(process.env.STUDENT_A_COOKIE_3);
+await again.beIdentity(process.env.STUDENT_A_COOKIE_3);
+await again.open(classroom);
+check('the beneficiary enters the reopened class', await again.connected());
+await admin.shot('r267-admin-inside');
+await admin.evaluate(`(() => document.querySelector('[aria-label="إنهاء الحصة للجميع"]').click())()`);
+await admin.waitFor(`document.querySelector('dialog[open]')`, 10);
+await admin.evaluate(`(() => [...document.querySelectorAll('dialog[open] button')]
+  .find((b) => b.textContent.trim() === 'إنهاء الحصة').click())()`);
+check('the administrator ends it for everyone: the beneficiary sees «انتهت الحصة»',
+  await again.waitFor(`document.querySelector('.classroom-card__title')?.textContent === 'انتهت الحصة'`, 40));
+
+// The rooms' sockets keep node alive; the verdict is the exit code.
+process.exit(finish());

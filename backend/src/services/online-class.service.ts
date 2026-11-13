@@ -11,6 +11,7 @@ import { assertFreshActive } from "../policies/freshness.policy.js";
 import {
   grantsFor,
   joinWindowFor,
+  moderatesClass,
   roomNameForSession,
   tokenSecondsFor,
   windowState,
@@ -76,12 +77,12 @@ export interface JoinAuthorization {
 }
 
 /**
- * `ending` (R266): the مؤطِّرة pressing «إنهاء الحصة للجميع» is not entering —
- * she may end a class that overran its window, and ending one already ended
- * must answer again rather than refuse.
+ * `moderating` (R266/R267): «إنهاء الحصة للجميع» and «إعادة فتح الحصة» are not
+ * entering — a class that overran its window may still be ended, and an ended
+ * class must be reachable to be ended again or reopened.
  */
 export interface AuthorizeOptions {
-  ending?: boolean;
+  moderating?: boolean;
 }
 
 export interface JoinResult extends JoinCredentials {
@@ -179,13 +180,16 @@ export async function authorizeJoin(
    * **R266 — a class its مؤطِّرة ended for everyone stays ended.** Checked
    * after authorization for the same disclosure reason as the window.
    */
-  if (session.onlineEndedAt !== null && !options.ending) {
+  const state = windowState(window, now);
+  if (session.onlineEndedAt !== null && !options.moderating) {
     throw new AppError("STATE_CONFLICT", "this class was ended for everyone", {
       reason: "ENDED",
+      // R267 — whoever may reopen it is told so, while reopening still
+      // leads somewhere (the window has not closed).
+      can_reopen: moderatesClass(participant.role) && state !== "too_late",
     });
   }
-  const state = windowState(window, now);
-  if (state !== "open" && !options.ending) {
+  if (state !== "open" && !options.moderating) {
     throw new AppError(
       "STATE_CONFLICT",
       state === "too_early"
@@ -219,8 +223,8 @@ export async function authorizeJoin(
  * **R266 — «إنهاء الحصة للجميع»** (the Owner, 2026-11-12: «once the teacher
  * ends the call for everyone, the button should disappear»).
  *
- * Teaching staff only — the same people who hold moderation in the room
- * (R98 §9); an administrator's participation grants no more than that. A live
+ * Whoever moderates the class (R267 `moderatesClass`: the مؤطِّرة, her
+ * assistant, an administrator admitted to it). A live
  * recording is stopped first, the class is marked ended (once — a second
  * press answers with the first instant), and then the provider's room is
  * closed, which puts everybody out of it. Nobody may enter afterwards.
@@ -234,14 +238,7 @@ export async function endOnlineClass(
   sessionId: string,
   now: Date = new Date(),
 ): Promise<{ endedAt: Date }> {
-  const authorization = await authorizeJoin(prisma, actor, sessionId, undefined, now, {
-    ending: true,
-  });
-  if (authorization.role !== "teacher" && authorization.role !== "assistant") {
-    throw new AppError("FORBIDDEN", "only the teaching staff may end a class for everyone", {
-      reason: "END_NOT_PERMITTED",
-    });
-  }
+  const authorization = await authorizeModeration(prisma, actor, sessionId, now, "END_NOT_PERMITTED");
 
   // A recording must end with the class, not run on in an empty room.
   try {
@@ -283,6 +280,61 @@ export async function endOnlineClass(
     }
   }
   return { endedAt };
+}
+
+/**
+ * **R267 — «إعادة فتح الحصة»** (the Owner, 2026-11-13: «I want a way back in»).
+ *
+ * Undoes «إنهاء الحصة للجميع»: the same people may do it, and only while the
+ * join window has not closed — after that, entering is refused anyway and a
+ * reopened class would lead nowhere. Reopening one that is not ended answers
+ * the same (idempotent). Everybody enters again through «دخول الحصة».
+ */
+export async function reopenOnlineClass(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  now: Date = new Date(),
+): Promise<{ reopened: boolean }> {
+  const authorization = await authorizeModeration(prisma, actor, sessionId, now, "REOPEN_NOT_PERMITTED");
+  if (now.getTime() > authorization.closesAt.getTime()) {
+    throw new AppError("STATE_CONFLICT", "the join window has closed", {
+      reason: "AFTER_WINDOW",
+      closes_at: authorization.closesAt.toISOString(),
+    });
+  }
+  const { count } = await prisma.session.updateMany({
+    where: { id: sessionId, deletedAt: null, onlineEndedAt: { not: null } },
+    data: { onlineEndedAt: null },
+  });
+  if (count > 0) {
+    await audit.write(prisma, {
+      actorUserId: actor.userId,
+      ...(actor.activeRole !== undefined ? { activeRole: actor.activeRole } : {}),
+      actionType: "session.online_reopen",
+      targetEntity: "session",
+      targetId: sessionId,
+      detail: {},
+    });
+  }
+  return { reopened: count > 0 };
+}
+
+/** The join authorization, then R267's one rule for every classroom power. */
+async function authorizeModeration(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  now: Date,
+  reason: "END_NOT_PERMITTED" | "REOPEN_NOT_PERMITTED",
+): Promise<JoinAuthorization> {
+  const authorization = await authorizeJoin(prisma, actor, sessionId, undefined, now, {
+    moderating: true,
+  });
+  if (!moderatesClass(authorization.role)) {
+    throw new AppError("FORBIDDEN", "only those who moderate the class may do this", { reason });
+  }
+  return authorization;
 }
 
 /**

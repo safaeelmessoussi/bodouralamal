@@ -867,6 +867,7 @@ export function createApp(
   guarded.post('/sessions/:id/online-join', onlineClassCtl.join(prisma, onlineClass));
   // R266 — the مؤطِّرة ends the class for everyone; nobody enters after.
   guarded.post('/sessions/:id/online-end', onlineClassCtl.end(prisma, onlineClass));
+  guarded.post('/sessions/:id/online-reopen', onlineClassCtl.reopen(prisma));
   /**
    * **R99 — recording is OPTIONAL and EXPLICIT.**
    *

@@ -433,6 +433,8 @@ console.log(
     seerahNext: seerahOcc.next,
     hadithToday: hadithOcc.today,
     branch: targa.id,
+    // R267 — the Super Admin the scenario acts as: an administrator of the class.
+    admin: actor.userId,
     otherBranch: masira.id,
     room: room.id,
     level: level.id,

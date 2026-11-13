@@ -225,7 +225,8 @@ POST /exams/{id}/attendance                   # §4.7 R123; the supervisor marks
 DELETE /exams/{id}/attendance/{studentId}     # §4.7 R123, TD-5
 PUT /sessions/{id}/audience                   # R92, generalised 2026-09-17; this occurrence's own audience along five dimensions; an empty list clears that dimension's override
 POST /sessions/{id}/online-join               # R98; Bodour authorizes, the provider executes; derived room, bounded token
-POST /sessions/{id}/online-end                # R266; teaching staff end the class for everyone; nobody enters after
+POST /sessions/{id}/online-end                # R266/R267; whoever moderates ends the class for everyone; nobody enters after
+POST /sessions/{id}/online-reopen             # R267; whoever moderates reopens an ended class while the window is open
 POST /sessions/{id}/recording                 # R99; OPTIONAL and explicit; teacher/assistant/admin only; server-side capture
 GET /sessions/{id}/recording                  # R99.5; readable by EVERY participant — «جاري التسجيل» is transparency, not authority
 POST /sessions/{id}/recording/stop            # R99; same authority as starting, and not limited to whoever started it

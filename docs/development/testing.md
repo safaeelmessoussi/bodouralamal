@@ -170,7 +170,7 @@ All under `scripts/dev/browser/` (`.sh` wrapper + `.mjs`); fuller descriptions a
 | `verify-library-recorder.sh` | Recorder's second entry in مكتبة المحتوى, measured sort indicator | 16/16 |
 | `verify-livekit-ingest.sh` | R99 C2 record → Egress → import → plays (`readyState >= 2 && duration > 0`); URL `/storage/` not `recordings-staging`; starter's tab closed; staging swept (R99.13) | 28/28 |
 | `verify-livekit-join.sh` | R98 real `livekit-server --dev`, fake devices, three-party room across tabs, `data-connection`, media bytes via `list-bucket.mjs` | 61/61 |
-| `verify-classroom-end.sh` | R266 real LiveKit: «دخول الحصة» offered while open, the redesigned room (header, controls, audio cards), «إنهاء الحصة للجميع» puts everybody out, `409 ENDED` in words, the calendar stops offering it; `SHOTS=<dir>` at 1366/390 | 15/15 |
+| `verify-classroom-end.sh` | R266 real LiveKit: «دخول الحصة» offered while open, the redesigned room (header, controls, audio cards), «إنهاء الحصة للجميع» puts everybody out, `409 ENDED` in words, the calendar then offers the مؤطِّرة «إعادة فتح الحصة»; R267: an administrator reopens it, the beneficiary re-enters, the administrator ends it; `SHOTS=<dir>` at 1366/390 | 22/22 |
 | `verify-nav-toggle-geometry.sh` | R138 item 8 sidebar toggle at 320/390/1280/1440; empty-module portal | 46/46 |
 | `verify-notifications.sh` | R77/R82/R83 audience through `/notify`: the resolver, not the button; ids from `GET /admin/course-schedules/{id}/sessions` | 22/22 |
 | `verify-notify-ui.sh` | Clicks «إرسال الإشعار», reads the recipient's own bell; R91/R92, Event delete/cancel, grade republish | 37/37 |

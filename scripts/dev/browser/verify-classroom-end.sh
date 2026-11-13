@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# R266 — «إنهاء الحصة للجميع» and the classroom, through the real screens against
+# R266/R267 — «إنهاء الحصة للجميع», «إعادة فتح الحصة» and the classroom, through the real screens against
 # the dev overlay's LOCAL LiveKit (no paid account). Seeds the tagged R98
 # scenario and removes it on exit. `SHOTS=<dir>` keeps screenshots.
 set -euo pipefail
@@ -24,6 +24,9 @@ export SAFA_COOKIE_2="$(bash scripts/dev/issue-dev-session.sh "$(id safa)")"
 export HIND_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id hind)")"
 export STUDENT_A_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id studentA)")"
 export STUDENT_A_COOKIE_2="$(bash scripts/dev/issue-dev-session.sh "$(id studentA)")"
+export STUDENT_A_COOKIE_3="$(bash scripts/dev/issue-dev-session.sh "$(id studentA)")"
+# R267 — an administrator of the class (the scenario's Super Admin).
+export ADMIN_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id admin)")"
 
 WORK="$(mktemp -d)"
 cleanup() {

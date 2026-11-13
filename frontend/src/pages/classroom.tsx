@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { requestJoin, type JoinCredentials } from '../adapters/online-class.js';
+import { MODERATORS, reopenClass, requestJoin, type JoinCredentials } from '../adapters/online-class.js';
 import { OnlineClassroom } from '../components/classroom/online-classroom.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { Button, ButtonLink } from '../components/ui/button.js';
@@ -36,7 +36,8 @@ type Phase =
   | { name: 'joining' }
   | { name: 'inside'; credentials: JoinCredentials }
   | { name: 'left' }
-  | { name: 'ended' }
+  /** R267 — `canReopen`: whoever moderates may reopen it while the window is open. */
+  | { name: 'ended'; canReopen: boolean }
   | { name: 'refused'; message: string };
 
 export function ClassroomPage(): ReactNode {
@@ -50,6 +51,28 @@ export function ClassroomPage(): ReactNode {
    *  duplicated the second (R98.17). */
   const [attempt, setAttempt] = useState(0);
 
+  const [reopening, setReopening] = useState(false);
+  const [reopenIssue, setReopenIssue] = useState<string | null>(null);
+
+  /** R267 — reopen, then enter again exactly as «إعادة الدخول» does. */
+  async function reopen(): Promise<void> {
+    if (!accessToken) return;
+    setReopening(true);
+    setReopenIssue(null);
+    try {
+      await reopenClass(sessionId, accessToken);
+      setAttempt((n) => n + 1);
+    } catch (error) {
+      setReopenIssue(
+        error instanceof ApiError && error.details['reason'] === 'AFTER_WINDOW'
+          ? t('classroom.afterWindow')
+          : t('classroom.reopenFailed'),
+      );
+    } finally {
+      setReopening(false);
+    }
+  }
+
   useEffect(() => {
     if (!accessToken) {
       setPhase({ name: 'anonymous' });
@@ -62,7 +85,14 @@ export function ClassroomPage(): ReactNode {
         const credentials = await requestJoin(sessionId, accessToken, activeChildId);
         if (live) setPhase({ name: 'inside', credentials });
       } catch (error) {
-        if (live) setPhase({ name: 'refused', message: refusalMessage(error) });
+        if (!live) return;
+        // R267 — an ended class its moderator may reopen is the ended card
+        // with «إعادة فتح الحصة», not a refusal.
+        if (error instanceof ApiError && error.details['reason'] === 'ENDED' && error.details['can_reopen'] === true) {
+          setPhase({ name: 'ended', canReopen: true });
+        } else {
+          setPhase({ name: 'refused', message: refusalMessage(error) });
+        }
       }
     })();
     return () => {
@@ -84,7 +114,14 @@ export function ClassroomPage(): ReactNode {
             credentials={phase.credentials}
             accessToken={accessToken ?? ''}
             onLeave={() => setPhase({ name: 'left' })}
-            onEnded={() => setPhase({ name: 'ended' })}
+            onEnded={() =>
+              setPhase({
+                name: 'ended',
+                canReopen:
+                  MODERATORS.includes(phase.credentials.role) &&
+                  Date.now() < Date.parse(phase.credentials.closes_at),
+              })
+            }
           />
         ) : (
           <section className="classroom-card" aria-labelledby="classroom-card-title">
@@ -147,12 +184,19 @@ export function ClassroomPage(): ReactNode {
               </div>
             ) : null}
 
-            {/* R266 — ended for everyone: no «إعادة الدخول», it would only refuse. */}
+            {/* R266 — ended for everyone: no «إعادة الدخول», it would only refuse.
+                R267 — whoever moderates is offered «إعادة فتح الحصة» instead. */}
             {phase.name === 'ended' ? (
               <div className="state" role="status">
-                <p>{t('classroom.endedBody')}</p>
+                <p>{phase.canReopen ? t('classroom.reopenBody') : t('classroom.endedBody')}</p>
+                {reopenIssue ? <p className="classroom-card__issue">{reopenIssue}</p> : null}
                 <div className="classroom__exit">
-                  <ButtonLink variant="primary" href="/calendar">
+                  {phase.canReopen ? (
+                    <Button variant="primary" disabled={reopening} onClick={() => void reopen()}>
+                      {t('classroom.reopen')}
+                    </Button>
+                  ) : null}
+                  <ButtonLink variant={phase.canReopen ? 'secondary' : 'primary'} href="/calendar">
                     {t('classroom.back')}
                   </ButtonLink>
                 </div>

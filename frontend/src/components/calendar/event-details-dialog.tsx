@@ -389,10 +389,23 @@ export function EventDetailsDialog({
  */
 function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
   const accessToken = useContext(SessionContext)?.accessToken ?? null;
+  const activeRoles = useActiveRoleOrNull()?.activeRoles ?? [];
   const now = useMinuteClock();
   if (occurrence.kind !== 'session') return null;
   if (occurrence.delivery_mode !== 'online') return null;
   if (!accessToken) return null;
+  // R267 — an ended class, to a مؤطِّرة or an administrator, while the window
+  // is open: the way back in, beside where «دخول الحصة» was. The classroom asks
+  // the server, which decides (`can_reopen`); a beneficiary is never offered it.
+  if (activeRoles.some((role) => STAFF_ROLES.includes(role)) && reopenOffered(occurrence.online_join, now)) {
+    return (
+      <p className="details__action">
+        <ButtonLink variant="secondary" href={`/classroom/${occurrence.id}`}>
+          {t('classroom.reopen')}
+        </ButtonLink>
+      </p>
+    );
+  }
   // R266 — only while the door is open: from five minutes before the start
   // until the window closes, and never again once the class was ended for
   // everyone. The server still decides; this only stops offering a dead door.
@@ -414,6 +427,12 @@ export function joinOpen(
 ): boolean {
   if (!window) return true; // an older server: offer it, as before R266
   if (window.ended) return false;
+  return now >= Date.parse(window.opens_at) && now <= Date.parse(window.closes_at);
+}
+
+/** R267 — whether «إعادة فتح الحصة» leads somewhere at `now`. */
+export function reopenOffered(window: Occurrence['online_join'], now: number): boolean {
+  if (!window?.ended) return false;
   return now >= Date.parse(window.opens_at) && now <= Date.parse(window.closes_at);
 }
 

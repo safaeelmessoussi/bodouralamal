@@ -19,7 +19,7 @@ import {
 } from 'livekit-client';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { endClass, type JoinCredentials } from '../../adapters/online-class.js';
+import { endClass, MODERATORS, type JoinCredentials } from '../../adapters/online-class.js';
 import { t } from '../../i18n/index.js';
 import { mediaLabel } from '../scheduling/delivery.js';
 import { Button } from '../ui/button.js';
@@ -36,9 +36,9 @@ import { RecordingPanel } from './recording.js';
  * the server:
  *
  * * `media_mode` — whether this class has video at all;
- * * `role` — whether the person holds teaching authority, which is the only
- *   thing that differs between them («إنهاء الحصة للجميع», recording and
- *   sharing the screen).
+ * * `role` — whether the person moderates the class (the مؤطِّرة, her
+ *   assistant or an administrator, R267), which is the only thing that differs
+ *   between them («إنهاء الحصة للجميع», recording and sharing the screen).
  *
  * **Nothing here decides authorization** (rule O): the token already carries
  * exactly what its holder may publish, so a modified client can hide a control
@@ -56,7 +56,6 @@ import { RecordingPanel } from './recording.js';
 /** Stable across renders: a new object each time would reconnect the room. */
 const NO_THIRD_PARTY_ICE = { rtcConfig: { iceServers: [] } };
 
-const TEACHING: JoinCredentials['role'][] = ['teacher', 'assistant'];
 
 export function OnlineClassroom({
   credentials,
@@ -168,7 +167,7 @@ function ClassroomStage({
   const participants = useParticipants();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
     useLocalParticipant();
-  const teaching = TEACHING.includes(credentials.role);
+  const teaching = MODERATORS.includes(credentials.role);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
   const [ending, setEnding] = useState(false);
   const [endIssue, setEndIssue] = useState<string | null>(null);

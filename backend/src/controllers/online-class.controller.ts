@@ -56,3 +56,12 @@ export function end(prisma: PrismaClient, provider: OnlineClassProvider | null) 
     res.json({ data: { ended_at: result.endedAt.toISOString() } });
   };
 }
+
+/** R267 — «إعادة فتح الحصة»: undoes «إنهاء الحصة للجميع» while the window is open. */
+export function reopen(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    parse(onlineJoinSchema, req.body ?? {});
+    const result = await onlineClass.reopenOnlineClass(prisma, requireActor(req), idParam(req, "id"));
+    res.json({ data: { reopened: result.reopened } });
+  };
+}

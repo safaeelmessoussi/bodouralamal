@@ -2,6 +2,7 @@ import { useIsRecording } from '@livekit/components-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import {
+  MODERATORS,
   readRecordingState,
   startRecording,
   stopRecording,
@@ -42,7 +43,8 @@ import { Feedback } from '../ui/feedback.js';
 
 /** Who is offered the controls — mirrors the server's `MAY_RECORD` and is not
  *  the authority (the server is). A beneficiary and a guardian see none. */
-const MAY_RECORD: JoinCredentials['role'][] = ['teacher', 'assistant', 'admin'];
+/** R267 — recording is one of the classroom powers `MODERATORS` names. */
+const MAY_RECORD = MODERATORS;
 
 /** How long the room and the platform may disagree about «is it recording»
  *  before it is called a stalled recorder rather than two messages crossing. */

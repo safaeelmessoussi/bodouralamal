@@ -51,22 +51,23 @@ provider: a bounded participant token; no key, no room API.
 | credential lifetime | bounded by the window; never timeless, never past 6 hours, never under a minute |
 
 - Evaluated AFTER authorization: an unauthorised caller gets `404`, never «الحصة لم تبدأ بعد» (§20 rule 17).
-- A class ended for everyone stays closed: `409 ENDED`, whatever the window says (R266).
+- A class ended for everyone stays closed: `409 ENDED`, whatever the window says (R266), until reopened; the refusal carries `can_reopen` (R267).
 
-## Ending a class for everyone (R266)
+## Ending and reopening a class (R266, R267)
 
 ```
-POST /sessions/{id}/online-end       ← Session id, EMPTY body; teacher or assistant only
+POST /sessions/{id}/online-end       ← Session id, EMPTY body; whoever moderates (moderatesClass)
  ├─ authorization ...... the join's own, window not required (a class that overran)
  ├─ a live recording ... stopped first
  ├─ session.online_ended_at  set once (a second press answers with the first instant)
  └─ provider.endRoom ... the room is closed; everybody is put out
 ```
 
-- Administrator and beneficiary: `403 END_NOT_PERMITTED`; nobody else's class: `404`.
+- `moderatesClass` (R267) = teacher, assistant, administrator admitted to the class — one rule for moderation, recording, screen sharing, ending and reopening. A beneficiary: `403 END_NOT_PERMITTED` / `REOPEN_NOT_PERMITTED`; nobody else's class: `404`.
 - A failure to close the room is `503 ROOM_NOT_CLOSED` with the class already ended; pressing again retries.
 - `online_ended_at` is a fact about the class, not a room record: the room stays derived and unstored.
-- In the room: «إنهاء للجميع» (teaching staff only) behind a confirmation; everybody's page turns to «انتهت الحصة» (`DisconnectReason.ROOM_DELETED`), with no «إعادة الدخول».
+- In the room: «إنهاء للجميع» (moderators only) behind a confirmation; everybody's page turns to «انتهت الحصة» (`DisconnectReason.ROOM_DELETED`), with no «إعادة الدخول».
+- `POST /sessions/{id}/online-reopen` (R267): same people, only while the window is open (`409 AFTER_WINDOW` after); clears `online_ended_at`, audits `session.online_reopen`, `{ reopened }` (false if it was not ended). Offered on the moderator's ended card (server's `can_reopen`) and, to a signed-in مؤطِّرة or administrator, in the calendar dialog in place of «دخول الحصة».
 
 ## What the credential carries
 
@@ -74,7 +75,7 @@ POST /sessions/{id}/online-end       ← Session id, EMPTY body; teacher or assi
 |---|---|---|---|---|
 | beneficiary | yes | yes | no | mic + camera (`audio_video`) |
 | مؤطِّرة / assistant | yes | yes | yes | mic + camera |
-| administrator | yes | yes | no | mic + camera |
+| administrator | yes | yes | yes (R267) | mic + camera |
 | any, `audio_only` | yes | yes | as above | microphone only |
 
 - «صوت فقط» is in the token (a modified client cannot publish a camera); the client never requests one either.

@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MediaDeviceFailure } from 'livekit-client';
 
-import { EventDetailsDialog, joinOpen } from '../calendar/event-details-dialog.js';
+import { EventDetailsDialog, joinOpen, reopenOffered } from '../calendar/event-details-dialog.js';
+import { MODERATORS } from '../../adapters/online-class.js';
 import { SessionContext } from '../../contexts/session.js';
 import { deviceMessage } from './online-classroom.js';
 import { refusalMessage } from '../../pages/classroom.js';
@@ -373,10 +374,9 @@ describe('recording is optional, explicit, and visible to everyone (R99)', () =>
     expect(code(RECORDING)).toMatch(/live \?[\s\S]*classroom\.recordingLive/);
   });
 
-  it('offers the controls to teaching staff and to nobody else', () => {
-    expect(code(RECORDING)).toContain(
-      "const MAY_RECORD: JoinCredentials['role'][] = ['teacher', 'assistant', 'admin']",
-    );
+  it('offers the controls to those who moderate and to nobody else', () => {
+    expect(code(RECORDING)).toContain('const MAY_RECORD = MODERATORS;');
+    expect(MODERATORS).toEqual(['teacher', 'assistant', 'admin']);
     // The role comes from the credential the SERVER issued (rule O).
     expect(code(RECORDING)).toContain('mayRecord ?');
   });
@@ -545,9 +545,9 @@ describe('R266 — «دخول الحصة» from five minutes before, and never a
     expect(ar.classroom.beforeWindow).toContain('بخمس دقائق');
   });
 
-  it('offers «إنهاء الحصة للجميع» to the teaching staff only, behind a confirmation', () => {
+  it('offers «إنهاء الحصة للجميع» to whoever moderates (R267: administrators too), behind a confirmation', () => {
     const source = code(CLASSROOM);
-    expect(source).toContain("const TEACHING: JoinCredentials['role'][] = ['teacher', 'assistant'];");
+    expect(source).toContain('const teaching = MODERATORS.includes(credentials.role);');
     expect(source).toMatch(/\{teaching \? \(\s*<ControlButton\s+icon="stop"/);
     expect(source).toContain('<ConfirmDialog');
     expect(source).toContain('await endClass(credentials.session_id, accessToken);');
@@ -556,6 +556,39 @@ describe('R266 — «دخول الحصة» from five minutes before, and never a
   it('shows «انتهت الحصة» to everybody when the room is closed, with no «إعادة الدخول»', () => {
     expect(code(CLASSROOM)).toContain('if (reason === DisconnectReason.ROOM_DELETED) onEnded();');
     const page = code(CLASSROOM_PAGE);
-    expect(page).toMatch(/phase\.name === 'ended' \? \(\s*<div className="state" role="status">\s*<p>\{t\('classroom\.endedBody'\)\}<\/p>/);
+    expect(page).toMatch(/phase\.name === 'ended' \? \(\s*<div className="state" role="status">\s*<p>\{phase\.canReopen \? t\('classroom\.reopenBody'\) : t\('classroom\.endedBody'\)\}<\/p>/);
+  });
+});
+
+describe('R267 — a way back in, and administrators do what the مؤطِّرة does', () => {
+  const window = {
+    opens_at: '2026-11-12T18:25:00.000Z',
+    closes_at: '2026-11-12T20:30:00.000Z',
+    ended: true,
+  };
+  const at = (iso: string): number => Date.parse(iso);
+
+  it('the calendar offers «إعادة فتح الحصة» only for an ended class, and only while the window is open', () => {
+    expect(reopenOffered(window, at('2026-11-12T19:00:00.000Z'))).toBe(true);
+    expect(reopenOffered({ ...window, ended: false }, at('2026-11-12T19:00:00.000Z'))).toBe(false);
+    expect(reopenOffered(window, at('2026-11-12T20:30:01.000Z'))).toBe(false);
+    expect(reopenOffered(null, at('2026-11-12T19:00:00.000Z'))).toBe(false);
+  });
+
+  it('only to a مؤطِّرة or an administrator, never a beneficiary', () => {
+    expect(code(DIALOG)).toContain(
+      'if (activeRoles.some((role) => STAFF_ROLES.includes(role)) && reopenOffered(occurrence.online_join, now)) {',
+    );
+  });
+
+  it('the ended card offers «إعادة فتح الحصة» when the server says she may (`can_reopen`)', () => {
+    const page = code(CLASSROOM_PAGE);
+    expect(page).toContain("error.details['reason'] === 'ENDED' && error.details['can_reopen'] === true");
+    expect(page).toContain('await reopenClass(sessionId, accessToken);');
+    expect(code(ADAPTER)).toContain('/online-reopen');
+  });
+
+  it('the confirmation no longer says it is final', () => {
+    expect(ar.classroom.endConfirmBody).toContain('إلا إذا أُعيد فتحها');
   });
 });

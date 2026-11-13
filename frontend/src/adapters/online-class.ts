@@ -40,11 +40,28 @@ export interface JoinCredentials {
 }
 
 /**
- * **R266 — «إنهاء الحصة للجميع».** Teaching staff only (the server refuses
- * anybody else); everybody is put out of the room and nobody enters after.
+ * **R266 — «إنهاء الحصة للجميع».** Whoever moderates (R267; the server refuses
+ * anybody else); everybody is put out of the room and nobody enters until it
+ * is reopened.
  */
 export async function endClass(sessionId: string, token: string): Promise<void> {
   await api<{ data: { ended_at: string } }>(`/sessions/${sessionId}/online-end`, {
+    method: 'POST',
+    token,
+    body: {},
+  });
+}
+
+/**
+ * **R267 — who moderates a class**: the مؤطِّرة, her assistant and an
+ * administrator (the Owner, 2026-11-13: «admins should be able to do all what
+ * a teacher can do»). Shows the controls only; the server decides.
+ */
+export const MODERATORS: readonly JoinCredentials['role'][] = ['teacher', 'assistant', 'admin'];
+
+/** R267 — «إعادة فتح الحصة»: undoes «إنهاء الحصة للجميع» while the window is open. */
+export async function reopenClass(sessionId: string, token: string): Promise<void> {
+  await api<{ data: { reopened: boolean } }>(`/sessions/${sessionId}/online-reopen`, {
     method: 'POST',
     token,
     body: {},

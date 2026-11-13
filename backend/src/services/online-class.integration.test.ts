@@ -19,7 +19,7 @@ import {
   type JoinCredentialRequest,
   type OnlineClassProvider,
 } from "../lib/online-class-provider.js";
-import { authorizeJoin, endOnlineClass, joinOnlineClass } from "./online-class.service.js";
+import { authorizeJoin, endOnlineClass, joinOnlineClass, reopenOnlineClass } from "./online-class.service.js";
 import { joinWindowDto } from "../policies/online-class.js";
 import { createLevel } from "./level.service.js";
 import { createCourseSchedule } from "./course-schedule.service.js";
@@ -783,9 +783,10 @@ describe("administration reuses the authority that edits the occurrence (R98.8)"
     ).toBe("NOT_FOUND");
   });
 
-  it("gives an administrator NO moderation permissions (R98.9)", () => {
-    expect(grantsFor("admin", "audio_video").roomAdmin).toBe(false);
+  it("gives an administrator the مؤطِّرة's moderation, and a beneficiary none (R267)", () => {
+    expect(grantsFor("admin", "audio_video").roomAdmin).toBe(true);
     expect(grantsFor("teacher", "audio_video").roomAdmin).toBe(true);
+    expect(grantsFor("student", "audio_video").roomAdmin).toBe(false);
   });
 });
 
@@ -1155,24 +1156,80 @@ describe("R266 — the door opens five minutes before, and the مؤطِّرة en
     expect(ended.endedAt.toISOString()).toBe(late.toISOString());
   });
 
-  it("refuses a beneficiary and an administrator — 403, and ends nothing", async () => {
+  it("refuses a beneficiary — 403, and ends nothing", async () => {
     const { sessionId } = await onlineClass();
     const student = await person("مستفيدة", [{ role: "student", branchId: branchA }]);
     await enrol(student, branchA);
-    const admin = await person("إدارية", [{ role: "admin", branchId: branchA }]);
     const provider = new RecordingProvider();
-    for (const actor of [
-      actorOf(student, [{ role: "student", branches: [branchA] }]),
-      actorOf(admin, [{ role: "admin", branches: [branchA] }]),
-    ]) {
-      await expect(endOnlineClass(prisma, provider, actor, sessionId, DURING)).rejects.toMatchObject({
-        code: "FORBIDDEN",
-        details: { reason: "END_NOT_PERMITTED" },
-      });
-    }
+    const studentActor = actorOf(student, [{ role: "student", branches: [branchA] }]);
+    await expect(endOnlineClass(prisma, provider, studentActor, sessionId, DURING)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      details: { reason: "END_NOT_PERMITTED" },
+    });
+    await expect(reopenOnlineClass(prisma, studentActor, sessionId, DURING)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      details: { reason: "REOPEN_NOT_PERMITTED" },
+    });
     expect(provider.ended).toEqual([]);
     const row = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { onlineEndedAt: true } });
     expect(row.onlineEndedAt).toBeNull();
+  });
+
+  it("R267 — an administrator of the class's branch ends it, as the مؤطِّرة may", async () => {
+    const { sessionId } = await onlineClass();
+    const admin = await person("إدارية", [{ role: "admin", branchId: branchA }]);
+    const provider = new RecordingProvider();
+    await endOnlineClass(prisma, provider, actorOf(admin, [{ role: "admin", branches: [branchA] }]), sessionId, DURING);
+    expect(provider.ended).toEqual([roomNameForSession(sessionId)]);
+  });
+
+  it("R267 — «إعادة فتح الحصة»: the class is entered again, and only those who moderate are offered it", async () => {
+    const { scheduleId, sessionId } = await onlineClass();
+    const teacher = await person("مؤطِّرة", [{ role: "teacher", branchId: branchA }]);
+    await staff(scheduleId, teacher, "teacher");
+    const student = await person("مستفيدة", [{ role: "student", branchId: branchA }]);
+    await enrol(student, branchA);
+    const admin = await person("إدارية", [{ role: "admin", branchId: branchA }]);
+    const teacherActor = actorOf(teacher, [{ role: "teacher", branches: [branchA] }]);
+    const studentActor = actorOf(student, [{ role: "student", branches: [branchA] }]);
+    const adminActor = actorOf(admin, [{ role: "admin", branches: [branchA] }]);
+
+    await endOnlineClass(prisma, new RecordingProvider(), teacherActor, sessionId, DURING);
+    // The refusal says who may reopen it — the server decides, the page shows.
+    for (const [actor, canReopen] of [
+      [teacherActor, true],
+      [adminActor, true],
+      [studentActor, false],
+    ] as const) {
+      await expect(authorizeJoin(prisma, actor, sessionId, undefined, DURING)).rejects.toMatchObject({
+        details: { reason: "ENDED", can_reopen: canReopen },
+      });
+    }
+
+    expect(await reopenOnlineClass(prisma, adminActor, sessionId, DURING)).toEqual({ reopened: true });
+    expect(await reopenOnlineClass(prisma, teacherActor, sessionId, DURING)).toEqual({ reopened: false });
+    await expect(authorizeJoin(prisma, studentActor, sessionId, undefined, DURING)).resolves.toMatchObject({
+      role: "student",
+    });
+    expect(
+      await prisma.auditLog.count({ where: { targetId: sessionId, actionType: "session.online_reopen" } }),
+    ).toBe(1);
+  });
+
+  it("R267 — not after the window closed: reopening would lead nowhere", async () => {
+    const { scheduleId, sessionId } = await onlineClass();
+    const teacher = await person("مؤطِّرة", [{ role: "teacher", branchId: branchA }]);
+    await staff(scheduleId, teacher, "teacher");
+    const teacherActor = actorOf(teacher, [{ role: "teacher", branches: [branchA] }]);
+    await endOnlineClass(prisma, new RecordingProvider(), teacherActor, sessionId, DURING);
+    const late = new Date(`${CLASS_DATE}T18:00:00+01:00`);
+    await expect(authorizeJoin(prisma, teacherActor, sessionId, undefined, late)).rejects.toMatchObject({
+      details: { reason: "ENDED", can_reopen: false },
+    });
+    await expect(reopenOnlineClass(prisma, teacherActor, sessionId, late)).rejects.toMatchObject({
+      code: "STATE_CONFLICT",
+      details: { reason: "AFTER_WINDOW" },
+    });
   });
 
   it("refuses somebody who does not staff the class — 404", async () => {
