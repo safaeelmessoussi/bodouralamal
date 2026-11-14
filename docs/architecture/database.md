@@ -125,6 +125,7 @@ Platform-level tables: `PlatformOwner`, `AuditLog`, `Trash`, `SystemSetting`, `A
 | `RefreshToken.token_hash` | Presented token → exactly one row, by lookup |
 | `RefreshToken.session_id → RefreshSession.id` | Every generation has one stable serialization target |
 | `Enrollment (student_id, level_id, academic_period_id)` where not deleted | Exactly one live enrolment per Level per academic period (BR-21, narrowed by R122); the period is in the key so re-enrolling next semester keeps the previous row as history. Expressible only because `level_id` sits on the enrolment row |
+| `Enrollment (student_id, level_id, academic_year_id)` where not deleted and a year is named | R271: one live whole-year enrolment per Level per year; `enrollment_year_or_period_check` — a year or a semester, never both. A year enrolment is live on any day a semester of its year covers (`enrolmentInPeriodOn`); year/semester overlap is refused in the service (`overlappingEnrolment`) |
 | `AdministrativeGroup (id, level_id)` | Redundant against the PK on purpose: PostgreSQL requires it before `Enrollment` can declare its composite FK |
 | `StudentTeachingGroup` at most one per `(student, subject, level)` where not deleted | At most one split-group per subject (BR-22); `subject` and `level` come from the teaching group, so it is a hand-written functional index over the join |
 | `Session (schedule_id, date)` | Makes `session.materialize` idempotent |

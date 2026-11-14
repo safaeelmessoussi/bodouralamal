@@ -5,6 +5,7 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { Actor } from '../policies/actor.js';
 import { isCurrentPeriod } from './academic-period.service.js';
 import { enrolAtLevel, unenrolById } from './enrollment.service.js';
+import { expectedAttendeesInPeriod } from './attendance.service.js';
 
 /**
  * **An enrolment belongs to a semester** (SRS Revision 122).
@@ -292,5 +293,68 @@ describe('the history a future attestation needs is reconstructible', () => {
 
     // The progression reached: the highest Level rank she was ever enrolled at.
     expect(Math.max(...history.map((h) => h.studiesYear ?? 0))).toBe(2);
+  });
+});
+
+/* ── R271 — the whole academic year, the ordinary path ─────────────────── */
+
+describe('R271 — an enrolment for the whole academic year', () => {
+  let yearStudent = '';
+  let levelYear3 = '';
+  let curYearId = '';
+
+  beforeAll(async () => {
+    yearStudent = (
+      await prisma.user.create({
+        data: { sex: 'female', nameArabic: `${TAG} مستفيدة سنة`, accountStatus: 'active', isBeneficiary: true },
+      })
+    ).id;
+    const category = await prisma.category.findFirstOrThrow({ where: { name: `${TAG} فئة` } });
+    levelYear3 = (
+      await prisma.level.create({ data: { name: `${TAG} سنة ثالثة`, categoryId: category.id, displayOrder: 3 } })
+    ).id;
+    curYearId = (await prisma.academicYear.findFirstOrThrow({ where: { label: '2095-2096' } })).id;
+  });
+
+  const live = async (iso: string): Promise<boolean> =>
+    (await prisma.enrollment.count({
+      where: { studentId: yearStudent, levelId: levelYear3, ...expectedAttendeesInPeriod(day(iso)) },
+    })) > 0;
+
+  it('names the year and no semester, and is live in every semester of it', async () => {
+    const row = await enrolAtLevel(prisma, admin(), {
+      studentId: yearStudent,
+      levelId: levelYear3,
+      branchId,
+      academicYearId: curYearId,
+    });
+    expect(row).toMatchObject({ academicYearId: curYearId, academicPeriodId: null });
+    expect(await live('2095-10-01')).toBe(true); // semester 1
+    expect(await live('2096-03-01')).toBe(true); // semester 2
+    expect(await live('2095-03-01')).toBe(false); // the previous year
+    expect(await live('2096-07-15')).toBe(false); // no semester covers it yet
+  });
+
+  it('covers a semester recorded after the enrolment', async () => {
+    await prisma.academicPeriod.create({
+      data: { academicYearId: curYearId, sequence: 3, startDate: day('2096-07-01'), endDate: day('2096-08-31') },
+    });
+    expect(await live('2096-07-15')).toBe(true);
+  });
+
+  it('refuses a semester of a year she is enrolled for, and the year once a semester of it is taken', async () => {
+    await expect(
+      enrolAtLevel(prisma, admin(), { studentId: yearStudent, levelId: levelYear3, branchId, academicPeriodId: curS1 }),
+    ).rejects.toMatchObject({ details: { reason: 'ALREADY_ENROLLED_IN_LEVEL' } });
+    await expect(
+      enrolAtLevel(prisma, admin(), { studentId: studentId, levelId: levelYear1, branchId, academicYearId: curYearId }),
+    ).rejects.toMatchObject({ details: { reason: 'ALREADY_ENROLLED_IN_LEVEL' } });
+  });
+
+  it('a past year is accepted too — any year or semester, past, present or future', async () => {
+    const prevYearId = (await prisma.academicYear.findFirstOrThrow({ where: { label: '2094-2095' } })).id;
+    await expect(
+      enrolAtLevel(prisma, admin(), { studentId: yearStudent, levelId: levelYear3, branchId, academicYearId: prevYearId }),
+    ).resolves.toMatchObject({ academicYearId: prevYearId });
   });
 });

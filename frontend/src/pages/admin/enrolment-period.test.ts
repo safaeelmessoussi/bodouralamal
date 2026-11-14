@@ -62,13 +62,17 @@ describe('a stale "choose the semester" notice does not survive the semester bei
   // anyway. `submit()` only ever cleared `notice` at the START of a
   // subsequent successful save — nothing watched the fields it complained
   // about actually being answered.
-  it('clears the notice once Level, branch and period are all answered', () => {
-    expect(source).toContain('if (levelId && derivedBranchId && periodId) setNotice(null);');
+  // R271 — the term is the year (ordinary) or the semester (exception); the
+  // notice clears once whichever one the form asks is answered.
+  it('clears the notice once Level, branch and the term are all answered', () => {
+    expect(source).toContain(
+      "if (levelId && derivedBranchId && (termKind === 'year' ? yearId : periodId)) setNotice(null);",
+    );
   });
 
-  it('watches exactly the three fields submit() itself gates on, in an effect', () => {
+  it('watches exactly the fields submit() itself gates on, in an effect', () => {
     expect(source).toMatch(
-      /useEffect\(\(\) => \{\s*if \(levelId && derivedBranchId && periodId\) setNotice\(null\);\s*\}, \[levelId, derivedBranchId, periodId\]\);/,
+      /useEffect\(\(\) => \{\s*if \(levelId && derivedBranchId && \(termKind === 'year' \? yearId : periodId\)\) setNotice\(null\);\s*\}, \[levelId, derivedBranchId, periodId, yearId, termKind\]\);/,
     );
   });
 });

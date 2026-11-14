@@ -628,3 +628,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 ## 2026-11-14 — SRS Revision 270: the swipe line under the filters
 - `calendar-header.tsx`: «السحب يمينًا أو يسارًا يغيّر الشهر» renders after the filter row, directly above the grid (was between the month title and the filters).
 - Verified: `shoot-pages` calendar phone/laptop (no sideways scroll), calendar tests 71, tsc, lint, build.
+
+## 2026-11-14 — SRS Revision 271: enrolment for a whole academic year (the ordinary path)
+- `enrollment.academic_year_id` (migration r271: year XOR semester CHECK, one live year enrolment per Level per year); `enrolmentInPeriodOn` = the semester covers the day OR the year has a semester covering it — a semester recorded later is covered.
+- `EnrolmentTerm` (period id | `{ academicYearId }`) through `enrolInLevel`/`enrolInGroup`; `overlappingEnrolment` refuses a year over one of its semesters and the reverse (`ALREADY_ENROLLED_IN_LEVEL`). `POST /admin/enrollments`: exactly one of `academic_year_id`, `academic_period_id`.
+- «تسجيل مستفيد(ة)»: «مدة التسجيل» — «السنة الدراسية كاملة» (default, current year) or «فصل دراسي واحد»; the list shows «2026-2027 (السنة كاملة)» with current/ended. The group roster's own add stays by semester.
+- The enrolment's term reads «2026-2027 (السنة كاملة)» / «2026-2027 الفصل 1» in the table and in «إدارة التسجيلات» (`enrolmentTerm`; the year isolated left-to-right — it read «2027-2026»). Year lookup excludes deleted years (trash-coverage guard).
+- Verified: full integration (128 files; the one finding fixed, its 3 files then 34/34); `verify-enrolment-year` 7/7 (390/1366); frontend tests, lint, tsc, build; backend typecheck, lint.

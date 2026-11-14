@@ -70,7 +70,15 @@ import { calendarDay, effectiveOn } from "./effective-staffing.js";
  */
 export function enrolmentInPeriodOn(on: Date): Prisma.EnrollmentWhereInput {
   const day = calendarDay(on);
-  return { academicPeriod: { startDate: { lte: day }, endDate: { gte: day } } };
+  const covers = { startDate: { lte: day }, endDate: { gte: day } };
+  /**
+   * **R271 — or a year enrolment whose year has a semester covering the day**
+   * (the ordinary path since 2026-11-14). The year has no dates of its own;
+   * its semesters are its span, so one recorded after the enrolment is
+   * covered too. Every caller spreads this into a `where` with no `OR` of its
+   * own (checked when R271 made it one).
+   */
+  return { OR: [{ academicPeriod: covers }, { academicYear: { periods: { some: covers } } }] };
 }
 
 /** The parts of a schedule that decide its audience. Deliberately structural: a

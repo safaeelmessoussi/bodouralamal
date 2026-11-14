@@ -33,9 +33,18 @@ const createSchema = z
      * now* unanswerable, and the column is nullable only so rows written before
      * this revision stay honest.
      */
-    academic_period_id: z.string().uuid(),
+    academic_period_id: z.string().uuid().optional(),
+    /**
+     * **R271 — or the whole academic year**, the ordinary path (the Owner,
+     * 2026-11-14); a single semester is the exception. Exactly one of the two.
+     */
+    academic_year_id: z.string().uuid().optional(),
   })
-  .strict();
+  .strict()
+  .refine((b) => (b.academic_period_id === undefined) !== (b.academic_year_id === undefined), {
+    message: 'name exactly one of academic_year_id and academic_period_id',
+    path: ['academic_year_id'],
+  });
 
 const querySchema = z
   .object({
@@ -69,7 +78,8 @@ export function create(prisma: PrismaClient) {
       studentId: b.student_id,
       levelId: b.level_id,
       branchId: b.branch_id,
-      academicPeriodId: b.academic_period_id,
+      ...(b.academic_year_id ? { academicYearId: b.academic_year_id } : {}),
+      ...(b.academic_period_id ? { academicPeriodId: b.academic_period_id } : {}),
       ...(b.administrative_group_id === undefined
         ? {}
         : { administrativeGroupId: b.administrative_group_id }),

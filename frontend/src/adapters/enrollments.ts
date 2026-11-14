@@ -35,6 +35,8 @@ export interface EnrollmentRowView {
   academic_period_id: string | null;
   academic_period_sequence: number | null;
   academic_year_label: string | null;
+  /** R271 — a whole-year enrolment names its year (and no semester). */
+  academic_year_id?: string | null;
   is_current_period: boolean;
 }
 
@@ -62,8 +64,9 @@ export async function enrol(
     level_id: string;
     branch_id: string;
     administrative_group_id?: string | null;
-    /** R122 — required: an enrolment names the semester it is for. */
-    academic_period_id: string;
+    /** R271 — exactly one: the whole year (ordinary) or one semester. */
+    academic_period_id?: string;
+    academic_year_id?: string;
   },
   token: string | null,
 ): Promise<{ id: string }> {

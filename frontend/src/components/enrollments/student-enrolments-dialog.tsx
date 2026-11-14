@@ -99,7 +99,7 @@ export function StudentEnrolmentsDialog({
                       {[
                         enrolment.branch_name,
                         enrolment.administrative_group_name ?? t('admin.enrollments.noGroup'),
-                        enrolment.academic_year_label,
+                        enrolmentTerm(enrolment),
                       ]
                         .filter((part): part is string => Boolean(part))
                         .join(' · ')}
@@ -148,4 +148,22 @@ export function StudentEnrolmentsDialog({
       </div>
     </Dialog>
   );
+}
+
+/**
+ * **R271 — what the enrolment is for, in words**: «2026-2027 (السنة كاملة)»
+ * or «2026-2027 الفصل 1». The year is isolated left-to-right (U+2066/U+2069):
+ * inside Arabic text a bare «2026-2027» reads back as «2027-2026».
+ */
+export function enrolmentTerm(enrolment: {
+  academic_year_label: string | null;
+  academic_year_id?: string | null;
+  academic_period_sequence: number | null;
+}): string | null {
+  if (!enrolment.academic_year_label) return null;
+  const year = `\u2066${enrolment.academic_year_label}\u2069`;
+  if (enrolment.academic_period_sequence !== null) {
+    return `${year} ${t('admin.enrollments.semester').replace('{n}', String(enrolment.academic_period_sequence))}`;
+  }
+  return enrolment.academic_year_id ? `${year} ${t('admin.enrollments.wholeYear')}` : year;
 }

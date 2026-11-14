@@ -14,6 +14,7 @@ import {
   type EnrollmentRowView,
 } from '../../adapters/enrollments.js';
 import { listLevels, type Level } from '../../adapters/taxonomy.js';
+import { listAcademicYears, type AcademicYearRef } from '../../adapters/reference-data.js';
 import {
   addMember,
   listCircles,
@@ -22,7 +23,7 @@ import {
 } from '../../adapters/teaching-groups.js';
 import { searchDirectory, type DirectoryEntry, type RoleAssignment } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
-import { StudentEnrolmentsDialog } from '../../components/enrollments/student-enrolments-dialog.js';
+import { StudentEnrolmentsDialog, enrolmentTerm } from '../../components/enrollments/student-enrolments-dialog.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction } from '../../components/ui/data-table.js';
@@ -32,7 +33,7 @@ import {
   type AcademicPeriodRef,
 } from '../../adapters/academic-periods.js';
 import { Badge } from '../../components/ui/badge.js';
-import { SearchInput, SelectField } from '../../components/ui/field.js';
+import { ChoiceField, SearchInput, SelectField } from '../../components/ui/field.js';
 import { MultiSelectField } from '../../components/ui/multi-select.js';
 import { useSession } from '../../contexts/session.js';
 import { isDirty } from '../../lib/form-dirty.js';
@@ -296,7 +297,17 @@ export function EnrollmentsPage(): ReactNode {
           <ul className="admin-list admin-list--plain">
             {r.enrolments.map((e) => (
               <li key={e.id}>
-                {e.academic_period_id === null ? (
+                {e.academic_period_id === null && e.academic_year_id ? (
+                  // R271 — a whole-year enrolment.
+                  <>
+                    {enrolmentTerm(e)}{' '}
+                    <Badge tone={e.is_current_period ? 'ok' : 'neutral'}>
+                      {e.is_current_period
+                        ? t('admin.enrollments.currentBadge')
+                        : t('admin.enrollments.endedBadge')}
+                    </Badge>
+                  </>
+                ) : e.academic_period_id === null ? (
                   // Honest: written before R122, its semester was never
                   // recorded and was deliberately not guessed.
                   <span className="muted">{t('admin.enrollments.periodUnrecorded')}</span>
@@ -583,11 +594,32 @@ function EnrolDialog({
    */
   const [periods, setPeriods] = useState<AcademicPeriodRef[]>([]);
   const [periodId, setPeriodId] = useState('');
+  /** R271 — the whole academic year (the ordinary path) or one semester. */
+  const [termKind, setTermKind] = useState<'year' | 'semester'>('year');
+  const [years, setYears] = useState<AcademicYearRef[]>([]);
+  const [yearId, setYearId] = useState('');
   /** The Level's circles, across its Subjects — offered, never required. */
   const [circles, setCircles] = useState<TeachingGroupRow[]>([]);
   const [circleIds, setCircleIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // R271 — the years, and a default of the current one.
+  useEffect(() => {
+    let cancelled = false;
+    void listAcademicYears(token)
+      .then((rows) => {
+        if (cancelled) return;
+        setYears(rows);
+        setYearId((chosen) => chosen || (rows.find((y) => y.is_current)?.id ?? ''));
+      })
+      .catch(() => {
+        if (!cancelled) setYears([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   // R122 — the semesters, and a default of the one running today.
   useEffect(() => {
@@ -639,8 +671,8 @@ function EnrolDialog({
    * clearing here can never race ahead of a still-genuine refusal.
    */
   useEffect(() => {
-    if (levelId && derivedBranchId && periodId) setNotice(null);
-  }, [levelId, derivedBranchId, periodId]);
+    if (levelId && derivedBranchId && (termKind === 'year' ? yearId : periodId)) setNotice(null);
+  }, [levelId, derivedBranchId, periodId, yearId, termKind]);
 
 
   // **The list is loaded once, on open; search NARROWS it in the control.** It
@@ -805,7 +837,11 @@ function EnrolDialog({
     }
     // R122 — refused in words, never in silence (rule AH). With no period the
     // enrolment could not end on its own, which is the defect this closes.
-    if (!periodId) {
+    if (termKind === 'year' && !yearId) {
+      setNotice(t('admin.enrollments.yearRequired'));
+      return;
+    }
+    if (termKind === 'semester' && !periodId) {
       setNotice(t('admin.enrollments.periodRequired'));
       return;
     }
@@ -819,7 +855,8 @@ function EnrolDialog({
           branch_id: derivedBranchId,
           // `null` is the placement, not the absence of one (R66).
           administrative_group_id: groupId === '' ? null : groupId,
-          academic_period_id: periodId,
+          // R271 — the year, the ordinary path; a semester, the exception.
+          ...(termKind === 'year' ? { academic_year_id: yearId } : { academic_period_id: periodId }),
         },
         token,
       );
@@ -925,6 +962,35 @@ function EnrolDialog({
           the reader was looking at, and nothing on screen explained why. The
           placeholder makes "nothing is actually selected" impossible to
           mistake for a choice. */}
+      {/* R271 (the Owner, 2026-11-14) — «enrolling to a year … is the normal
+          path, and as exception, to enrol to only a semester». Any year or
+          semester, past, present or future. */}
+      <fieldset>
+        <legend>{t('admin.enrollments.termLegend')}</legend>
+        {(['year', 'semester'] as const).map((kind) => (
+          <ChoiceField
+            key={kind}
+            type="radio"
+            name="enrolment-term"
+            label={t(kind === 'year' ? 'admin.enrollments.termYear' : 'admin.enrollments.termSemester')}
+            checked={termKind === kind}
+            onChange={(on) => {
+              if (on) setTermKind(kind);
+            }}
+          />
+        ))}
+      </fieldset>
+      {termKind === 'year' ? (
+        <SelectField
+          label={t('admin.enrollments.yearLabel')}
+          value={yearId}
+          onChange={setYearId}
+          required
+          placeholder={t('admin.enrollments.periodPlaceholder')}
+          options={years.map((y) => ({ value: y.id, label: y.label }))}
+          hint={t('admin.enrollments.yearHint')}
+        />
+      ) : (
       <SelectField
         label={t('admin.enrollments.periodLabel')}
         value={periodId}
@@ -943,6 +1009,7 @@ function EnrolDialog({
               : t('admin.enrollments.periodHint')
         }
       />
+      )}
 
       <SelectField
         label={t('admin.nav.groups')}

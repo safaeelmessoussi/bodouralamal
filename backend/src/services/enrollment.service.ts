@@ -104,9 +104,62 @@ export interface EnrollmentRow {
   administrativeGroupId: string | null;
   /** R66 — always present: the single answer to *where is this student*. */
   branchId: string;
-  /** R122 — `null` only on rows written before the revision. */
+  /** R122 — `null` only on rows written before the revision, or (R271) for a
+   *  year enrolment. */
   academicPeriodId: string | null;
+  /** R271 — the whole academic year, the ordinary path; else `null`. */
+  academicYearId: string | null;
   enrolledAt: Date;
+}
+
+/**
+ * **R271 — what an enrolment is for**: one semester (a period id, the shape
+ * every caller used before) or a whole academic year (the ordinary path since
+ * 2026-11-14: «enrolling to a year … which is the normal path, and as
+ * exception, to enrol to only a semester»).
+ */
+export type EnrolmentTerm = string | { academicYearId: string };
+
+function termColumns(term: EnrolmentTerm): { academicPeriodId: string | null; academicYearId: string | null } {
+  return typeof term === 'string'
+    ? { academicPeriodId: term, academicYearId: null }
+    : { academicPeriodId: null, academicYearId: term.academicYearId };
+}
+
+/**
+ * The live enrolment of this beneficiary in this Level that the new one would
+ * overlap: the same semester, or the same year — a year enrolment overlaps
+ * every semester of its year, and a semester overlaps its year's enrolment.
+ */
+async function overlappingEnrolment(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  levelId: string,
+  term: EnrolmentTerm,
+): Promise<{ id: string; administrativeGroupId: string | null } | null> {
+  const { academicPeriodId, academicYearId } = termColumns(term);
+  const yearId =
+    academicYearId ??
+    (
+      await tx.academicPeriod.findUnique({
+        where: { id: academicPeriodId ?? '' },
+        select: { academicYearId: true },
+      })
+    )?.academicYearId ??
+    null;
+  return tx.enrollment.findFirst({
+    where: {
+      studentId,
+      levelId,
+      deletedAt: null,
+      OR: [
+        ...(academicPeriodId ? [{ academicPeriodId }] : []),
+        ...(yearId ? [{ academicYearId: yearId }] : []),
+        ...(academicYearId ? [{ academicPeriod: { academicYearId } }] : []),
+      ],
+    },
+    select: { id: true, administrativeGroupId: true },
+  });
 }
 
 export async function listGroupRoster(
@@ -192,9 +245,10 @@ export async function enrolInGroup(
    * one: an enrolment with no period is exactly the open-ended row that made
    * *is she enrolled right now* unanswerable.
    */
-  academicPeriodId: string,
+  term: EnrolmentTerm,
 ): Promise<EnrollmentRow> {
   assertCanManage(actor);
+  const { academicPeriodId, academicYearId } = termColumns(term);
 
   {
     const group = await tx.administrativeGroup.findFirst({
@@ -228,10 +282,7 @@ export async function enrolInGroup(
     // the dimension the association actually enrols in. Without the period in
     // this predicate, a beneficiary taking Semester 2 of a Level she took
     // Semester 1 of would be refused, which is the association's ordinary case.
-    const already = await tx.enrollment.findFirst({
-      where: { studentId, levelId: group.levelId, academicPeriodId, deletedAt: null },
-      select: { id: true, administrativeGroupId: true },
-    });
+    const already = await overlappingEnrolment(tx, studentId, group.levelId, term);
     if (already) {
       if (already.administrativeGroupId === administrativeGroupId) {
         throw new AppError('DUPLICATE', 'student is already enrolled in this group');
@@ -254,6 +305,7 @@ export async function enrolInGroup(
         levelId: group.levelId,
         branchId: group.branchId,
         academicPeriodId,
+        academicYearId,
         createdById: actor.userId,
       },
       select: {
@@ -263,6 +315,7 @@ export async function enrolInGroup(
         administrativeGroupId: true,
         branchId: true,
         academicPeriodId: true,
+        academicYearId: true,
         enrolledAt: true,
       },
     });
@@ -281,6 +334,7 @@ export async function enrolInGroup(
         administrative_group_id: administrativeGroupId,
         branch_id: group.branchId,
         academic_period_id: academicPeriodId,
+        academic_year_id: academicYearId,
         source,
       },
     });
@@ -325,7 +379,7 @@ export async function enrolAtPlacement(
   placement: PlacementInput,
   studentId: string,
   source: 'roster_edit' | 'approval',
-  academicPeriodId: string,
+  academicPeriodId: EnrolmentTerm,
 ): Promise<EnrollmentRow> {
   return 'administrativeGroupId' in placement
     ? enrolInGroup(tx, actor, placement.administrativeGroupId, studentId, source, academicPeriodId)
@@ -369,9 +423,10 @@ export async function enrolInLevel(
    * one: an enrolment with no period is exactly the open-ended row that made
    * *is she enrolled right now* unanswerable.
    */
-  academicPeriodId: string,
+  term: EnrolmentTerm,
 ): Promise<EnrollmentRow> {
   assertCanManage(actor);
+  const { academicPeriodId, academicYearId } = termColumns(term);
 
   const level = await tx.level.findFirst({
     where: { id: levelId, deletedAt: null },
@@ -398,10 +453,7 @@ export async function enrolInLevel(
   // unique index would catch it, but a raw constraint violation tells an
   // administrator nothing about what to do instead.
   // BR-21, scoped to the period — see the identical note in `enrolInGroup`.
-  const already = await tx.enrollment.findFirst({
-    where: { studentId, levelId, academicPeriodId, deletedAt: null },
-    select: { id: true, administrativeGroupId: true },
-  });
+  const already = await overlappingEnrolment(tx, studentId, levelId, term);
   if (already) {
     throw new AppError('STATE_CONFLICT', 'student is already enrolled in this level', {
       reason: 'ALREADY_ENROLLED_IN_LEVEL',
@@ -414,7 +466,7 @@ export async function enrolInLevel(
     // No group: this Level has no subdivision. The composite FK is not enforced
     // when `administrative_group_id` is NULL, so the branch stands alone here
     // and is the caller's checked choice.
-    data: { studentId, levelId, branchId, academicPeriodId, createdById: actor.userId },
+    data: { studentId, levelId, branchId, academicPeriodId, academicYearId, createdById: actor.userId },
     select: {
       id: true,
       studentId: true,
@@ -422,6 +474,7 @@ export async function enrolInLevel(
       administrativeGroupId: true,
       branchId: true,
       academicPeriodId: true,
+      academicYearId: true,
       enrolledAt: true,
     },
   });
@@ -442,6 +495,7 @@ export async function enrolInLevel(
       administrative_group_id: null,
       branch_id: branchId,
       academic_period_id: academicPeriodId,
+      academic_year_id: academicYearId,
       source,
     },
   });
@@ -711,6 +765,7 @@ export async function moveStudent(
         administrativeGroupId: true,
         branchId: true,
         academicPeriodId: true,
+        academicYearId: true,
         enrolledAt: true,
       },
     });
@@ -874,6 +929,10 @@ export async function listEnrollments(
           academicYear: { select: { label: true } },
         },
       },
+      // R271 — or the whole year, with its semesters (its span).
+      academicYear: {
+        select: { id: true, label: true, periods: { select: { startDate: true, endDate: true } } },
+      },
     },
     orderBy: resolveSort(ENROLLMENT_SORT_FIELDS, filters, ENROLLMENT_DEFAULT_ORDER) as never,
     take: 500,
@@ -898,8 +957,12 @@ export async function listEnrollments(
      */
     academic_period_id: r.academicPeriod?.id ?? null,
     academic_period_sequence: r.academicPeriod?.sequence ?? null,
-    academic_year_label: r.academicPeriod?.academicYear.label ?? null,
-    is_current_period: r.academicPeriod ? isCurrentPeriod(r.academicPeriod) : false,
+    academic_year_label: r.academicPeriod?.academicYear.label ?? r.academicYear?.label ?? null,
+    // R271 — a year enrolment: it runs while any semester of its year does.
+    academic_year_id: r.academicYear?.id ?? null,
+    is_current_period: r.academicPeriod
+      ? isCurrentPeriod(r.academicPeriod)
+      : (r.academicYear?.periods.some((p) => isCurrentPeriod(p)) ?? false),
     // Only the seats inside THIS Level: a circle is scoped to (Subject, Level),
     // so another Level's seats describe a different enrolment entirely.
     circles: r.student.teachingGroupSeats
@@ -928,12 +991,25 @@ export async function enrolAtLevel(
     levelId: string;
     branchId: string;
     administrativeGroupId?: string | null;
-    /** R122 — required by this boundary; see `enrolStudent`. */
-    academicPeriodId: string;
+    /** R122 — a semester (R271: the exception); see `enrolStudent`. */
+    academicPeriodId?: string;
+    /** R271 — the whole academic year, the ordinary path. Exactly one of the two. */
+    academicYearId?: string;
   },
 ): Promise<EnrollmentRow> {
   return prisma.$transaction(async (tx) => {
-    await assertPeriodExists(tx, input.academicPeriodId);
+    let term: EnrolmentTerm;
+    if (input.academicYearId) {
+      const year = await tx.academicYear.findFirst({
+        where: { id: input.academicYearId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!year) throw new AppError('NOT_FOUND', 'no such academic year');
+      term = { academicYearId: year.id };
+    } else {
+      await assertPeriodExists(tx, input.academicPeriodId ?? '');
+      term = input.academicPeriodId ?? '';
+    }
     return enrolAtPlacement(
       tx,
       actor,
@@ -942,7 +1018,7 @@ export async function enrolAtLevel(
         : { levelId: input.levelId, branchId: input.branchId },
       input.studentId,
       'roster_edit',
-      input.academicPeriodId,
+      term,
     );
   });
 }

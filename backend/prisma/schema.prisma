@@ -1685,6 +1685,11 @@ model Enrollment {
   /// attestation «في أي فصل كنت مسجّلة» loses its answer.
   academicPeriodId String?         @map("academic_period_id") @db.Uuid
   academicPeriod   AcademicPeriod? @relation(fields: [academicPeriodId], references: [id], onDelete: Restrict)
+  /// **R271 — or the whole academic year** (the ordinary path): live on every
+  /// day some semester of that year covers, including a semester recorded
+  /// later. Never both (`enrollment_year_or_period_check`).
+  academicYearId   String?         @map("academic_year_id") @db.Uuid
+  academicYear     AcademicYear?   @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
 
   enrolledAt  DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -1697,6 +1702,7 @@ model Enrollment {
   /// «active forever».
   // Uniqueness is scoped to non-deleted rows → partial index in SQL (TD-6).
   @@index([academicPeriodId, deletedAt])
+  @@index([academicYearId, deletedAt])
   @@index([administrativeGroupId, deletedAt])
   @@index([levelId, deletedAt])
   @@index([studentId, deletedAt])
@@ -3892,6 +3898,7 @@ model AcademicYear {
   /// R122 — the year's semesters. The year itself carries NO dates: they would
   /// be a second, driftable copy of `min(start_date)`/`max(end_date)` here.
   periods            AcademicPeriod[]
+  enrollments        Enrollment[]
   id                 String              @id @default(uuid()) @db.Uuid
   /// Validated `YYYY-YYYY`; free-text year strings are prohibited (§4.10).
   /// **Unique among live rows** (partial index, R137) — a soft-deleted year
