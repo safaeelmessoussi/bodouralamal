@@ -611,3 +611,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - `class-section.multi-dimension` «has ended» test: 20 s timeout for its first import of the scheduling page (timed out under a full parallel run).
 - `verify-admin-navigation`: the typed-address checks restated for R263 (a refused address leads home); they had expected a refusal message since R263.
 - Verified: `verify-header-fits` 12/12 (1366 shot: full navigation, every control inside), `verify-admin-navigation` 44/44; frontend 1732, lint, tsc, build, token guard.
+
+## 2026-11-14 — SRS Revision 269: a class occurrence changed into an exam that replaces it
+- `exam.replaces_session` (migration r269: target CHECK, one live replacement per Session, no room only for a replacing sitting); `session-exam.service` `readExamConversion` / `convertSessionToExam` (`loadForWrite` authority, class facts and staff copied, Session overridden, audit `session.convert_to_exam`).
+- `GET /sessions/{id}/exam-conversion`, `POST /sessions/{id}/convert-to-exam`; `deleteExam` of a replacing sitting authorizes through `loadForWrite` and sends no «cancelled» notice — the class returns.
+- Calendar omits replaced Sessions; exam occurrences carry `replaced_session_id` and the class's delivery/media/`online_join`, so «دخول الحصة» opens the class's call. «حصص الجدول» rows carry `replaced_by_exam`: «أصبحت اختبارًا», «إرجاعها حصة».
+- «تعديل الحصة»: «النوع» (`SessionTypeField`) swaps the form for `ExamConversionFields` (Level when several, Subject, Surah, العلامة القصوى). The R98 scenario removes harness-made exams on clean.
+- Verified: full integration 129 files (2954) + `session-exam` 8/8 after the Level label; `verify-session-to-exam` 9/9 (1366/390); seed drill; backend 395, frontend 1738, lints, guards, OpenAPI.

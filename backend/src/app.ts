@@ -764,6 +764,9 @@ export function createApp(
   // field assignment cannot carry.
   guarded.patch('/sessions/:id', sessionsCtl.override(prisma));
   guarded.post('/sessions/:id/cancel', sessionsCtl.cancel(prisma));
+  // R269 — «تعديل الحصة» → النوع: اختبار; the exam replaces the class.
+  guarded.get('/sessions/:id/exam-conversion', sessionsCtl.examConversion(prisma));
+  guarded.post('/sessions/:id/convert-to-exam', sessionsCtl.convertToExam(prisma));
   guarded.post('/sessions/:id/restore', sessionsCtl.restore(prisma));
   // R172 §9 — one occurrence to the Trash.
   guarded.delete('/sessions/:id', sessionsCtl.remove(prisma));

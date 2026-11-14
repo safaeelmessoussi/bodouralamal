@@ -8034,6 +8034,138 @@
         }
       }
     },
+    "/sessions/{id}/exam-conversion": {
+      "get": {
+        "summary": "What «تعديل الحصة» offers when the class becomes an exam",
+        "description": "**R269 (Owner, 2026-11-14).** The choices for changing ONE class occurrence into an exam that replaces it, decided by the server and prefilled: `exam_types` (live scheduling types of kind `exam`), `levels` (the class's own — its occurrence audience, else its Levels, else its Categories' Levels — each with the Subjects taught there and its «مقرر الحفظ» Surahs), `level_id` (when the class has one Level), `subject_id`, `surah_id` (when the class names one), `max_grade` (20) and the session `version`. Same authority as editing the occurrence: an administrator of its branch, or its مؤطِّرة/assistant.",
+        "responses": {
+          "200": {
+            "description": "`{ data: { exam_types, levels, level_id, subject_id, surah_id, max_grade, version } }`."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an occurrence the caller cannot change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason SESSION_NOT_SCHEDULED or ALREADY_AN_EXAM.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/convert-to-exam": {
+      "post": {
+        "summary": "Change a class occurrence into an exam that replaces it",
+        "description": "**R269 (Owner, 2026-11-14: «in تعديل الحصة of that session, i want to be able to change its type to exam»).** Creates a published physical sitting with `target_kind = session` and `replaces_session = true`, keeping the class's date, times, branch, room (none for a class عن بُعد — the sitting is held in the class's own call), visibility, description and staff (the مؤطِّرة supervises, assistants assist). The body carries only what a class does not say: `scheduling_type_id` (kind `exam`), `level_id` (one of the class's), `subject_id` (taught at that Level), `surah_id` (by-Surah subjects, within the Level's «مقرر الحفظ»), `max_grade` (default 20) and `version`. The occurrence is kept, marked overridden, and hidden from every calendar while the sitting is live; `DELETE /exams/{id}` by the same people changes it back. Strict body.",
+        "responses": {
+          "201": {
+            "description": "`{ data: { exam_id } }`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — LEVEL_NOT_OF_CLASS, SUBJECT_NOT_AT_LEVEL, SURAH_NOT_IN_SYLLABUS, or an unknown key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an occurrence the caller cannot change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT (SESSION_NOT_SCHEDULED, ALREADY_AN_EXAM) or VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{id}/cancel": {
       "post": {
         "summary": "Cancel a session",

@@ -204,3 +204,18 @@ export const onlineJoinSchema = z.object({}).strict();
  * the semantics R97 established and R99 preserves.
  */
 export const recordingCommandSchema = z.object({}).strict();
+
+/**
+ * R269 — «تعديل الحصة» → النوع: اختبار. What a class does not say and an
+ * exam needs; everything else is the class's own and is not accepted here.
+ */
+export const convertToExamSchema = z
+  .object({
+    scheduling_type_id: z.string().uuid(),
+    level_id: z.string().uuid(),
+    subject_id: z.string().uuid(),
+    surah_id: z.number().int().min(1).max(114).nullable().optional(),
+    max_grade: z.number().positive().max(9999).optional(),
+    version: z.number().int().min(0),
+  })
+  .strict();

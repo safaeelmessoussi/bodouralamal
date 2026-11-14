@@ -5,10 +5,12 @@ import type { PrismaClient } from "../generated/prisma/client.js";
 import { requireActor } from "../middleware/authenticate.js";
 import { sessionTitles } from "../services/class-title.js";
 import * as sessions from "../services/session.service.js";
+import * as sessionExam from "../services/session-exam.service.js";
 import { sessionContentLinkDto, sessionDto, sessionRosterDto } from "./dto.js";
 import { idParam, parse } from "./parse.js";
 import {
   cancelSessionSchema,
+  convertToExamSchema,
   linkContentSchema,
   overrideSessionSchema,
   restoreSessionSchema,
@@ -232,5 +234,28 @@ export function setAudience(prisma: PrismaClient) {
         overridden: result.overridden,
       },
     });
+  };
+}
+
+/** R269 — what «تعديل الحصة» offers when its type becomes an exam. */
+export function examConversion(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    res.json({ data: await sessionExam.readExamConversion(prisma, requireActor(req), idParam(req, "id")) });
+  };
+}
+
+/** R269 — the class becomes an exam that replaces it. */
+export function convertToExam(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(convertToExamSchema, req.body ?? {});
+    const result = await sessionExam.convertSessionToExam(prisma, requireActor(req), idParam(req, "id"), {
+      schedulingTypeId: body.scheduling_type_id,
+      levelId: body.level_id,
+      subjectId: body.subject_id,
+      surahId: body.surah_id ?? null,
+      maxGrade: body.max_grade ?? 20,
+      version: body.version,
+    });
+    res.status(201).json({ data: { exam_id: result.examId } });
   };
 }

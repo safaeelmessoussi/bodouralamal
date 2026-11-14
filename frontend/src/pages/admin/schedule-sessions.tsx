@@ -18,6 +18,12 @@ import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { SessionMaterialsDialog } from '../../components/content/session-materials-dialog.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { deleteExam } from '../../adapters/exams.js';
+import {
+  ExamConversionFields,
+  SessionTypeField,
+  useExamConversion,
+} from '../../components/scheduling/exam-conversion.js';
 import {
   SessionAudienceDialog,
   SessionAudienceFields,
@@ -209,6 +215,9 @@ export function ScheduleSessionsPage({
   const [status, setStatus] = useState<TableStatus>('loading');
   const [editing, setEditing] = useState<ScheduleSession | null>(null);
   const [cancelling, setCancelling] = useState<ScheduleSession | null>(null);
+  /** R269 — «إرجاعها حصة»: the exam that replaced this class is deleted. */
+  const [reverting, setReverting] = useState<ScheduleSession | null>(null);
+  const [revertIssue, setRevertIssue] = useState<string | null>(null);
   /** R172 §9 — one occurrence to the Trash; `deleteBlocked` names an exam sat in it. */
   const [deleting, setDeleting] = useState<ScheduleSession | null>(null);
   const [deleteBlocked, setDeleteBlocked] = useState<string | null>(null);
@@ -362,7 +371,10 @@ export function ScheduleSessionsPage({
       key: 'status',
       header: t('admin.sessions.colStatus'),
       // Announced as a word, never colour alone (§14.4).
-      cell: (r) => t(`admin.sessions.status.${r.status}`),
+      // R269 — a class an exam replaced says so (the exam's long composed
+      // title is the calendar's to show; here it made the row a column).
+      cell: (r) =>
+        r.replaced_by_exam ? t('admin.sessions.becameExam') : t(`admin.sessions.status.${r.status}`),
     },
     {
       // **R97 — what this occurrence actually is**, which after an override is
@@ -461,7 +473,17 @@ export function ScheduleSessionsPage({
     // doors to one fact only made her ask which was the real one. R91 §11's
     // one-off cover is unchanged in substance: it is saved from the edit
     // dialog, for this occurrence only.)
-    { label: t('common.edit'), onSelect: (r) => setEditing(r) },
+    // R269 — a class an exam replaced is not edited as a class: it is changed
+    // back first («إرجاعها حصة»).
+    { label: t('common.edit'), onSelect: (r) => setEditing(r), available: (r) => !r.replaced_by_exam },
+    {
+      label: t('admin.sessions.revertAction'),
+      onSelect: (r) => {
+        setRevertIssue(null);
+        setReverting(r);
+      },
+      available: (r) => Boolean(r.replaced_by_exam),
+    },
     {
       label: t('session.materialsAction'),
       onSelect: (r) => setMaterialsFor(r.id),
@@ -486,7 +508,7 @@ export function ScheduleSessionsPage({
       label: t('admin.sessions.cancel'),
       danger: true,
       onSelect: (r) => setCancelling(r),
-      available: (r) => r.status === 'scheduled',
+      available: (r) => r.status === 'scheduled' && !r.replaced_by_exam,
     },
     {
       // R172 §9 — «حذف»: this occurrence should not exist (a stray one, a
@@ -750,6 +772,11 @@ export function ScheduleSessionsPage({
           scheduleSubjectId={isTeacherPortal ? null : scope?.subjectId ?? null}
           teachers={teachers}
           branches={branches}
+          accessToken={accessToken}
+          onConverted={() => {
+            setEditing(null);
+            void load();
+          }}
         />
       ) : null}
 
@@ -877,6 +904,30 @@ export function ScheduleSessionsPage({
           setRestoreBlocked(null);
         }}
       />
+      <ConfirmDialog
+        open={reverting !== null}
+        {...(revertIssue ? { blocked: revertIssue } : {})}
+        title={t('admin.sessions.revertTitle')}
+        body={t('admin.sessions.revertBody')}
+        confirmLabel={t('admin.sessions.revertConfirm')}
+        busy={busy}
+        onConfirm={() => {
+          const exam = reverting?.replaced_by_exam;
+          if (!exam) return;
+          setBusy(true);
+          deleteExam(exam.id, accessToken)
+            .then(async () => {
+              setReverting(null);
+              await load();
+            })
+            .catch(() => setRevertIssue(t('admin.sessions.revertFailed')))
+            .finally(() => setBusy(false));
+        }}
+        onCancel={() => {
+          setReverting(null);
+          setRevertIssue(null);
+        }}
+      />
       {cancelling ? (
         <CancelDialog
           session={cancelling}
@@ -944,9 +995,15 @@ function ScopeDialog({
   scheduleSubjectId,
   teachers,
   branches,
+  accessToken,
+  onConverted,
 }: {
   session: ScheduleSession;
   total: number;
+  /** R269 — the caller's own token: converting is the مؤطِّرة's too, so it is
+   *  not the manager-only `token` below. */
+  accessToken: string | null;
+  onConverted: () => void;
   /** SRS Revision 166 §2 — whom «هذه الحصة فقط» may be staffed with, and the
    *  branches its audience may draw from; both already loaded by the page. */
   teachers: DirectoryEntry[];
@@ -995,6 +1052,9 @@ function ScopeDialog({
   scheduleSubjectId: string | null;
 }): ReactNode {
   const [scope, setScope] = useState<EditScope>('this_session');
+  // R269 — «النوع»: '' keeps the class; an exam type changes it into an exam.
+  const conversion = useExamConversion(session.id, accessToken);
+  const [examTypeId, setExamTypeId] = useState('');
   const [date, setDate] = useState(session.date);
   const [startTime, setStartTime] = useState(session.start_time);
   const [endTime, setEndTime] = useState(session.end_time);
@@ -1243,6 +1303,20 @@ function ScopeDialog({
     >
       {guard.confirmation}
       <div className="form">
+        {conversion && conversion.exam_types.length > 0 ? (
+          <SessionTypeField facts={conversion} value={examTypeId} onChange={setExamTypeId} />
+        ) : null}
+        {conversion && examTypeId !== '' ? (
+          <ExamConversionFields
+            sessionId={session.id}
+            facts={conversion}
+            typeId={examTypeId}
+            token={accessToken}
+            onCancel={onCancel}
+            onConverted={onConverted}
+          />
+        ) : (
+        <>
         <fieldset>
           <legend>{t('admin.sessions.scopeLegend')}</legend>
           {/* Radios, not a select: three mutually exclusive answers to one
@@ -1527,6 +1601,8 @@ function ScopeDialog({
             {t('common.save')}
           </Button>
         </div>
+        </>
+        )}
       </div>
     </Dialog>
   );

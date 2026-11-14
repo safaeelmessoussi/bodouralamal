@@ -457,6 +457,8 @@ const OCCURRENCE_KEYS = [
   "online_join",
   "online_media_mode",
   "recurrence",
+  // R269 — on an exam that replaced a class: that class.
+  "replaced_session_id",
   "room_name",
   // R119 — which catalogue row this is, and its structural kind. `kind` says
   // `event` for both a نشاط and a عطلة; these are what tell them apart, and

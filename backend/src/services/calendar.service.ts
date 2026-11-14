@@ -215,6 +215,9 @@ export interface Occurrence {
    * again once its مؤطِّرة ended it for everyone. `null` otherwise.
    */
   onlineJoin: { opens_at: string; closes_at: string; ended: boolean } | null;
+  /** R269 — on an exam that replaced a class: that class (its call, its
+   *  way back). Null everywhere else. */
+  replacedSessionId: string | null;
   categoryId: string | null;
   categoryName: string | null;
   levelId: string | null;
@@ -783,6 +786,7 @@ function sessionOccurrence(
     deliveryMode: session.deliveryMode,
     onlineMediaMode: session.onlineMediaMode,
     onlineJoin: joinWindowDto(session),
+    replacedSessionId: null,
     categoryId: category?.id ?? null,
     categoryName: category?.name ?? null,
     levelId: level?.id ?? null,
@@ -1855,6 +1859,7 @@ export async function readCalendar(
         deliveryMode: null,
         onlineMediaMode: null,
         onlineJoin: null,
+        replacedSessionId: null,
         categoryId: event.categoryScopes[0]?.category.id ?? null,
         categoryName: event.categoryScopes[0]?.category.name ?? null,
         levelId: event.levelScopes[0]?.level.id ?? null,
@@ -1924,6 +1929,18 @@ export async function readCalendar(
           include: {
             // R165 §2 — the one Surah this sitting examines, by name.
             surah: { select: { surahId: true, nameArabic: true } },
+            // R269 — the class this sitting replaced: its delivery and its call.
+            session: {
+              select: {
+                id: true,
+                date: true,
+                startTime: true,
+                endTime: true,
+                deliveryMode: true,
+                onlineMediaMode: true,
+                onlineEndedAt: true,
+              },
+            },
             // The category NAME travels with its id, as it does for a session: an id
             // with no name is unreadable on a grid, and the filter chip beside the
             // calendar is drawn from exactly this pair (R55.1).
@@ -1981,6 +1998,7 @@ export async function readCalendar(
       : exams;
 
   for (const exam of examsForActor) {
+    const replaced = exam.replacesSession ? exam.session : null;
     out.push({
       kind: "exam",
       schedulingTypeId: exam.schedulingType?.id ?? null,
@@ -2016,9 +2034,13 @@ export async function readCalendar(
       // applies here exactly as it does to a Session, and an exam has no
       // join/provider column to report one from — the reader learns *this is
       // remote*, never *through what*.
-      deliveryMode: exam.mode === "online" ? "online" : null,
-      onlineMediaMode: null,
-      onlineJoin: null,
+      // R269 — a sitting that replaced a class عن بُعد is held in that class's
+      // own call: its delivery, media and door are the class's.
+      deliveryMode:
+        exam.mode === "online" || (replaced?.deliveryMode === "online") ? "online" : null,
+      onlineMediaMode: replaced?.onlineMediaMode ?? null,
+      onlineJoin: replaced ? joinWindowDto(replaced) : null,
+      replacedSessionId: replaced?.id ?? null,
       categoryId: exam.level.category.id,
       categoryName: exam.level.category.name,
       levelId: exam.levelId,
@@ -2124,6 +2146,8 @@ export async function readCalendar(
       where: {
         deletedAt: null,
         date: { gte: from, lte: query.to },
+        // R269 — a class an exam replaced is shown as that exam, not twice.
+        exams: { none: { replacesSession: true, deletedAt: null } },
         // **Codex review, 2026-09-20 — every independent OR-bearing
         // condition now lives in ONE `AND` array, never spread as sibling
         // top-level `OR` keys.** `sessionTierWhere(actor)` returns its own

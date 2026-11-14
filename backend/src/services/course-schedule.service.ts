@@ -2782,6 +2782,12 @@ export async function listScheduleSessions(
           where: { deletedAt: null },
           select: { userId: true, position: true, user: { select: { nameArabic: true } } },
         },
+        // R269 — the exam that replaced this class, while it is live.
+        exams: {
+          where: { replacesSession: true, deletedAt: null },
+          select: { id: true, title: true },
+          take: 1,
+        },
       },
     }),
     prisma.session.count({ where }),
@@ -2815,6 +2821,7 @@ export async function listScheduleSessions(
           name: s.user.nameArabic,
         })),
         protectedReasons: reasons.get(r.id) ?? [],
+        replacedByExam: r.exams[0] ?? null,
       })),
       window,
       total,

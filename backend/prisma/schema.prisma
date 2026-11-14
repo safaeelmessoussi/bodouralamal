@@ -3508,6 +3508,11 @@ model Exam {
   /// `session` target — the class occurrence this quick test belongs to.
   sessionId       String?        @map("session_id") @db.Uuid
   session         Session?       @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  /// **R269 — this sitting REPLACES its class** («تعديل الحصة» → النوع: اختبار).
+  /// Only with `target_kind = 'session'`; one live replacement per Session
+  /// (`exam_replaces_session_live_key`). Calendars hide the Session while this
+  /// row is live; deleting the exam brings the class back.
+  replacesSession Boolean        @default(false) @map("replaces_session")
   /// `teaching_group` target.
   teachingGroupId String?        @map("teaching_group_id") @db.Uuid
   teachingGroup   TeachingGroup? @relation(fields: [teachingGroupId], references: [id], onDelete: Restrict)

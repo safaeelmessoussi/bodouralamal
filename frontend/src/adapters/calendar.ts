@@ -106,6 +106,8 @@ export interface Occurrence {
    * Optional so an older fixture without it still type-checks.
    */
   online_join?: { opens_at: string; closes_at: string; ended: boolean } | null;
+  /** R269 — on an exam that replaced a class: that class (its call, and the way back). */
+  replaced_session_id?: string | null;
   category_id: string | null;
   category_name: string | null;
   level_id: string | null;

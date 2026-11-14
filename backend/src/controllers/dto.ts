@@ -2145,6 +2145,8 @@ export interface ScheduleSessionDto {
    *  (Revision 155), applied here too. */
   staff: { user_id: string; position: string; user_name: string | null }[];
   protected_reasons: string[];
+  /** R269 — the exam that replaced this class, while it is live. */
+  replaced_by_exam: { id: string; title: string } | null;
 }
 
 export function scheduleSessionDto(row: {
@@ -2165,6 +2167,7 @@ export function scheduleSessionDto(row: {
   version: number;
   staff: { userId: string; position: string; name: string | null }[];
   protectedReasons: string[];
+  replacedByExam?: { id: string; title: string } | null;
 }): ScheduleSessionDto {
   return {
     id: row.id,
@@ -2184,6 +2187,8 @@ export function scheduleSessionDto(row: {
     version: row.version,
     staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position, user_name: s.name })),
     protected_reasons: row.protectedReasons,
+    // R269 — this class became that exam; its row says so and edits nothing.
+    replaced_by_exam: row.replacedByExam ?? null,
   };
 }
 

@@ -81,6 +81,8 @@ export interface ScheduleSession {
    * unanswerable without this.
    */
   protected_reasons: string[];
+  /** R269 — the exam that replaced this class, while it is live. */
+  replaced_by_exam?: { id: string; title: string } | null;
 }
 
 export interface Page<T> {
@@ -348,4 +350,51 @@ export async function setSessionAudienceOverrides(
     teachingGroupIds: res.data.teaching_group_ids,
     overridden: res.data.overridden,
   };
+}
+
+/** R269 — what «تعديل الحصة» offers when the class becomes an exam. */
+export interface ExamConversionFacts {
+  exam_types: { id: string; name: string }[];
+  levels: {
+    id: string;
+    name: string;
+    /** For the platform's one Level label, «الفئة — المستوى». */
+    category_name: string | null;
+    subjects: { id: string; name: string; requires_surahs: boolean }[];
+    surahs: { id: number; name: string }[];
+  }[];
+  level_id: string | null;
+  subject_id: string | null;
+  surah_id: number | null;
+  max_grade: number;
+  version: number;
+}
+
+export async function readExamConversion(
+  sessionId: string,
+  token: string | null,
+): Promise<ExamConversionFacts> {
+  return (await api<{ data: ExamConversionFacts }>(`/sessions/${sessionId}/exam-conversion`, { token })).data;
+}
+
+/** R269 — the class becomes an exam that replaces it. */
+export async function convertSessionToExam(
+  sessionId: string,
+  body: {
+    scheduling_type_id: string;
+    level_id: string;
+    subject_id: string;
+    surah_id: number | null;
+    max_grade: number;
+    version: number;
+  },
+  token: string | null,
+): Promise<{ exam_id: string }> {
+  return (
+    await api<{ data: { exam_id: string } }>(`/sessions/${sessionId}/convert-to-exam`, {
+      method: 'POST',
+      token,
+      body,
+    })
+  ).data;
 }

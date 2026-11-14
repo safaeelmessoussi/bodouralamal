@@ -97,6 +97,15 @@ async function wipe(): Promise<void> {
   await prisma.notification.deleteMany({ where: { sessionId: { in: sids } } });
   await prisma.sessionContent.deleteMany({ where: { sessionId: { in: sids } } });
   await prisma.sessionStaff.deleteMany({ where: { sessionId: { in: sids } } });
+  // R269 — an exam a harness made of one of these classes (`exam.session_id`
+  // is RESTRICT), with what hangs off it.
+  const exams = (
+    await prisma.exam.findMany({ where: { sessionId: { in: sids } }, select: { id: true } })
+  ).map((e) => e.id);
+  await prisma.notification.deleteMany({ where: { examId: { in: exams } } });
+  await prisma.examStaff.deleteMany({ where: { examId: { in: exams } } });
+  await prisma.trash.deleteMany({ where: { targetId: { in: exams } } });
+  await prisma.exam.deleteMany({ where: { id: { in: exams } } });
   await prisma.session.deleteMany({ where: { id: { in: sids } } });
   await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
   await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: ids } } });

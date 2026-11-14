@@ -197,6 +197,8 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     online_media_mode: o.onlineMediaMode,
     // R266 — when «دخول الحصة» is offered; `null` for anything not online.
     online_join: o.onlineJoin,
+    // R269 — the class an exam replaced (its call, and the way back).
+    replaced_session_id: o.replacedSessionId,
     category_id: o.categoryId,
     category_name: o.categoryName,
     level_id: o.levelId,

@@ -62,6 +62,25 @@ CHECK (delivery_mode = 'in_person' OR room_id IS NULL)
 - Delivery adds no «دخول الحصة» of its own; joining is R98.
 - Teacher parity: a مؤطِّرة uses the same `SchedulingDialog` with `types={['activity']}` (R71.0 keeps class creation with Admins; §4.4c derives her scope from the schedules she staffs); delivery widens no scheduling authority.
 
+## A class changed into an exam (R269)
+
+```
+«حصص الجدول» → تعديل → النوع: <exam type>
+GET  /sessions/{id}/exam-conversion   the class's own choices, prefilled
+POST /sessions/{id}/convert-to-exam   { scheduling_type_id, level_id, subject_id, surah_id?, max_grade?, version }
+ ├─ authority ...... loadForWrite (branch admin, or the occurrence's مؤطِّرة/assistant)
+ ├─ exam ........... physical, published, target_kind=session, replaces_session=true;
+ │                   date, times, branch, room (none عن بُعد), visibility, description,
+ │                   staff (teacher→supervisor, assistant→assistant) copied from the class
+ └─ session ........ kept, overridden (spared by regeneration), audited session.convert_to_exam
+```
+
+- Calendars omit a Session while a live exam replaces it; the exam's occurrence carries `replaced_session_id` and, for a class عن بُعد, the class's delivery, media and `online_join`: «دخول الحصة» opens `/classroom/{session}` (R98 unchanged).
+- Level: one of the class's (occurrence audience → schedule Levels → its Categories' Levels → its group's Level); Subject taught there; Surah within that Level's «مقرر الحفظ».
+- Refused: a cancelled or held class (`SESSION_NOT_SCHEDULED`), one already replaced (`ALREADY_AN_EXAM`, unique live index), a Level not the class's (`LEVEL_NOT_OF_CLASS`).
+- Back: `DELETE /exams/{id}` («إرجاعها حصة» on the row) — the same people may, no «cancelled» notice is sent, and the class reappears. Conversion sends no notice either.
+- Schema: `exam.replaces_session`; `exam_physical_place_all_or_none_check` accepts no room only for a replacing sitting.
+
 ## Guards
 
 | guard | property |
@@ -70,6 +89,8 @@ CHECK (delivery_mode = 'in_person' OR room_id IS NULL)
 | `components/scheduling/delivery.test.ts` (21) | one catalogue, one section, hidden-means-cleared, no dead Join button, no vendor named; a hand-written «عن بُعد» and a second delivery control each fail it |
 | `pages/admin/scheduling-contract.test.tsx` | schedule wire key set for R97 |
 | `pages/admin/schedule-sessions.test.tsx` | occurrence wire key set for R97 |
+| `services/session-exam.integration.test.ts` (8) | R269 conversion: choices, copied facts, calendar replacement, the class's call, back by deleting, refusals |
+| `components/scheduling/exam-conversion.test.tsx` (5) | «النوع», what is asked, the row, the calendar door |
 
 ## Deliberately not built here
 

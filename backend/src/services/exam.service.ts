@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { examAudienceFilters } from './calendar.service.js';
 import { assertTypeOfKind } from './scheduling-type.service.js';
+import { loadForWrite } from './session.service.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import type { Actor } from '../policies/actor.js';
@@ -711,11 +712,18 @@ export async function deleteExam(
         administrativeGroupId: true,
         visibility: true,
         date: true,
+        replacesSession: true,
+        sessionId: true,
         staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
       },
     });
     if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
-    await assertScope(
+    // R269 — deleting a sitting that REPLACED a class is changing it back:
+    // whoever could change the class (`loadForWrite`, the question «تعديل
+    // الحصة» asks) may undo it, and the class reappears on every calendar.
+    if (existing.replacesSession && existing.sessionId) {
+      await loadForWrite(tx as unknown as PrismaClient, actor, existing.sessionId);
+    } else await assertScope(
       tx,
       actor,
       {
@@ -803,7 +811,9 @@ export async function deleteExam(
     // fell outside the window, and a restored exam came back with nobody
     // supervising it — silently, which is the failure §7 describes.
     const now = new Date();
-    await notifyExamCancelled(
+    // R269 — changing a sitting back into its class cancels nothing: the class
+    // is back where it was, so nobody is told an exam was cancelled.
+    if (!existing.replacesSession) await notifyExamCancelled(
       tx,
       id,
       {

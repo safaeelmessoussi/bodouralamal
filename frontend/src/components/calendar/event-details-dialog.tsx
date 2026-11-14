@@ -391,7 +391,14 @@ function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
   const accessToken = useContext(SessionContext)?.accessToken ?? null;
   const activeRoles = useActiveRoleOrNull()?.activeRoles ?? [];
   const now = useMinuteClock();
-  if (occurrence.kind !== 'session') return null;
+  // R269 — an exam that replaced a class عن بُعد is held in that class's call.
+  const room =
+    occurrence.kind === 'session'
+      ? occurrence.id
+      : occurrence.kind === 'exam'
+        ? (occurrence.replaced_session_id ?? null)
+        : null;
+  if (room === null) return null;
   if (occurrence.delivery_mode !== 'online') return null;
   if (!accessToken) return null;
   // R267 — an ended class, to a مؤطِّرة or an administrator, while the window
@@ -400,7 +407,7 @@ function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
   if (activeRoles.some((role) => STAFF_ROLES.includes(role)) && reopenOffered(occurrence.online_join, now)) {
     return (
       <p className="details__action">
-        <ButtonLink variant="secondary" href={`/classroom/${occurrence.id}`}>
+        <ButtonLink variant="secondary" href={`/classroom/${room}`}>
           {t('classroom.reopen')}
         </ButtonLink>
       </p>
@@ -413,7 +420,7 @@ function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
 
   return (
     <p className="details__action">
-      <ButtonLink variant="primary" href={`/classroom/${occurrence.id}`}>
+      <ButtonLink variant="primary" href={`/classroom/${room}`}>
         {t('classroom.join')}
       </ButtonLink>
     </p>
