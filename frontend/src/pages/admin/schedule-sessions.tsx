@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { listCourseSchedules, updateCourseSchedule } from '../../adapters/course-schedules.js';
+import { listCourseSchedules, updateCourseSchedule, type CourseSchedule } from '../../adapters/course-schedules.js';
 import {
   cancelSession,
   deleteSession,
@@ -291,6 +291,10 @@ export function ScheduleSessionsPage({
     teachingMode: string;
   } | null>(null);
 
+  /** R277 — everything the class says, under its title (the Owner: «should
+   *  show all the detail of the event such as the branch and the level»). */
+  const [facts, setFacts] = useState<CourseSchedule | null>(null);
+
   /** R97 — the branch's rooms, so an occurrence moved back to حضوري can name
    *  the one it meets in. Loaded once the schedule's branch is known. */
   const [rooms, setRooms] = useState<{ id: string; name: string; capacity: number | null }[]>([]);
@@ -345,6 +349,7 @@ export function ScheduleSessionsPage({
           dimensions: mine.dimensions,
           surahIds: mine.surah_ids ?? [],
         });
+        setFacts(mine);
         setKlass({
           title: mine.title,
           description: mine.description,
@@ -738,6 +743,8 @@ export function ScheduleSessionsPage({
         </Button>
       }
     >
+      {facts ? <ClassFacts schedule={facts} /> : null}
+
       {notice ? (
         <Feedback>
           {notice}
@@ -1670,5 +1677,48 @@ function CancelDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * **R277 — the class these occurrences belong to, in full** (the Owner: «the
+ * title in حصص الجدول … should show all the detail of the event such as the
+ * branch and the level»). Its title is the page's lede (R272); these are the
+ * rest: Subject, branch, place, Level, circle, group, Surahs, days and time,
+ * dates, staff — each only when the class says it.
+ */
+export function ClassFacts({ schedule: c }: { schedule: CourseSchedule }) {
+  const list = (names: readonly (string | null | undefined)[] | undefined): string =>
+    (names ?? []).filter((n): n is string => Boolean(n)).join(t('common.listSeparator'));
+  const place =
+    c.delivery_mode === 'online' ? t('delivery.online') : (c.room_name ?? t('delivery.in_person'));
+  const days = list(c.weekdays.map((d) => t(`admin.schedules.day_${d}` as Parameters<typeof t>[0])));
+  const dates =
+    c.anchor_date || c.effective_until
+      ? `${formatDate(c.anchor_date)} – ${c.effective_until ? formatDate(c.effective_until) : '…'}`
+      : '';
+  const rows: [string, string][] = [
+    [t('admin.schedules.subject'), c.subject_name ?? ''],
+    [t('calendar.detailsBranch'), c.branch_name ?? ''],
+    [t('calendar.detailsRoom'), place],
+    [t('calendar.detailsLevel'), list(c.level_names) || (c.teaching_mode === 'entire_level' ? (c.target_name ?? '') : '')],
+    [t('calendar.detailsCircle'), list(c.circle_names)],
+    [t('calendar.detailsGroup'), list(c.group_names)],
+    [t('calendar.detailsSurahs'), list(c.surah_names)],
+    [t('calendar.detailsTime'), [days, `${c.start_time.slice(0, 5)} – ${c.end_time.slice(0, 5)}`].filter(Boolean).join(' ')],
+    [t('calendar.detailsDate'), dates],
+    [t('calendar.detailsInstructors'), list(c.staff.map((x) => x.user_name))],
+  ];
+  return (
+    <dl className="details details--tiles class-facts">
+      {rows
+        .filter(([, value]) => value !== '')
+        .map(([label, value]) => (
+          <div key={label} className="details__item">
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+    </dl>
   );
 }

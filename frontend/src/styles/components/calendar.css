@@ -822,6 +822,12 @@ tr:last-child .cal-cell {
     grid-template-columns: 1fr;
   }
 }
+/* R277 — «حصص الجدول»: the class's facts under its title, as many per row
+   as fit, then the table. */
+.details.class-facts {
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  margin-block-end: var(--space-4);
+}
 
 /* ── Narrow screens ─────────────────────────────────────────────────────────
    Tested at 360 px (§14.7). The fixed cell height wastes a phone screen, and a

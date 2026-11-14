@@ -43,3 +43,10 @@ describe('تقويمي reads its filter options from her own scoped vocabulary',
     expect(filtersCall).not.toContain('bootstrap?.levels');
   });
 });
+
+describe('R276 — تقويمي opens on «الكل», even for a list of one', () => {
+  it('never chooses a filter for her (R254\'s single-choice default withdrawn here)', () => {
+    expect(source).not.toMatch(/filters\.set\(/);
+    expect(source).not.toMatch(/length === 1/);
+  });
+});

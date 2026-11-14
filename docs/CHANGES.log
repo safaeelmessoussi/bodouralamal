@@ -642,3 +642,8 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - R275: `session_became_exam` / `session_back_to_class` (migration r275), written in the conversion and in deleting a replacing exam (`notifySessionExamChange`, opposite notice withdrawn). Roster `POST …/roster` takes `academic_year_id` | `academic_period_id`; «مجموعات المستويات» sent neither (refused since R122) and now asks «مدة التسجيل» (`useEnrolmentTerm`).
 - `ops:merge-schedules` (KEEP, MERGE, `APPLY=1`): identical details only, no shared date; occurrences move, dates widen, the emptied class to the Trash. Drilled on Localhost.
 - Verified: full integration 128 files (the one finding — `session-audience.http`'s fixture circle shared the R92 class's subject — given its own subject), then the touched suites 46/46 and 42/42; `verify-role-switch` 5/5, `verify-session-to-exam` 9/9; frontend 1742, backend 395, lints, guards, OpenAPI, seed drill. `verify-admin-navigation`: its reload check stalls intermittently on Localhost (document never runs its script) with and without this change — its detail line now says where.
+
+## 2026-11-14 — SRS Revisions 276–277: «تقويمي» opens on «الكل»; «حصص الجدول» names its class in full
+- `PersonalCalendar` no longer chooses a list-of-one filter (R254 effect removed): a beneficiary with one circle saw only that circle's subject. Pinned in `personal-calendar.test.tsx`.
+- R277: `ClassFacts` under the title of «حصص الجدول» (from the class's list row: Subject, branch, place, Level, circle, group, Surahs, days/time, dates, staff), `.details.class-facts` tiles.
+- Verified: frontend tsc, lint, vitest, build; design-token guard; `verify-class-facts` 9/9 (390/1366).

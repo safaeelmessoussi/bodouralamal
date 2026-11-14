@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import {
   fetchCalendarBootstrap,
@@ -165,29 +165,10 @@ export function PersonalCalendar({
       .catch(() => setOptions(null));
   }, [token, as]);
 
-  /**
-   * **R254 — a list of one is chosen, not «الكل»** (the Owner: «if the drop
-   * down contain only one element … that one element should be selected by
-   * default; once more than one … الكل»). Once, when her own vocabulary
-   * arrives, for each of this reader's fields the address leaves unset.
-   */
-  const singlesApplied = useRef(false);
-  useEffect(() => {
-    if (!options || singlesApplied.current) return;
-    singlesApplied.current = true;
-    const lists: Partial<Record<CalendarFilterField, readonly { id: string }[]>> = {
-      branchId: options.branches,
-      categoryId: options.categories,
-      levelId: options.levels,
-      subjectId: options.subjects,
-      groupId: options.groups,
-      circleId: options.circles,
-    };
-    for (const field of fields) {
-      const list = lists[field];
-      if (list?.length === 1 && !filters.value[field]) filters.set(field, list[0]!.id);
-    }
-  }, [options, fields, filters]);
+  // R276 — every filter opens on «الكل», even a list of one (the Owner: «in
+  // تقويمي, the default of the filters should be الكل» — a lone «الحلقة» chosen
+  // by default hid every class of the other subjects). R254's single-choice
+  // default is withdrawn here.
 
   const hijriByDate = useMemo(() => {
     const map = new Map<string, HijriDay>();
