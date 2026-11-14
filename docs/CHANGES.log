@@ -624,3 +624,7 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Fix: the candidates are Sessions holding a linked `session_recording` — the only ones `consent.reevaluate` acts on; a later recording link/import queues its own. Same outcome, a handful of rows.
 - Tests: consent / group-less fixtures give their classes a recording (`test-support/session-recording-link.ts`); new «requeues nothing for a class that holds no recording».
 - Verified: consent, consent-safeguarding, group-less-enrollment, recording-ingest integration 100/100; backend typecheck, lint.
+
+## 2026-11-14 — SRS Revision 270: the swipe line under the filters
+- `calendar-header.tsx`: «السحب يمينًا أو يسارًا يغيّر الشهر» renders after the filter row, directly above the grid (was between the month title and the filters).
+- Verified: `shoot-pages` calendar phone/laptop (no sideways scroll), calendar tests 71, tsc, lint, build.

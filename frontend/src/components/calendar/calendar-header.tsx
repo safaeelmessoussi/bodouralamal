@@ -115,16 +115,6 @@ export function CalendarHeader({
         </div>
       </div>
 
-      {/* R264 — on a phone, where the month turns by a swipe and its buttons
-          are not shown, a line says so. */}
-      {swipeOnPhone ? (
-        <p className="cal-header__swipe-hint">
-          <span aria-hidden="true">→</span>
-          {t('calendar.swipeHint')}
-          <span aria-hidden="true">←</span>
-        </p>
-      ) : null}
-
       {/* R177 §4 (Owner, 2026-09-29) — the filters are on screen on every
           width; the phone toggle «تصفية الجدول» is gone. A control that hides
           the filters is one more tap between a visitor and the answer, and
@@ -134,6 +124,18 @@ export function CalendarHeader({
         <div id={filtersId} className="cal-header__filters" role="group" aria-label={t('calendar.filtersLabel')}>
           {filters}
         </div>
+      ) : null}
+
+      {/* R264 — on a phone, where the month turns by a swipe and its buttons
+          are not shown, a line says so. R270 (the Owner, 2026-11-14) — under
+          the filters, right above the grid it turns, not between the month's
+          name and the filters. */}
+      {swipeOnPhone ? (
+        <p className="cal-header__swipe-hint">
+          <span aria-hidden="true">→</span>
+          {t('calendar.swipeHint')}
+          <span aria-hidden="true">←</span>
+        </p>
       ) : null}
     </div>
   );

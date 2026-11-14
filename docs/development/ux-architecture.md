@@ -234,7 +234,7 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 - `.cal-segmented` in [`calendar.css`](../../frontend/src/styles/components/calendar.css), used by `CalendarNav` and `ViewSwitch` on every calendar; `border-inline-start` on every child but the first; `outline-offset: -2px`; verified as rendered boxes at 1440px and 390px.
 
 ### AJ · One calendar header, and the title is centred on it
-- One arrangement, [`calendar-header.tsx`](../../frontend/src/components/calendar/calendar-header.tsx): `[قائمة | تقويم]` · centred `صفر 1448 │ أغسطس 2026` · `[السابق | اليوم | التالي]`, then filters, then calendar/list; source order is the RTL order (no `direction`/`order`); a `1fr auto 1fr` grid centres the title on the header.
+- One arrangement, [`calendar-header.tsx`](../../frontend/src/components/calendar/calendar-header.tsx): `[قائمة | تقويم]` · centred `صفر 1448 │ أغسطس 2026` · `[السابق | اليوم | التالي]`, then filters, then (phone, swiping surfaces) the «السحب يمينًا أو يسارًا يغيّر الشهر» line (R270), then calendar/list; source order is the RTL order (no `direction`/`order`); a `1fr auto 1fr` grid centres the title on the header.
 - Shape follows the data: a surface with no month omits centre and stepping together (no `showTitle` flag); month names come from the backend bootstrap through `CalendarTitle` (§20 rule 14; R31, R36).
 
 ## AP · Three portals, one frame — and a registry is what makes a screen exist
