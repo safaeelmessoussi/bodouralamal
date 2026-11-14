@@ -183,6 +183,10 @@ Cross-cutting: every UI request is interpreted *against* these rules. Counterpar
 | Empty | «لا … تطابق الاختيارات», or *this Level teaches no subjects* naming the screen that fixes it |
 | Required | marked `*` (`ScopeSelectors` `required`); no «choose X first» |
 
+## S2 · The application bar keeps every control on the screen
+
+- [`application-header.tsx`](../../frontend/src/components/header/application-header.tsx) `useBarFit` (R268): the bar measures its parts and takes `full` → `compact` («تثبيت التطبيق» as its icon) → `crowded` (burger); 60rem stays the floor below which it is always the burger; its container reaches 90rem. Measured by `scripts/dev/browser/verify-header-fits.sh`.
+
 ## T · The page header is one block
 - Title, description and action are one two-column grid: heading takes the free space (description up to `--measure-lede`, `min-inline-size: 0`), action as wide as its buttons with `align-self: start`; never a flex row on a wide screen (`flex-wrap: wrap` drops the action under the heading); **below 44rem (R251) a wrapping row**: the action stays beside the title while both fit and only then moves under it. The title is `--font-size-lg`, with no rule under the head.
 - Canonical: `.admin__head` / `.admin__heading` / `.admin__actions` in [`admin.css`](../../frontend/src/styles/components/admin.css), rendered by [`PortalShell`](../../frontend/src/components/portal/portal-shell.tsx); never per page, never `<br>`; measured by `scripts/dev/browser/measure-page-header.sh` (nine widths); `scripts/ci/check-shared-layout.sh` refuses a page stylesheet redefining it.

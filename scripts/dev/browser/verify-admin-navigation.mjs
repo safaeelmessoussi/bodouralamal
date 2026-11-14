@@ -306,24 +306,26 @@ check(
   `${adminCards?.length ?? 0} cards`,
 );
 
-/* ── Typing the URL: the SCREEN refuses, and it is not a blank page ──────── */
+/* ── Typing the URL: the address leads home, never to a blank page ──────── */
 
+// R263 (the Owner, 2026-11-03) — «a refused address leads home»: the shell
+// replaces it with `/` rather than titling an empty page. Before R263 this
+// asserted a refusal message inside the shell.
 for (const [label, path] of ADMINISTRATION) {
   await goto(path);
-  const state = await evaluate(`(() => {
-    const el = document.querySelector('.state[role="alert"], .admin-empty, .state');
-    const nav = document.querySelector('.admin-nav');
-    return {
-      refused: !!el && /صلاحية|الدور|لا تملك/.test(el.textContent),
-      text: el ? el.textContent.trim().slice(0, 60) : null,
-      shell: !!nav,
+  let state = null;
+  for (let i = 0; i < 40; i += 1) {
+    state = await evaluate(`(() => ({
+      path: location.pathname,
       body: document.body.textContent.trim().length,
-    };
-  })()`);
+    }))()`);
+    if (state.path === '/' && state.body > 0) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
   check(
-    `Admin at ${path} (${label}) — refused inside the shell, never a blank page`,
-    state.refused && state.shell && state.body > 0,
-    state.text ?? 'no state element',
+    `Admin at ${path} (${label}) — refused: led to the home page, never a blank page`,
+    state.path === '/' && state.body > 0,
+    JSON.stringify(state),
   );
 }
 

@@ -96,6 +96,11 @@ def display_rules(selector):
         if "[dir=" in css[head_start:at]:
             index = end
             continue
+        # R268 — a rule scoped to the measured state (`.app-header__bar.is-crowded
+        # …`) applies only when the bar has said it does not fit; checked below.
+        if ".is-crowded" in css[head_start:at] or ".is-compact" in css[head_start:at]:
+            index = end
+            continue
         m = re.search(r"(?:^|;)\s*display:\s*([a-z-]+)", body)
         if m:
             before = css[:at]
@@ -147,6 +152,17 @@ for m in re.finditer(r"\[dir='(ltr|rtl)'\]\s*\.app-header__burger\s*\{([^}]*)\}"
             failures.append(f"[dir={m.group(1)}] shows the burger without hiding {selector}")
     if not re.search(r"display:\s*inline-flex", m.group(2)):
         failures.append(f"[dir={m.group(1)}] block does not show the burger")
+
+# R268 — the crowded state must flip BOTH navigations together, as above.
+crowded = {}
+for sel in (".app-header__nav", ".app-header__actions--desktop", ".app-header__burger"):
+    m = re.search(r"\.app-header__bar\.is-crowded\s+" + re.escape(sel) + r"[^{]*\{([^}]*)\}", css)
+    crowded[sel] = re.search(r"display:\s*([a-z-]+)", m.group(1)).group(1) if m else None
+if any(crowded.values()):
+    if crowded[".app-header__nav"] != "none" or crowded[".app-header__actions--desktop"] != "none":
+        failures.append("is-crowded shows the burger without hiding the bar")
+    if crowded[".app-header__burger"] != "inline-flex":
+        failures.append("is-crowded does not show the burger")
 
 if failures:
     print("FAIL: header navigation exclusivity (frontend/src/styles.css)")

@@ -381,7 +381,10 @@ describe('R179 §12 — what an edit reaches is said on the form', () => {
     expect(classHasEnded({ recurrence: 'weekly', startDate: '2026-09-01', repeatUntil: null }, '2026-09-29')).toBe(false);
     expect(classHasEnded({ recurrence: 'none', startDate: '2026-09-21', repeatUntil: null }, '2026-09-29')).toBe(true);
     expect(classHasEnded({ recurrence: 'none', startDate: '2026-09-29', repeatUntil: null }, '2026-09-29')).toBe(false);
-  });
+    // The first import of the whole scheduling page takes ~3 s alone and passed
+    // the 5 s default under a full parallel run (2026-11-14): the time is the
+    // import's, not the assertion's.
+  }, 20_000);
 
   it('the notice is rendered on edit of a class, in one of its two forms', () => {
     expect(SCHEDULING_SOURCE).toContain("{type === 'class' && editing && item ? (");

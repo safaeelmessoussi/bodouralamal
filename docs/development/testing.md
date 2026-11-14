@@ -134,7 +134,7 @@ All under `scripts/dev/browser/` (`.sh` wrapper + `.mjs`); fuller descriptions a
 | `shoot-pages.sh` | A look, not a check (`design.mmd` §13): 13 surfaces at 390/1366 px into `scratch/shots/`, flags sideways overflow | 13, none scrolls sideways |
 | `verify-academic-periods.sh` | R122 الفصول الدراسية create; جارٍ from dates; year as text (rule AF) | 4/4 |
 | `verify-account-deletion.sh` | R133 one deletion, Trash as recovery, three withdrawn workflows absent; read-only | 20/20 |
-| `verify-admin-navigation.sh` | R105 menus as rendered (Admin: no الإدارة heading); cookie transport regression (Back/Forward, reload, re-login, consumed callback, fresh tab); real Admin bearer vs server; R61.2 reads kept beside refused writes | 42/42 |
+| `verify-admin-navigation.sh` | R105 menus as rendered (Admin: no الإدارة heading); a refused address leads home (R263); cookie transport regression (Back/Forward, reload, re-login, consumed callback, fresh tab); real Admin bearer vs server; R61.2 reads kept beside refused writes | 44/44 |
 | `verify-approvals-sorting.sh` | NEW C طلبات الانضمام reorders; three tagged applicants whose name and submission orders are neither equal nor reversed | 7/7 |
 | `verify-assessment-library.sh` | A created paper is found after navigating away and back; fixture = journey suite | stale since R136 §2 (24/31) |
 | `verify-assessments.sh` | R124/R125 builder: draft saves, target picker names her own student, إرسال asks then locks | 6/6 |
@@ -171,6 +171,7 @@ All under `scripts/dev/browser/` (`.sh` wrapper + `.mjs`); fuller descriptions a
 | `verify-livekit-ingest.sh` | R99 C2 record → Egress → import → plays (`readyState >= 2 && duration > 0`); URL `/storage/` not `recordings-staging`; starter's tab closed; staging swept (R99.13) | 28/28 |
 | `verify-livekit-join.sh` | R98 real `livekit-server --dev`, fake devices, three-party room across tabs, `data-connection`, media bytes via `list-bucket.mjs` | 61/61 |
 | `verify-classroom-end.sh` | R266 real LiveKit: «دخول الحصة» offered while open, the redesigned room (header, controls, audio cards), «إنهاء الحصة للجميع» puts everybody out, `409 ENDED` in words, the calendar then offers the مؤطِّرة «إعادة فتح الحصة»; R267: an administrator reopens it, the beneficiary re-enters, the administrator ends it; `SHOTS=<dir>` at 1366/390 | 22/22 |
+| `verify-header-fits.sh` | R268 Super Admin header at 960–1920 px up and back down: no sideways scroll, exactly one navigation, every control on screen; the full navigation at 1366, the full bar at 1920; `SHOTS=<dir>` | 12/12 |
 | `verify-nav-toggle-geometry.sh` | R138 item 8 sidebar toggle at 320/390/1280/1440; empty-module portal | 46/46 |
 | `verify-notifications.sh` | R77/R82/R83 audience through `/notify`: the resolver, not the button; ids from `GET /admin/course-schedules/{id}/sessions` | 22/22 |
 | `verify-notify-ui.sh` | Clicks «إرسال الإشعار», reads the recipient's own bell; R91/R92, Event delete/cancel, grade republish | 37/37 |

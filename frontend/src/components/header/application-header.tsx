@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { useSession } from '../../contexts/session.js';
 import { useNavigation } from '../../hooks/use-navigation.js';
@@ -33,6 +33,8 @@ export function ApplicationHeader(): ReactNode {
   const { accessToken, setAccessToken } = useSession();
   const navigation = useNavigation();
   const [open, setOpen] = useState(false);
+  const bar = useRef<HTMLDivElement>(null);
+  const fit = useBarFit(bar);
   const pathname = typeof window === 'undefined' ? '/' : window.location.pathname;
 
   // A sheet left open across a resize would sit behind the desktop bar with no
@@ -44,6 +46,10 @@ export function ApplicationHeader(): ReactNode {
     wide.addEventListener('change', close);
     return () => wide.removeEventListener('change', close);
   }, [open]);
+  // …and when the bar regains room for everything (R268).
+  useEffect(() => {
+    if (fit !== 'crowded') setOpen(false);
+  }, [fit]);
 
   async function signOut(): Promise<void> {
     // TD-4.14: the server revokes this session's refresh token. Clearing the
@@ -70,7 +76,7 @@ export function ApplicationHeader(): ReactNode {
 
       <header className="app-header">
         <Container>
-          <div className="app-header__bar">
+          <div ref={bar} className={`app-header__bar${fit === 'full' ? '' : ` is-${fit}`}`}>
             <Logo href="/" />
 
             <nav className="app-header__nav" aria-label={t('nav.primaryLabel')}>
@@ -142,4 +148,93 @@ export function ApplicationHeader(): ReactNode {
       </header>
     </>
   );
+}
+
+/**
+ * **R268 — the bar keeps its parts on the screen**, at any width (the Owner,
+ * 2026-11-13: a Super Admin's bar at 1366 px pushed «الحساب» off the screen and
+ * the page scrolled sideways).
+ *
+ * The 60rem breakpoint is a floor, not a guarantee: what the bar holds depends
+ * on the role and the page (a role switcher, «تثبيت التطبيق», the bell, the
+ * language on a public page). So the bar measures its own parts — their laid-out
+ * widths summed, never its `scrollWidth`, which an open popover inflates — and
+ * takes the first that fits: `full`; `compact` («تثبيت التطبيق» as its icon);
+ * `crowded` (the burger). A folded part cannot be measured, so the width each
+ * stage needed is remembered and the bar unfolds once it has that much room.
+ */
+export type BarFit = 'full' | 'compact' | 'crowded';
+
+function useBarFit(ref: RefObject<HTMLDivElement | null>): BarFit {
+  const [fit, setFit] = useState<BarFit>('full');
+  const needs = useRef({ full: 0, compact: 0 });
+
+  useLayoutEffect(() => {
+    const bar = ref.current;
+    if (!bar || typeof ResizeObserver === 'undefined') return;
+
+    const partsWidth = (): number | null => {
+      const nav = bar.querySelector<HTMLElement>('.app-header__nav');
+      const actions = bar.querySelector<HTMLElement>('.app-header__actions--desktop');
+      // Folded (or below 60rem, where the stylesheet shows the burger).
+      if (!nav || !actions || getComputedStyle(nav).display === 'none') return null;
+      const gap = parseFloat(getComputedStyle(bar).columnGap) || 0;
+      let total = 0;
+      let shown = 0;
+      for (const child of Array.from(bar.children) as HTMLElement[]) {
+        const style = getComputedStyle(child);
+        if (style.display === 'none') continue;
+        // The actions' `margin-inline-start: auto` is free space, not need.
+        const margins =
+          child === actions
+            ? 0
+            : (parseFloat(style.marginInlineStart) || 0) + (parseFloat(style.marginInlineEnd) || 0);
+        // The navigation may be squeezed narrower than its links: count the links.
+        const width = Math.max(child.getBoundingClientRect().width, child === nav ? nav.scrollWidth : 0);
+        total += width + margins;
+        shown += 1;
+      }
+      return Math.ceil(total + gap * Math.max(0, shown - 1));
+    };
+
+    const measure = (): void => {
+      const room = bar.clientWidth + 1;
+      const stage: BarFit = bar.classList.contains('is-crowded')
+        ? 'crowded'
+        : bar.classList.contains('is-compact')
+          ? 'compact'
+          : 'full';
+      const total = partsWidth();
+      if (stage === 'full' && total !== null) {
+        needs.current.full = total;
+        if (total <= room) return;
+        const label = bar.querySelector<HTMLElement>('.app-header__actions--desktop .install-app__label');
+        const saving = label ? label.getBoundingClientRect().width : 0;
+        needs.current.compact = saving > 0 ? total - saving : Number.POSITIVE_INFINITY;
+        setFit(needs.current.compact <= room ? 'compact' : 'crowded');
+        return;
+      }
+      if (stage === 'compact' && total !== null) {
+        needs.current.compact = total;
+        if (room >= needs.current.full) setFit('full');
+        else if (total > room) setFit('crowded');
+        return;
+      }
+      if (stage === 'crowded') {
+        if (needs.current.full > 0 && room >= needs.current.full) setFit('full');
+        else if (room >= needs.current.compact) setFit('compact');
+      }
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    for (const child of Array.from(bar.children)) observer.observe(child);
+    // The links themselves (web fonts arriving widen them inside a squeezed nav).
+    const links = bar.querySelector('.app-header__nav')?.firstElementChild;
+    if (links) observer.observe(links);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return fit;
 }

@@ -9,6 +9,7 @@ import {
   onInstallOfferChange,
   releaseInstallPrompt,
 } from '../../lib/install-capture.js';
+import { Icon } from '../ui/icon.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
 
@@ -78,8 +79,17 @@ export function InstallAppButton({ block = false }: { block?: boolean }): ReactN
   const steps = offer === 'ios' ? 'ios' : 'manual';
   return (
     <>
-      <Button variant="secondary" block={block} onClick={() => void install()} data-install-app={offer}>
-        {t('install.button')}
+      <Button
+        variant="secondary"
+        block={block}
+        className="install-app"
+        onClick={() => void install()}
+        data-install-app={offer}
+      >
+        {/* R268 — a tight header bar keeps the icon and hides the words
+            visually (they remain the button's name). */}
+        <Icon name="download" size={18} />
+        <span className="install-app__label">{t('install.button')}</span>
       </Button>
       {/* Mounted only while open: the header is on every page, and a closed
           dialog parked at the top of each one is a node nothing needs — and the

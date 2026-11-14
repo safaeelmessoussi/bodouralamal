@@ -604,3 +604,10 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Classroom ended card offers «إعادة فتح الحصة» to moderators; the calendar dialog offers it to a مؤطِّرة or administrator on an ended occurrence (`reopenOffered`); the end confirmation no longer says it is final.
 - Phone control bar keeps five controls on one row; `verify-classroom-end` exits on its own (`process.exit(finish())`); the scenario names its administrator.
 - Verified: integration online-class + session-recording 71/71, online-class.http + calendar.http + ingest 81/81; `verify-classroom-end` 22/22 (1366/390 shots); backend 395, frontend 1732, lints, build, guards, OpenAPI.
+
+## 2026-11-14 — SRS Revision 268: the header keeps every control on the screen
+- `useBarFit` (application-header): sums the bar's laid-out parts and picks `full` → `compact` («تثبيت التطبيق» as a download icon, label visually hidden) → `crowded` (burger), remembering each stage's need to unfold; `.app-header .container` up to 90rem.
+- Found: a Super Admin's bar needed ~1374 px in a 1152 px column, so at 1366 px «الحساب» left the screen and every page scrolled sideways.
+- `class-section.multi-dimension` «has ended» test: 20 s timeout for its first import of the scheduling page (timed out under a full parallel run).
+- `verify-admin-navigation`: the typed-address checks restated for R263 (a refused address leads home); they had expected a refusal message since R263.
+- Verified: `verify-header-fits` 12/12 (1366 shot: full navigation, every control inside), `verify-admin-navigation` 44/44; frontend 1732, lint, tsc, build, token guard.

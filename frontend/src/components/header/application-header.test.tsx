@@ -172,3 +172,15 @@ describe('the switchers appear only when they mean something', () => {
     expect((html.match(/menu__trigger/g) ?? []).length - languageMenus).toBe(2);
   });
 });
+
+describe('R268 — the bar keeps its parts on the screen', () => {
+  it('folds in two stages, measured, never by a fixed width alone', async () => {
+    const source = (await import('./application-header.tsx?raw')).default;
+    expect(source).toContain("export type BarFit = 'full' | 'compact' | 'crowded';");
+    // Laid-out widths, not the bar's scrollWidth an open popover would inflate.
+    expect(source).toContain('child.getBoundingClientRect().width');
+    expect(source).not.toContain('bar.scrollWidth');
+    // The stylesheet's half is measured in a browser: verify-header-fits.sh.
+    expect(source).toContain("className={`app-header__bar${fit === 'full' ? '' : ` is-${fit}`}`}");
+  });
+});

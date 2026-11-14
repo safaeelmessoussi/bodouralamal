@@ -234,6 +234,39 @@
   }
 }
 
+/* R268 — the header spans wider than the page's reading column, so a full bar
+ * fits on a laptop; `useBarFit` folds it further only when it must. */
+.app-header .container {
+  width: min(100% - 2 * var(--gutter), 90rem);
+}
+.install-app {
+  gap: var(--space-2);
+}
+.app-header__bar.is-compact .install-app {
+  padding-inline: var(--space-2);
+}
+.app-header__bar.is-compact .install-app__label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* R268 — the bar measured its parts and they do not fit (a Super Admin's bar
+ * at 1366 px): the burger, whatever the width. See `useCrowdedBar`. */
+.app-header__bar.is-crowded .app-header__nav,
+.app-header__bar.is-crowded .app-header__actions--desktop {
+  display: none;
+}
+.app-header__bar.is-crowded .app-header__burger {
+  display: inline-flex;
+}
+.app-header__bar.is-crowded .app-header__actions--mobile {
+  display: flex;
+}
+
 /* R224 §4 — a translated page (left to right) has longer words: the French
  * bar of a signed-in page measured ~1550px, so between 60rem and 100rem it
  * keeps the burger, exactly one navigation still showing at every width. */
