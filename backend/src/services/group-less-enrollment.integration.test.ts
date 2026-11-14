@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
 import { clearTestContentRetirements } from '../test-support/storage-retirement.js';
+import { linkTestRecording, unlinkTestRecordings } from '../test-support/session-recording-link.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import type { Actor } from "../policies/actor.js";
 import type { RoleScope } from "../policies/branch-scope.js";
@@ -78,6 +79,10 @@ async function clear(): Promise<void> {
   await prisma.notification.deleteMany({
     where: { session: { scheduleId: { in: sids } } },
   });
+  await unlinkTestRecordings(
+    prisma,
+    (await prisma.session.findMany({ where: { scheduleId: { in: sids } }, select: { id: true } })).map((r) => r.id),
+  );
   await prisma.session.deleteMany({ where: { scheduleId: { in: sids } } });
   await prisma.courseScheduleStaff.deleteMany({
     where: { scheduleId: { in: sids } },
@@ -188,7 +193,7 @@ describe("P0 — consent re-evaluation reaches a group-less student", () => {
         academicYearId: yearId,
       },
     });
-    await prisma.session.create({
+    const occurrence = await prisma.session.create({
       data: {
         scheduleId: schedule.id,
         date: new Date("2098-03-02"),
@@ -196,6 +201,8 @@ describe("P0 — consent re-evaluation reaches a group-less student", () => {
         endTime: new Date("1970-01-01T10:00:00Z"),
       },
     });
+    // What a re-evaluation is for (2026-11-14: only sessions holding a recording).
+    await linkTestRecording(prisma, occurrence.id, TAG);
   }
 
   it("requeues the session for BOTH shapes of enrolment", async () => {
@@ -228,6 +235,26 @@ describe("P0 — consent re-evaluation reaches a group-less student", () => {
     ).toEqual([]);
   });
 
+  it("requeues nothing for a class that holds no recording (2026-11-14)", async () => {
+    // The job inspects a session's recordings and does nothing without one;
+    // queueing every such occurrence ran «تسجيل مستفيد(ة)» past its 5-second
+    // transaction on Staging (823 occurrences). A recording linked later
+    // queues its own re-evaluation.
+    await entireLevelSession();
+    await unlinkTestRecordings(
+      prisma,
+      (
+        await prisma.session.findMany({
+          where: { schedule: { title: { startsWith: TAG } } },
+          select: { id: true },
+        })
+      ).map((r) => r.id),
+    );
+    expect(
+      await prisma.$transaction((tx) => enqueueConsentReevaluationForStudent(tx, solo)),
+    ).toEqual([]);
+  });
+
   it("is unchanged for administrative_group schedules", async () => {
     // The other two arms were correct and must stay correct: this one is
     // genuinely about a group, so the group-less student is rightly absent.
@@ -245,7 +272,7 @@ describe("P0 — consent re-evaluation reaches a group-less student", () => {
         academicYearId: yearId,
       },
     });
-    await prisma.session.create({
+    const occurrence = await prisma.session.create({
       data: {
         scheduleId: schedule.id,
         date: new Date("2098-03-03"),
@@ -253,6 +280,7 @@ describe("P0 — consent re-evaluation reaches a group-less student", () => {
         endTime: new Date("1970-01-01T10:00:00Z"),
       },
     });
+    await linkTestRecording(prisma, occurrence.id, TAG);
 
     expect(
       await prisma.$transaction((tx) =>

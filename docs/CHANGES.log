@@ -618,3 +618,9 @@ Format, one entry per pushed commit set: `## YYYY-MM-DD — <title>` then ≤6 l
 - Calendar omits replaced Sessions; exam occurrences carry `replaced_session_id` and the class's delivery/media/`online_join`, so «دخول الحصة» opens the class's call. «حصص الجدول» rows carry `replaced_by_exam`: «أصبحت اختبارًا», «إرجاعها حصة».
 - «تعديل الحصة»: «النوع» (`SessionTypeField`) swaps the form for `ExamConversionFields` (Level when several, Subject, Surah, العلامة القصوى). The R98 scenario removes harness-made exams on clean.
 - Verified: full integration 129 files (2954) + `session-exam` 8/8 after the Level label; `verify-session-to-exam` 9/9 (1366/390); seed drill; backend 395, frontend 1738, lints, guards, OpenAPI.
+
+## 2026-11-14 — «تسجيل مستفيد(ة)» answered 500 on Staging
+- Found: the four `POST /admin/enrollments` of 10:51–10:52 each ran 5.0–5.9 s and failed — Prisma's 5 s interactive-transaction limit. `consentSessionIdsForStudent` evaluated every reachable occurrence one by one (823 multi-filter occurrences on Staging) and queued each, inside the enrolment's transaction.
+- Fix: the candidates are Sessions holding a linked `session_recording` — the only ones `consent.reevaluate` acts on; a later recording link/import queues its own. Same outcome, a handful of rows.
+- Tests: consent / group-less fixtures give their classes a recording (`test-support/session-recording-link.ts`); new «requeues nothing for a class that holds no recording».
+- Verified: consent, consent-safeguarding, group-less-enrollment, recording-ingest integration 100/100; backend typecheck, lint.

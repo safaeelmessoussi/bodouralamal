@@ -283,6 +283,19 @@ export async function consentSessionIdsForStudent(
   const candidates = await tx.session.findMany({
     where: {
       deletedAt: null,
+      /**
+       * **Only a session that holds a recording** (2026-11-14). The job
+       * (`reevaluateSessionConsentOnce`) inspects a session's linked
+       * `session_recording` content and does nothing without one, and a
+       * recording linked later queues its own re-evaluation (ingest, link,
+       * unlink). Without this, enrolling one beneficiary evaluated every
+       * occurrence of every class that could reach her, one by one inside the
+       * enrolment's transaction: 823 multi-filter occurrences on Staging ran
+       * past Prisma's 5-second limit and «تسجيل مستفيد(ة)» answered 500.
+       */
+      linkedContent: {
+        some: { deletedAt: null, content: { deletedAt: null, origin: 'session_recording' } },
+      },
       OR: [
         {
           schedule: {

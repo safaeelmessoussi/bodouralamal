@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { actorFor } from "../test-support/actor.js";
+import { linkTestRecording, unlinkTestRecordings } from "../test-support/session-recording-link.js";
 
 import { loadConfig } from "../lib/config.js";
 import {
@@ -85,6 +86,8 @@ async function makeGroup(branchId: string, name: string): Promise<string> {
   const ctx = await createTeachingContext(prisma, `${TAG} ${name}`, branchId, {
     levelId,
   });
+  // What a re-evaluation is for (2026-11-14: only sessions holding a recording).
+  await linkTestRecording(prisma, ctx.sessionId, TAG);
   contexts.set(ctx.administrativeGroupId, ctx);
   return ctx.administrativeGroupId;
 }
@@ -104,6 +107,7 @@ async function makeGroupInOwnLevel(
 ): Promise<string> {
   // No `levelId`: the fixture creates its own Category and Level.
   const ctx = await createTeachingContext(prisma, `${TAG} ${name}`, branchId);
+  await linkTestRecording(prisma, ctx.sessionId, TAG);
   contexts.set(ctx.administrativeGroupId, ctx);
   return ctx.administrativeGroupId;
 }
@@ -189,6 +193,7 @@ async function makeMultiDimensionSchedule(
     });
     return session.id;
   });
+  await linkTestRecording(prisma, sessionId, TAG);
   return sessionId;
 }
 
@@ -206,6 +211,7 @@ async function clear(): Promise<void> {
     await prisma.$executeRaw`DELETE FROM pgboss.job WHERE name = 'consent.reevaluate' AND data->>'session_id' = ${s.id}`;
   }
   const sessionIds = sessions.map((s) => s.id);
+  await unlinkTestRecordings(prisma, sessionIds);
   // Codex review, 2026-09-20 — the R161 occurrence-override tables and the
   // `multi_dimension` scope join this file's own new fixtures write to.
   await prisma.sessionAudienceBranch.deleteMany({ where: { sessionId: { in: sessionIds } } });
