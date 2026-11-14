@@ -30,6 +30,7 @@
     "ops:fill-session-rooms": "node dist/src/ops/fill-session-rooms.js",
     "ops:cut-print-pages": "node dist/src/ops/cut-print-pages.js",
     "ops:rename-surah-parts": "node dist/src/ops/rename-surah-parts.js",
+    "ops:merge-schedules": "node dist/src/ops/merge-schedules.js",
     "openapi:generate": "tsx scripts/generate-openapi.ts"
   },
   "dependencies": {

@@ -6,6 +6,7 @@ import { assertSubjectTaughtAtLevel, resolveSurahs, subjectsTaughtAt } from "../
 import { effectiveOn } from "../policies/effective-staffing.js";
 import * as audit from "../repositories/audit.repository.js";
 import { examTitle } from "./class-title.js";
+import { notifySessionExamChange } from "./notification.service.js";
 import { assertCanManage } from "./exam.service.js";
 import { assertTypeOfKind } from "./scheduling-type.service.js";
 import { loadForWrite } from "./session.service.js";
@@ -206,6 +207,8 @@ export async function convertSessionToExam(
       where: { id: session.id },
       data: { overridden: true, version: { increment: 1 } },
     });
+    // R275 — her beneficiaries are told.
+    await notifySessionExamChange(tx, session.id, actor.userId, "became_exam");
     await audit.write(tx, {
       actorUserId: actor.userId,
       ...(actor.activeRole !== undefined ? { activeRole: actor.activeRole } : {}),

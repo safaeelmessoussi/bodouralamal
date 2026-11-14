@@ -298,3 +298,59 @@ describe("Codex review, 2026-09-20 — the SQL candidate filter is a deliberate 
     expect(scoped(rows, ctxA.sessionId)).toBe(false);
   });
 });
+
+describe("R274 — a subject divided into circles is attended in a circle (the Owner, 2026-11-14)", () => {
+  async function circleOfA(): Promise<string> {
+    return (
+      await prisma.teachingGroup.create({
+        data: { name: `${TAG} حلقة أ`, subjectId: ctxA.subjectId, levelId: ctxA.levelId },
+      })
+    ).id;
+  }
+
+  it("a beneficiary in no circle of a divided subject does not see its classes", async () => {
+    const studentId = await person("مستفيدة — بلا حلقة");
+    await enrol(prisma, ctxA, studentId);
+    const before = await readCalendar(prisma, viewer(studentId), { ...range, mine: true });
+    expect(scoped(before, ctxA.sessionId)).toBe(true); // not divided yet: unchanged
+
+    await circleOfA();
+    const after = await readCalendar(prisma, viewer(studentId), { ...range, mine: true });
+    expect(scoped(after, ctxA.sessionId)).toBe(false);
+  });
+
+  it("a beneficiary in a circle sees that circle's classes, and not the others of the subject", async () => {
+    const circle = await circleOfA();
+    const other = (
+      await prisma.teachingGroup.create({
+        data: { name: `${TAG} حلقة ب`, subjectId: ctxA.subjectId, levelId: ctxA.levelId },
+      })
+    ).id;
+    const studentId = await person("مستفيدة — في حلقة");
+    await enrol(prisma, ctxA, studentId);
+    await prisma.studentTeachingGroup.create({
+      data: { studentId, teachingGroupId: circle, subjectId: ctxA.subjectId, levelId: ctxA.levelId },
+    });
+
+    // The group-wide class of a divided subject is not hers.
+    expect(scoped(await readCalendar(prisma, viewer(studentId), { ...range, mine: true }), ctxA.sessionId)).toBe(false);
+
+    await setSessionAudienceOverrides(prisma, superAdmin(), ctxA.sessionId, 0, {
+      branchIds: [],
+      categoryIds: [],
+      levelIds: [],
+      administrativeGroupIds: [],
+      teachingGroupIds: [circle],
+    });
+    expect(scoped(await readCalendar(prisma, viewer(studentId), { ...range, mine: true }), ctxA.sessionId)).toBe(true);
+
+    await setSessionAudienceOverrides(prisma, superAdmin(), ctxA.sessionId, 1, {
+      branchIds: [],
+      categoryIds: [],
+      levelIds: [],
+      administrativeGroupIds: [],
+      teachingGroupIds: [other],
+    });
+    expect(scoped(await readCalendar(prisma, viewer(studentId), { ...range, mine: true }), ctxA.sessionId)).toBe(false);
+  });
+});

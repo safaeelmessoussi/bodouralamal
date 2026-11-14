@@ -469,6 +469,9 @@ export const ar = {
     unreadLabel: 'غير مقروءة',
     sessionCancelled: 'أُلغيت حصة {subject} ليوم {date} على الساعة {time}.',
     sessionRestored: 'عادت حصة {subject} ليوم {date} على الساعة {time} إلى الجدول.',
+    // المراجعة 275 — حصة أصبحت اختبارًا، أو عادت حصة.
+    sessionBecameExam: 'أصبحت حصة {subject} ليوم {date} على الساعة {time} اختبارًا.',
+    sessionBackToClass: 'عادت حصة {subject} ليوم {date} على الساعة {time} حصةً كما كانت، ولم تعد اختبارًا.',
     // R78.4 — الإشعار يحمل الموعد الجديد، لأن إشعاراً يقول «تغيّر الموعد» فقط
     // لا يمكن لأحد أن يتصرّف بناءً عليه.
     sessionRescheduled: 'تغيّر موعد حصة {subject}. الموعد الجديد: {date} على الساعة {time}.',

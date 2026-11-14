@@ -109,6 +109,7 @@ async function cleanup(): Promise<void> {
   const taggedPerson = { nameArabic: { startsWith: TAG } };
   const scheduleWhere = { schedule: { subject: tagged } };
   await prisma.examStaff.deleteMany({ where: { exam: { subject: tagged } } });
+  await prisma.notification.deleteMany({ where: { user: taggedPerson } });
   await prisma.notification.deleteMany({ where: { exam: { subject: tagged } } });
   await prisma.trash.deleteMany({ where: { targetId: { in: (await prisma.exam.findMany({ where: { subject: tagged }, select: { id: true } })).map((e) => e.id) } } });
   await prisma.exam.deleteMany({ where: { subject: tagged } });
@@ -252,6 +253,25 @@ describe("R269 — «تعديل الحصة» → النوع: اختبار", () =
     expect(shown.some((o) => o.id === sessionId)).toBe(true);
     expect(shown.some((o) => o.id === examId)).toBe(false);
     await expect(convert(teacher.actor, sessionId)).resolves.toMatchObject({ examId: expect.any(String) });
+  });
+
+  it("R275 — her beneficiaries are told it became an exam, and told again when it is changed back", async () => {
+    const { scheduleId, sessionId } = await aClass(false);
+    const teacher = await teacherOf(scheduleId);
+    const student = await person("مستفيدة", [{ role: "student", branchId: branchA }]);
+    await prisma.enrollment.create({ data: { studentId: student, levelId, branchId: branchA } });
+    const notices = async () =>
+      (await prisma.notification.findMany({ where: { userId: student, sessionId }, select: { type: true } })).map(
+        (n) => n.type,
+      );
+
+    const { examId } = await convert(teacher.actor, sessionId);
+    expect(await notices()).toEqual(["session_became_exam"]);
+    // The مؤطِّرة who did it is not told her own act.
+    expect(await prisma.notification.count({ where: { userId: teacher.id, sessionId } })).toBe(0);
+
+    await deleteExam(prisma, teacher.actor, examId);
+    expect(await notices()).toEqual(["session_back_to_class"]);
   });
 
   it("refuses what it should", async () => {

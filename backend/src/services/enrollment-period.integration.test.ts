@@ -4,7 +4,7 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { Actor } from '../policies/actor.js';
 import { isCurrentPeriod } from './academic-period.service.js';
-import { enrolAtLevel, unenrolById } from './enrollment.service.js';
+import { enrolAtLevel, enrolStudent, unenrolById } from './enrollment.service.js';
 import { expectedAttendeesInPeriod } from './attendance.service.js';
 
 /**
@@ -82,6 +82,7 @@ async function clear(): Promise<void> {
   await prisma.academicPeriod.deleteMany({ where: { academicYearId: { in: yearIds } } });
   await prisma.academicYear.deleteMany({ where: { id: { in: yearIds } } });
 
+  await prisma.administrativeGroup.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -356,5 +357,27 @@ describe('R271 — an enrolment for the whole academic year', () => {
     await expect(
       enrolAtLevel(prisma, admin(), { studentId: yearStudent, levelId: levelYear3, branchId, academicYearId: prevYearId }),
     ).resolves.toMatchObject({ academicYearId: prevYearId });
+  });
+});
+
+describe('R275 — «مجموعات المستويات» places a beneficiary for the whole year', () => {
+  it('enrols into a group for a year, and refuses a semester of that year after it', async () => {
+    const category = await prisma.category.findFirstOrThrow({ where: { name: `${TAG} فئة` } });
+    const level = await prisma.level.create({ data: { name: `${TAG} سنة رابعة`, categoryId: category.id, displayOrder: 4 } });
+    const group = await prisma.administrativeGroup.create({ data: { name: `${TAG} مجموعة`, levelId: level.id, branchId } });
+    const yearId = (await prisma.academicYear.findFirstOrThrow({ where: { label: '2095-2096' } })).id;
+    const groupStudent = (
+      await prisma.user.create({
+        data: { sex: 'female', nameArabic: `${TAG} مستفيدة مجموعة`, accountStatus: 'active', isBeneficiary: true },
+      })
+    ).id;
+    await expect(enrolStudent(prisma, admin(), group.id, groupStudent, { academicYearId: yearId })).resolves.toMatchObject({
+      academicYearId: yearId,
+      academicPeriodId: null,
+      administrativeGroupId: group.id,
+    });
+    await expect(enrolStudent(prisma, admin(), group.id, groupStudent, curS2)).rejects.toBeTruthy();
+    await prisma.enrollment.deleteMany({ where: { studentId: groupStudent } });
+    await prisma.administrativeGroup.delete({ where: { id: group.id } });
   });
 });

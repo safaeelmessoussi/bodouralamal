@@ -522,10 +522,18 @@ export async function enrolStudent(
    * route refuses a request without one, so the platform cannot write the
    * open-ended row this revision exists to remove.
    */
-  academicPeriodId: string,
+  academicPeriodId: EnrolmentTerm,
 ): Promise<EnrollmentRow> {
   return prisma.$transaction(async (tx) => {
-    await assertPeriodExists(tx, academicPeriodId);
+    if (typeof academicPeriodId === 'string') {
+      await assertPeriodExists(tx, academicPeriodId);
+    } else {
+      const year = await tx.academicYear.findFirst({
+        where: { id: academicPeriodId.academicYearId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!year) throw new AppError('NOT_FOUND', 'no such academic year');
+    }
     return enrolInGroup(tx, actor, administrativeGroupId, studentId, 'roster_edit', academicPeriodId);
   });
 }

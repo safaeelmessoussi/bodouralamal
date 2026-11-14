@@ -4488,6 +4488,10 @@ enum NotificationType {
   enrollment_changed
   session_cancelled
   session_restored
+  /// R275 — a class became an exam that replaces it (R269), and back. The
+  /// row points at the Session; its audience is the class's own.
+  session_became_exam
+  session_back_to_class
   /// R78.2 — a person was ADDED to a Session's staffing. Never written for a
   /// re-save that changes nothing: the `(user, session, type)` unique index
   /// makes that structural rather than a check.

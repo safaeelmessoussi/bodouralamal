@@ -61,7 +61,12 @@ export const listAdministrativeGroupsQuerySchema = z.object({
  * the composite FK the only thing standing between a typo and a mis-filed
  * student, surfacing as an opaque constraint error rather than a decision.
  */
-/** R122 — a roster placement names the semester it is for. */
+/** R122 — a roster placement names what it is for: R271 — the whole academic
+ *  year (the ordinary path) or one semester. Exactly one of the two. */
 export const enrolStudentSchema = z
-  .object({ student_id: uuid, academic_period_id: uuid })
-  .strict();
+  .object({ student_id: uuid, academic_period_id: uuid.optional(), academic_year_id: uuid.optional() })
+  .strict()
+  .refine((b) => (b.academic_period_id === undefined) !== (b.academic_year_id === undefined), {
+    message: 'name exactly one of academic_year_id and academic_period_id',
+    path: ['academic_year_id'],
+  });

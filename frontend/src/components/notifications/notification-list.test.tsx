@@ -229,6 +229,8 @@ describe('R82/R83 — a notice of any kind reads as itself', () => {
     enrollment_changed: 'notifications.enrollmentChanged',
     session_cancelled: 'notifications.sessionCancelled',
     session_restored: 'notifications.sessionRestored',
+    session_became_exam: 'notifications.sessionBecameExam',
+    session_back_to_class: 'notifications.sessionBackToClass',
     session_rescheduled: 'notifications.sessionRescheduled',
     session_assigned: 'notifications.sessionAssigned',
     session_unassigned: 'notifications.sessionUnassigned',

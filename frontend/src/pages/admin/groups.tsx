@@ -1,3 +1,4 @@
+import { useEnrolmentTerm } from '../../components/enrollments/enrolment-term.js';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import {
@@ -570,6 +571,8 @@ function RosterDialog({
    * staff to find her. «إظهار الجميع» is the way back for the rare case.
    */
   const [everyone, setEveryone] = useState(false);
+  /** R271 — the whole year by default, one semester as the exception. */
+  const term = useEnrolmentTerm(token);
 
   // **Loaded on open, not on keystroke.** One read of the accounts the server
   // lets this caller see; the control filters that list client-side.
@@ -595,10 +598,15 @@ function RosterDialog({
 
   async function enrol(studentId: string): Promise<void> {
     if (!group || studentId === '') return;
+    // R271 — said in words, never refused in silence.
+    if (term.value === null) {
+      setNotice(t('admin.enrollments.yearRequired'));
+      return;
+    }
     setBusy(true);
     setNotice(null);
     try {
-      await enrolStudent(group.id, studentId, token);
+      await enrolStudent(group.id, studentId, term.value, token);
       setPicked('');
       await load();
     } catch (error) {
@@ -655,6 +663,7 @@ function RosterDialog({
               hint={t('admin.groups.showEveryoneHint')}
             />
           </div>
+          {term.field}
           <div className="form__actions">
             <Button
               variant="add"

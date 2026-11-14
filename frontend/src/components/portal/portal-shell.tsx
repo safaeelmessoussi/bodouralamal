@@ -1,3 +1,4 @@
+import { useSession } from '../../contexts/session.js';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { keepSidebarPlace } from '../../lib/nav-scroll.js';
@@ -210,9 +211,15 @@ export function PortalShell({
   // R263 — an address this session may not open leads to the home page, not
   // to its title over an empty page. When sign-in opens to everyone it will
   // lead to the sign-in page instead; for now that page is not offered.
+  //
+  // R273 (the Owner, 2026-11-14: switching to «مؤطِّرة» opened the landing
+  // page) — only once the session has said who she is. The session turns
+  // `authenticated` before `/me` arrives, and in that gap no role is active,
+  // so every page looked refused and «الجدولة» sent her home.
+  const { me } = useSession();
   useEffect(() => {
-    if (!permitted) window.location.replace('/');
-  }, [permitted]);
+    if (!permitted && me !== null) window.location.replace('/');
+  }, [permitted, me]);
 
   const frame = useRef<HTMLDivElement>(null);
   useEffect(() => {

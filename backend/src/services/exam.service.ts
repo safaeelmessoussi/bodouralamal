@@ -19,6 +19,7 @@ import * as trash from '../repositories/trash.repository.js';
 import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 import {
   notifyExamCancelled,
+  notifySessionExamChange,
   notifyExamCreated,
   notifyExamUpdated,
 } from './notification.service.js';
@@ -813,6 +814,10 @@ export async function deleteExam(
     const now = new Date();
     // R269 — changing a sitting back into its class cancels nothing: the class
     // is back where it was, so nobody is told an exam was cancelled.
+    if (existing.replacesSession && existing.sessionId) {
+      // R275 — the class is back, and its beneficiaries are told so.
+      await notifySessionExamChange(tx, existing.sessionId, actor.userId, "back_to_class");
+    }
     if (!existing.replacesSession) await notifyExamCancelled(
       tx,
       id,

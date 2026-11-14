@@ -337,7 +337,9 @@ async function writeFor(
     | "session_cancelled"
     | "session_rescheduled"
     | "session_assigned"
-    | "session_unassigned",
+    | "session_unassigned"
+    | "session_became_exam"
+    | "session_back_to_class",
   userIds: readonly string[],
 ): Promise<number> {
   const recipients = await liveNotificationRecipients(tx, userIds);
@@ -637,6 +639,28 @@ export async function notifySessionChange(
     );
     return { notified };
   });
+}
+
+/**
+ * **R275 — a class became an exam (R269), or was changed back** (the Owner,
+ * 2026-11-14: «add notice for students»). Written in the conversion's own
+ * transaction, to the class's audience (period-blind, as a cancellation's) and
+ * its staff, minus the actor. A notice of the opposite change is withdrawn, so
+ * the bell never says both.
+ */
+export async function notifySessionExamChange(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  actorUserId: string,
+  change: "became_exam" | "back_to_class",
+): Promise<number> {
+  const spec = await audienceForSession(tx as unknown as PrismaClient, sessionId);
+  if (spec === null) return 0;
+  const type = change === "became_exam" ? "session_became_exam" : "session_back_to_class";
+  const opposite = change === "became_exam" ? "session_back_to_class" : "session_became_exam";
+  await tx.notification.deleteMany({ where: { sessionId, type: { in: [type, opposite] } } });
+  const userIds = await recipientsFor(tx, sessionId, { ...spec, on: null }, actorUserId);
+  return writeFor(tx, sessionId, type, userIds);
 }
 
 /* ── Grades (R82.4) ───────────────────────────────────────────────────────── */

@@ -147,12 +147,15 @@ export async function listRoster(
 export async function enrolStudent(
   groupId: string,
   studentId: string,
+  /** R122/R271 — the whole year (ordinary) or one semester; the server
+   *  refuses a placement that names neither. */
+  term: { academic_year_id: string } | { academic_period_id: string },
   token: string | null,
 ): Promise<void> {
   await api<void>(`/admin/administrative-groups/${groupId}/roster`, {
     method: 'POST',
     token,
-    body: { student_id: studentId },
+    body: { student_id: studentId, ...term },
   });
 }
 

@@ -1190,11 +1190,42 @@ async function filterExamsByAudience<
  * round trip to matter, and because reconstructing the resolver's own
  * algebra a second time in SQL is the actual risk.
  */
-async function filterSessionsByPersonalAudience<T extends { id: string; staff: { user: { id: string } }[] }>(
+async function filterSessionsByPersonalAudience<
+  T extends {
+    id: string;
+    subjectId: string | null;
+    schedule: { subject: { id: string } | null };
+    staff: { user: { id: string } }[];
+  },
+>(
   prisma: PrismaClient,
   userId: string,
   sessions: T[],
 ): Promise<T[]> {
+  /**
+   * **R274 — a subject divided into circles is attended in a circle** (the
+   * Owner, 2026-11-14: «if a student is not enrolled in any circle of that
+   * subject, the student is considered not attending that subject»). Where a
+   * Subject has live circles at one of her Levels, its classes stay on her
+   * calendar only when addressed to a circle she sits in; a Subject with no
+   * circles is unchanged.
+   */
+  const [seats, enrolments] = await Promise.all([
+    prisma.studentTeachingGroup.findMany({
+      where: { studentId: userId, deletedAt: null, teachingGroup: { deletedAt: null } },
+      select: { teachingGroupId: true },
+    }),
+    prisma.enrollment.findMany({ where: { studentId: userId, deletedAt: null }, select: { levelId: true } }),
+  ]);
+  const myCircles = new Set(seats.map((r) => r.teachingGroupId));
+  const splitSubjects = new Set(
+    (
+      await prisma.teachingGroup.findMany({
+        where: { deletedAt: null, levelId: { in: [...new Set(enrolments.map((e) => e.levelId))] } },
+        select: { subjectId: true },
+      })
+    ).map((r) => r.subjectId),
+  );
   const kept: T[] = [];
   for (const session of sessions) {
     // Staffed directly — already exact, no audience override to resolve.
@@ -1212,7 +1243,16 @@ async function filterSessionsByPersonalAudience<T extends { id: string; staff: {
     const member = await prisma.user.count({
       where: { AND: [audienceWhere(spec), { id: userId, deletedAt: null }] },
     });
-    if (member > 0) kept.push(session);
+    if (member === 0) continue;
+    const subjectId = session.subjectId ?? session.schedule.subject?.id ?? null;
+    if (subjectId !== null && splitSubjects.has(subjectId)) {
+      const circles = [
+        ...(spec.teachingGroupId ? [spec.teachingGroupId] : []),
+        ...(spec.dimensions?.teachingGroupIds ?? []),
+      ];
+      if (!circles.some((id) => myCircles.has(id))) continue;
+    }
+    kept.push(session);
   }
   return kept;
 }

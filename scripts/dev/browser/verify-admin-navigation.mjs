@@ -251,6 +251,9 @@ check(
   await evaluate(
     `location.protocol === 'http:' && location.pathname === '/admin' && !!document.querySelector('.admin-nav')`,
   ),
+  await evaluate(
+    `JSON.stringify({ path: location.pathname, nav: !!document.querySelector('.admin-nav'), body: document.body.innerText.replace(/\\s+/g, ' ').slice(0, 160), sw: !!navigator.serviceWorker?.controller, ready: document.readyState, html: document.documentElement.outerHTML.length, root: document.getElementById('root')?.childElementCount ?? -1, url: location.href })`,
+  ),
 );
 
 const superNav = await readSidebar();

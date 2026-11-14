@@ -174,6 +174,7 @@ All under `scripts/dev/browser/` (`.sh` wrapper + `.mjs`); fuller descriptions a
 | `verify-header-fits.sh` | R268 Super Admin header at 960–1920 px up and back down: no sideways scroll, exactly one navigation, every control on screen; the full navigation at 1366, the full bar at 1920; `SHOTS=<dir>` | 12/12 |
 | `verify-session-to-exam.sh` | R269 the مؤطِّرة changes today's online class into an exam from «حصص الجدول» (النوع, prefilled form), the row says «أصبحت اختبارًا», a beneficiary's calendar shows the exam with the class's own «دخول الحصة», «إرجاعها حصة» changes it back; `SHOTS=<dir>` at 1366/390 | 9/9 |
 | `verify-enrolment-year.sh` | R271 «تسجيل مستفيد(ة)»: «مدة التسجيل» opens on «السنة الدراسية كاملة» with the current year, «فصل دراسي واحد» swaps in the semesters, saving the year enrols, the row reads «2026-2027 (السنة كاملة)»; `SHOTS=<dir>` | 7/7 |
+| `verify-role-switch.sh` | R273 a multi-role Super Admin switches «الدور الحالي» from `/admin` to each role; each lands on its own dashboard (مؤطِّرة → `/teacher/schedules`, never `/`) | 5/5 |
 | `verify-nav-toggle-geometry.sh` | R138 item 8 sidebar toggle at 320/390/1280/1440; empty-module portal | 46/46 |
 | `verify-notifications.sh` | R77/R82/R83 audience through `/notify`: the resolver, not the button; ids from `GET /admin/course-schedules/{id}/sessions` | 22/22 |
 | `verify-notify-ui.sh` | Clicks «إرسال الإشعار», reads the recipient's own bell; R91/R92, Event delete/cancel, grade republish | 37/37 |

@@ -405,9 +405,15 @@ beforeAll(async () => {
     .then((r) => r.id);
   groupOccurrence = await session(groupSchedule, day(8), []);
 
+  // R274 — the circle is of ANOTHER subject: a subject divided into circles
+  // is attended in a circle on a beneficiary's own calendar, and the branch
+  // tests below are about an undivided one. The roster tests read the circle's
+  // members, whatever its subject.
+  const circleSubjectId = (await prisma.subject.create({ data: { name: `${TAG} مادة الحلقة` } })).id;
+  await prisma.levelSubject.create({ data: { levelId, subjectId: circleSubjectId } });
   circle1 = (
     await prisma.teachingGroup.create({
-      data: { name: `${TAG} حلقة أولى`, levelId, subjectId },
+      data: { name: `${TAG} حلقة أولى`, levelId, subjectId: circleSubjectId },
     })
   ).id;
   studentF = await person("و الحلقة الأولى", "student", true);
@@ -421,7 +427,7 @@ beforeAll(async () => {
     data: { studentId: studentF, levelId, branchId: elsewhere },
   });
   await prisma.studentTeachingGroup.create({
-    data: { studentId: studentF, teachingGroupId: circle1, subjectId, levelId },
+    data: { studentId: studentF, teachingGroupId: circle1, subjectId: circleSubjectId, levelId },
   });
 });
 

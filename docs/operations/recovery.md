@@ -61,6 +61,8 @@ sudo bash /opt/bodour/scripts/backup/run-scheduled.sh monitor
 
 `docker compose exec -T api npm run --silent ops:empty-trash </dev/null` purges every Trash entry through the page's own door (`purgeEntry`: Super Admin freshness, the declared consequences, the deleted dependents first, an audit row; a `User` de-identified), acting as the platform owner, in up to four passes. An entry the service refuses (`DEPENDENTS_EXIST` — a LIVE record still uses it) is left and named — never forced. `DRY_RUN=1` lists without purging. Owner authorization each time; never on a schedule.
 
+`docker compose exec -T -e KEEP=<id> -e MERGE=<id> api npm run --silent ops:merge-schedules </dev/null` merges two classes that say the same thing (R275 ledger, 2026-11-14): refused unless every detail, filter, Surah and staff member matches and no date of MERGE's occurrences is already KEEP's; then MERGE's occurrences move to KEEP with their history, KEEP's dates widen to cover both, and the emptied MERGE goes to the Trash through the platform's own delete; audited on both. Lists only without `APPLY=1`. Owner authorization each time.
+
 ## Restore and fresh-host recovery
 
 If **no repository copy survives**, stop: recovery of the lost data is impossible under this architecture; a password or Git checkout cannot reconstruct it. If the repository survives (or an authorised copy exists), recover onto a clean **Moroccan** host:

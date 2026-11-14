@@ -725,6 +725,8 @@ export function ScheduleSessionsPage({
   return (
     <Layout
       title={t('admin.sessions.title')}
+      // R272 (the Owner, 2026-11-14) — which class these occurrences belong to.
+      lede={klass?.title ?? null}
       actions={
         <Button
           variant="secondary"

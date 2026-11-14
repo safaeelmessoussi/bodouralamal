@@ -28,6 +28,8 @@ export type NotificationType =
   | 'enrollment_changed'
   | 'session_cancelled'
   | 'session_restored'
+  | 'session_became_exam'
+  | 'session_back_to_class'
   | 'session_assigned'
   | 'session_unassigned'
   | 'session_rescheduled'
